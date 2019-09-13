@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+    <head>
+    <title> My First Webpage </title>
+    </head>
+    <body style="width: 880px; margin: auto;">
+    {% if not current_user.is_authenticated %}
+        <h1> I did this in PyCharm and run it off my own laptop</h1>
+        <p><a href="/login">Login here</a> </p>
+        <p><a href="/registration">Sign up</a> </p>
+            {% for message in get_flashed_messages() %}
+               {{ message }}
+            {% endfor %}
+<!--            {% for message in get_flashed_messages() %}-->
+<!--                {{ message }}-->
+<!--            {% endfor %}-->
+    {% endif %}
+    </body>
+

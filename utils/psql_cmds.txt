@@ -1,0 +1,18 @@
+CREATE TABLE files (
+file_id serial PRIMARY KEY,
+path VARCHAR(250) UNIQUE NOT NULL,
+size INT NOT NULL,
+cur_phase VARCHAR(15) NOT NULL,
+cur_task_id VARCHAR(30),
+extension VARCHAR(100) NOT NULL,
+sample_type VARCHAR(25) NOT NULL,
+metadata JSONB NOT NULL,
+created_on TIMESTAMP NOT NULL,
+last_extracted TIMESTAMP NOT NULL,
+owner VARCHAR(50) NOT NULL,
+crawl_type VARCHAR(50) NOT NULL
+);
+
+INSERT INTO files (path, size, extension, sample_type, metadata, created_on, last_extracted, owner, crawl_type)
+VALUES ('potato', 100, 'potato', 'potato', '', '2016-06-22 19:10:25-07', '2016-06-22 19:10:25-07', 'owner', 'crawl_type'
+);
