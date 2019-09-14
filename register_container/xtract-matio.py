@@ -11,7 +11,7 @@ container_type = 'docker'
 name = "xtract/matio"
 container_uuid = fxc.register_container(name, location, description, container_type)
 
-func = """
+func2 = """
 def matio_test(event):
     import os
     import time
@@ -46,11 +46,83 @@ def matio_test(event):
     return {'metadata': mdata_list, 'tot_time': t1-t0}
 """
 
+func = """
+def matio_test(event):
+    import os
+    import tempfile
+    import time
+    import xtract_matio_main
+    from home_run.base import _get_file
+
+    from threading import Thread
+    import requests
+
+    from shutil import copyfile 
+
+    # Make a temp dir and download the data
+    dir_name = tempfile.mkdtemp()
+    os.chdir(dir_name)
+
+    # copyfile('/rf-head-2019-08-26.pkl', f'{dir_name}/rf-head-2019-08-26.pkl')
+    # copyfile('/CLASS_TABLE.json', f'{dir_name}/CLASS_TABLE.json')
+
+    # A list of file paths
+    urls = event['data']['inputs']
+
+    def download_url(data):
+        file_id = data['file_id']
+        url = data['url']
+        headers = data['headers']
+        print("downloading: ",url)
+        file_name_start_pos = url.rfind("/") + 1
+        # file_name = url[file_name_start_pos:]
+        file_name = file_id
+        r = requests.get(url, headers=headers, stream=True)
+        if r.status_code == requests.codes.ok:
+            with open(file_name, 'wb') as f:
+                for data in r:
+                    f.write(data)
+        return url
+
+    threads = []
+
+
+    for item in urls:
+       # try:
+       t = Thread(target=download_url, args=(item,))
+       threads.append(t)
+       t.start()
+       # except:
+       #     pass
+
+    for t in threads:
+        t.join()
+
+    t0 = time.time()
+    mdata_list = []
+
+    # return (os.listdir('.'), urls)
+    for item in urls:
+        # return(input_data)
+        ta = time.time()
+        file_id = item['file_id']
+        tb = time.time()
+
+        new_mdata = xtract_matio_main.extract_matio(file_id)
+
+        new_mdata['file_id'] = file_id
+
+        mdata_list.append(new_mdata)
+
+    t1 = time.time()
+    return {'metadata': mdata_list, 'tot_time': t1-t0, 'trans_time': tb-ta} 
+"""
+
+# TODO: Fix transfer time above!!!! (it's only for 1 file).
+
 func_uuid = fxc.register_function("matio_test", func, "matio_test",
-                                 description="A test function for the matio extractor.",
-                                 container=container_uuid)
-# func_uuid = "989c2fb7-909f-42b9-9702-938eb53bbf9a"
-# func_uuid = 'd261e43b-722f-4da5-b838-ecde899aa5c6'
+                                  description="A test function for the sample extractor.",
+                                  container=container_uuid)
 # print(func_uuid)
 print(func_uuid)
 
@@ -62,31 +134,35 @@ tokens = client.login(
 auth_token = tokens["petrel_https_server"]['access_token']
 headers = {'Authorization': f'Bearer {auth_token}'}
 
+data = {'inputs': []}
 
-payload = {'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/w_14_v1-1/w_14_data/record-0.xyz',
-                       'headers': headers, 'file_id': 'potato'}
-print("Payload is {}".format(payload))
+# print("Payload is {}".format(payload))
 
-data = {'inputs':[]}
+import random
 
-for i in range(10):
+for i in range(0, 10):
+    payload = {
+        'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
+        'headers': headers, 'file_id': str(random.randint(10000, 99999))}
+
+    # print(thingy)
     data['inputs'].append(payload)
 
-endpoint_uuid = 'a92945a1-2778-4417-8cd1-4957bc35ce66'  # DLHub endpoint for testing
+print(data)
+endpoint_uuid = '3cc6d6ce-9a60-4559-bf21-1a3d2ce5da20'  # DLHub endpoint for testing
+# res = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True)
 
 
+times = []
 res_list = []
-for i in range(1,6):
+for i in range(0, 1):
     res = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True)
     res_list.append(res)
-
-print("Waiting for result...")
-# result = res
-# print(result)
+# res = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True)
 
 import time
 while True:
-
     for item in res_list:
         print(fxc.get_task_status(res))
     time.sleep(2)
+

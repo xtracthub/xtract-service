@@ -2,6 +2,7 @@ import json
 import sys
 
 from funcx.sdk.client import FuncXClient
+import time
 
 fxc = FuncXClient()
 
@@ -18,7 +19,9 @@ def sampler_test(event):
     import time
     import xtract_sampler_main
     from home_run.base import _get_file
-   
+    
+    from threading import Thread
+    import requests
    
     from shutil import copyfile 
     
@@ -30,18 +33,48 @@ def sampler_test(event):
     copyfile('/CLASS_TABLE.json', f'{dir_name}/CLASS_TABLE.json')
     
     # A list of file paths
-    all_files = event['data']['inputs']
+    urls = event['data']['inputs']
+    
+    def download_url(data):
+        file_id = data['file_id']
+        url = data['url']
+        headers = data['headers']
+        print("downloading: ",url)
+        file_name_start_pos = url.rfind("/") + 1
+        # file_name = url[file_name_start_pos:]
+        file_name = file_id
+        r = requests.get(url, headers=headers, stream=True)
+        if r.status_code == requests.codes.ok:
+            with open(file_name, 'wb') as f:
+                for data in r:
+                    f.write(data)
+        return url
+    
+    threads = []
+    
+    
+    for item in urls:
+       # try:
+       t = Thread(target=download_url, args=(item,))
+       threads.append(t)
+       t.start()
+       # except:
+       #     pass
+        
+    for t in threads:
+        t.join()
    
     t0 = time.time()
     mdata_list = []
-    for item in all_files:
+    
+    # return (os.listdir('.'), urls)
+    for item in urls:
+        # return(input_data)
         ta = time.time()
-        dir_name = tempfile.mkdtemp()
         file_id = item['file_id']
-        input_data = _get_file(item, dir_name)  # Download the file
         tb = time.time()
         
-        new_mdata = xtract_sampler_main.extract_sampler(mode='predict', predict_file=input_data, trained_classifier='rf-head-2019-08-26.pkl')
+        new_mdata = xtract_sampler_main.extract_sampler(mode='predict', predict_file=file_id, trained_classifier='rf-head-2019-08-26.pkl')
         
         new_mdata['file_id'] = file_id
         
@@ -69,16 +102,36 @@ headers = {'Authorization': f'Bearer {auth_token}'}
 
 data = {'inputs':[]}
 
-payload = {'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/blahblah/Ti3O2.xyz',
-                       'headers': headers, 'file_id': 'this-is-my-file-id'}
-print("Payload is {}".format(payload))
 
-for i in range(10):
+# print("Payload is {}".format(payload))
+
+import random
+
+
+
+for i in range(0, 10):
+    payload = {
+        # 'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/mdr_item_1061_v1/2015-07-15-AgedBar-Round2/AgedBar-R2-19.TRA',
+        'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data//mdr_item_1051_v2/MTR-Forging_Axial/Forging_Axial/Forging_Axial_Face2/Forging_Axial_Face2.dream3d',
+        'headers': headers, 'file_id': str(random.randint(10000,99999))}
+
+    # print(thingy)
     data['inputs'].append(payload)
 
-endpoint_uuid = '3cc6d6ce-9a60-4559-bf21-1a3d2ce5da20'  # DLHub endpoint for testing
-res = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True)
 
-print("Waiting for result...")
-# result = res.result()
-print(res)
+print(data)
+endpoint_uuid = '3cc6d6ce-9a60-4559-bf21-1a3d2ce5da20'  # DLHub endpoint for testing
+# res = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True)
+
+
+times = []
+res_list = []
+for i in range(0, 1):
+    res = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True)
+    res_list.append(res)
+# res = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True)
+
+while True:
+    for item in res_list:
+        print(fxc.get_task_status(res))
+    time.sleep(2)
