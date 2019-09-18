@@ -44,12 +44,6 @@ with open('/Users/tylerskluzacek/Desktop/result.json', 'r') as f:
 
     crawl_data = json.load(f)
 
-try:
-    conn = psycopg2.connect("dbname='xtractdb' user='xtract' host='xtractdb.c80kmwegdwta.us-east-1.rds.amazonaws.com' password='' port=5432")
-except Exception as e:
-    print("Cannot connect to database")
-    raise e
-
 
 t0 = time.time()
 i = 0
@@ -77,18 +71,6 @@ for item in crawl_data:
             print(e)
             print(item)
             print("INT TOO BIG. ")
-
-# 144248 -> 145000 are all missing.
-# 1327000 -> 1328000 some are missing.
-
-# Committing up to 1336000 files...
-# value too long for type character varying(250)
-
-#  Committing up to 1337000 files...
-
-    # break
-# Committing up to 1946000 files...
-# check_results(cur)
 
 
 

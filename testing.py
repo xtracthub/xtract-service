@@ -14,34 +14,23 @@
 #         i += 1
 # print(i)
 
-#################
-from funcx.sdk.client import FuncXClient
-#
-# # TODO: Make a class that represents the directory.
-fxc = FuncXClient()
-#
-import pickle
 
-print("opening file")
-# with open('save_file.pkl', 'rb') as f:
-#     uuid_list = pickle.load(f)
+import json
+import time
 
-# success_count = 0
-# for id in uuid_list:
-#     # print(uuid_list[id])
-#     res = fxc.get_task_status(id)
-#     print(res)
+t0 = time.time()
+with open('/Users/tylerskluzacek/Desktop/relax.json', 'r') as f:
+    data = json.load(f)
 
-    # if res['status'] == "SUCCEEDED":
-    #     print(id)
-    #     success_count += 1
-    #     print(success_count)
+field_dict = {'keys': []}
+for key in data:
+    field_dict['keys'].append(key)
 
-# Last count 558
-# print(success_count)
+t1 = time.time()
 
-##################
+field_dict['extract_time'] = t1-t0
+
+print(field_dict)
 
 
-task_id = "81951d94-22f9-4d2a-a4c9-257186faa48c"
-print(fxc.get_task_status(task_id))
+
