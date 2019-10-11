@@ -2,18 +2,23 @@
 import sys
 import json
 import webbrowser
+import uuid
 
 from queue import Queue
 from globus_sdk.exc import GlobusAPIError, TransferAPIError
 from globus_sdk import (NativeAppAuthClient, TransferClient, RefreshTokenAuthorizer)
 
+# TODO: Stevedore to discover these??
+from groupers import matio_grouper
+
 
 from base import Crawler
 
+grouper = matio_grouper.MatIOGrouper()
 
 class GlobusCrawler(Crawler):
 
-    def __init__(self, eid, path):
+    def __init__(self, eid, path, grouper=None):
         Crawler.__init__(self)
         self.path = path
         self.eid = eid
@@ -24,6 +29,7 @@ class GlobusCrawler(Crawler):
         self.get_input = getattr(__builtins__, 'raw_input', input)
         self.scopes = ('openid email profile '
                   'urn:globus:auth:scope:transfer.api.globus.org:all')
+        self.grouper = grouper
 
     def load_tokens_from_file(self, token_filepath):
         """Load a set of saved tokens."""
@@ -85,6 +91,9 @@ class GlobusCrawler(Crawler):
 
         return extension
 
+    def gen_group_id(self):
+        return uuid.uuid4()
+
     def get_transfer(self):
         tokens = None
         try:
@@ -141,11 +150,17 @@ class GlobusCrawler(Crawler):
             cur_dir = to_crawl.get()
 
             try:
-                for entry in transfer.operation_ls(self.eid, path=cur_dir):
+
+                dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
+
+                f_names = []
+                for entry in dir_contents:
 
                     full_path = cur_dir + "/" + entry['name']
-                    print(full_path)
+
+                    #print(entry['type'], entry['name'])
                     if entry['type'] == 'file':
+                        f_names.append(full_path)
                         extension = self.get_extension(entry["name"])
                         mdata_blob[full_path] = {"physical": {'size': entry['size'],
                                                               "extension": extension, "path_type": "globus"}}
@@ -156,6 +171,27 @@ class GlobusCrawler(Crawler):
                     elif entry['type'] == 'dir':
                         full_path = cur_dir + "/" + entry['name']
                         to_crawl.put(full_path)
+
+                if self.grouper == 'matio':
+                    group_list = grouper.group(f_names)
+
+                    for gr in group_list:
+                        print(gr)
+                        group_info = {"group_id": self.gen_group_id(), "files": [], "mdata": []}
+
+                        # TODO: It's like the groups are triple nested (require 3 for-loops)... ask Logan about this.
+                        for sub_gr in gr:
+
+                            if type(sub_gr) == str:  # str is length 1, then single-file group.
+                                group_info["files"].append(sub_gr)
+                                #print(mdata_blob)
+                                group_info["mdata"].append({"file": sub_gr, "blob": mdata_blob[sub_gr]})
+                                #print(group_info)
+
+                            else:
+                                for filename in sub_gr:
+                                    group_info["files"].append(filename)
+                                    group_info["mdata"].append({"file": filename, "blob": mdata_blob[filename]})
 
             except TransferAPIError as e:
                 print("Problem directory {}".format(cur_dir))
@@ -175,9 +211,9 @@ class GlobusCrawler(Crawler):
         return mdata_blob
 
 
-# if __name__ == "__main__":
-crawler = GlobusCrawler('1c115272-a3f2-11e9-b594-0e56e8fd6d5a', '/Users/tylerskluzacek/Desktop')
+if __name__ == "__main__":
+    crawler = GlobusCrawler('1c115272-a3f2-11e9-b594-0e56e8fd6d5a', '/Users/tylerskluzacek/Desktop', 'matio')
 
-tc = crawler.get_transfer()
+    tc = crawler.get_transfer()
 
-crawler.crawl(tc)
+    crawler.crawl(tc)
