@@ -3,16 +3,21 @@ import sys
 import json
 import webbrowser
 import uuid
+import os
+from utils.pg_utils import pg_conn
+
+from datetime import datetime
 
 from queue import Queue
 from globus_sdk.exc import GlobusAPIError, TransferAPIError
 from globus_sdk import (NativeAppAuthClient, TransferClient, RefreshTokenAuthorizer)
 
 # TODO: Stevedore to discover these??
-from groupers import matio_grouper
+from .groupers import matio_grouper
 
 
-from base import Crawler
+
+from .base import Crawler
 
 grouper = matio_grouper.MatIOGrouper()
 
@@ -30,6 +35,7 @@ class GlobusCrawler(Crawler):
         self.scopes = ('openid email profile '
                   'urn:globus:auth:scope:transfer.api.globus.org:all')
         self.grouper = grouper
+        self.conn = pg_conn()
 
     def load_tokens_from_file(self, token_filepath):
         """Load a set of saved tokens."""
@@ -75,6 +81,20 @@ class GlobusCrawler(Crawler):
 
         # return a set of tokens, organized by resource server name
         return token_response.by_resource_server
+
+    def add_group_to_db(self, group_id, grouper, num_files):
+
+        # TODO try/catch the postgres things.
+        cur = self.conn.cursor()
+
+        now_time = datetime.now()
+        query = f"INSERT INTO groups (group_id, grouper, num_files, created_on) VALUES " \
+            f"('{group_id}', '{grouper}', {num_files}, '{now_time}');"
+
+        cur.execute(query)
+
+        # TODO: Don't need to commit every dang single time.
+        return self.conn.commit()
 
     def get_extension(self, filepath):
         """Returns the extension of a filepath.
@@ -138,6 +158,10 @@ class GlobusCrawler(Crawler):
 
     def crawl(self, transfer):
 
+        dir_name = "xtract_metadata"
+        if not os.path.exists(dir_name):
+            os.mkdir(dir_name)
+
         # TODO: Have separate db update thread.
         mdata_blob = {}
         failed_dirs = {"failed": []}
@@ -157,8 +181,6 @@ class GlobusCrawler(Crawler):
                 for entry in dir_contents:
 
                     full_path = cur_dir + "/" + entry['name']
-
-                    #print(entry['type'], entry['name'])
                     if entry['type'] == 'file':
                         f_names.append(full_path)
                         extension = self.get_extension(entry["name"])
@@ -176,22 +198,31 @@ class GlobusCrawler(Crawler):
                     group_list = grouper.group(f_names)
 
                     for gr in group_list:
-                        print(gr)
                         group_info = {"group_id": self.gen_group_id(), "files": [], "mdata": []}
 
                         # TODO: It's like the groups are triple nested (require 3 for-loops)... ask Logan about this.
                         for sub_gr in gr:
 
                             if type(sub_gr) == str:  # str is length 1, then single-file group.
+                                # Group is reset here, because single-file group.
+                                group_info = {"group_id": str(self.gen_group_id()), "files": [], "mdata": []}
+
                                 group_info["files"].append(sub_gr)
-                                #print(mdata_blob)
                                 group_info["mdata"].append({"file": sub_gr, "blob": mdata_blob[sub_gr]})
-                                #print(group_info)
+
+                                with open("xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
+                                    json.dump(group_info, f)
+
+                                self.add_group_to_db(str(group_info["group_id"]), self.grouper, len(group_info['files']))
+
 
                             else:
                                 for filename in sub_gr:
                                     group_info["files"].append(filename)
                                     group_info["mdata"].append({"file": filename, "blob": mdata_blob[filename]})
+
+                                    with open("xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
+                                        json.dump(group_info, f)
 
             except TransferAPIError as e:
                 print("Problem directory {}".format(cur_dir))
@@ -210,10 +241,3 @@ class GlobusCrawler(Crawler):
 
         return mdata_blob
 
-
-if __name__ == "__main__":
-    crawler = GlobusCrawler('1c115272-a3f2-11e9-b594-0e56e8fd6d5a', '/Users/tylerskluzacek/Desktop', 'matio')
-
-    tc = crawler.get_transfer()
-
-    crawler.crawl(tc)

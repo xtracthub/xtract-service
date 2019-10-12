@@ -25,4 +25,3 @@ class Crawler:
             f_metadata)}, '{f_created_on}', '{f_last_extracted}', '{f_owner}', '{f_crawl_type}');"""
 
         pg.pg_update(cur, update_string)
-
