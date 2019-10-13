@@ -1,12 +1,14 @@
 
 
 import psycopg2
+import os
 
 
+# TODO: Turn this into a class that allows shared conn() object.
 def pg_conn():
-    # TODO: Offload this to a config file.
     try:
-        conn = psycopg2.connect()
+        conn = psycopg2.connect(host=os.environ["XTRACT_DB"], database="xtractdb",
+                                user="xtract", port=5432, password=os.environ["XTRACT_PASS"])
     except Exception as e:
         print("Cannot connect to database")
         raise e

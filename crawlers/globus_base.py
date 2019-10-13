@@ -16,14 +16,15 @@ from globus_sdk import (NativeAppAuthClient, TransferClient, RefreshTokenAuthori
 from .groupers import matio_grouper
 
 
-
 from .base import Crawler
 
+# TODO: Tidy this.
 grouper = matio_grouper.MatIOGrouper()
+
 
 class GlobusCrawler(Crawler):
 
-    def __init__(self, eid, path, grouper=None):
+    def __init__(self, eid, path, crawl_id, grouper=None):
         Crawler.__init__(self)
         self.path = path
         self.eid = eid
@@ -33,9 +34,10 @@ class GlobusCrawler(Crawler):
         self.redirect_uri = 'https://auth.globus.org/v2/web/auth-code'
         self.get_input = getattr(__builtins__, 'raw_input', input)
         self.scopes = ('openid email profile '
-                  'urn:globus:auth:scope:transfer.api.globus.org:all')
+                       'urn:globus:auth:scope:transfer.api.globus.org:all')
         self.grouper = grouper
         self.conn = pg_conn()
+        self.crawl_id = crawl_id
 
     def load_tokens_from_file(self, token_filepath):
         """Load a set of saved tokens."""
@@ -88,8 +90,8 @@ class GlobusCrawler(Crawler):
         cur = self.conn.cursor()
 
         now_time = datetime.now()
-        query1 = f"INSERT INTO groups (group_id, grouper, num_files, created_on) VALUES " \
-            f"('{group_id}', '{grouper}', {num_files}, '{now_time}');"
+        query1 = f"INSERT INTO groups (group_id, grouper, num_files, created_on, crawl_id) VALUES " \
+            f"('{group_id}', '{grouper}', {num_files}, '{now_time}', '{self.crawl_id}');"
 
         query2 = f"INSERT INTO group_status (group_id, status) VALUES ('{group_id}', 'crawled');"
 
@@ -97,6 +99,13 @@ class GlobusCrawler(Crawler):
         cur.execute(query2)
 
         # TODO: Don't need to commit every dang single time.
+        return self.conn.commit()
+
+    def db_crawl_end(self):
+        cur = self.conn.cursor()
+        query = f"UPDATE crawls SET status='complete' WHERE crawl_id='{self.crawl_id}';"
+        cur.execute(query)
+
         return self.conn.commit()
 
     def get_extension(self, filepath):
@@ -165,12 +174,20 @@ class GlobusCrawler(Crawler):
         if not os.path.exists(dir_name):
             os.mkdir(dir_name)
 
-        # TODO: Have separate db update thread.
         mdata_blob = {}
         failed_dirs = {"failed": []}
 
         to_crawl = Queue()
         to_crawl.put(self.path)
+
+        cur = self.conn.cursor()
+
+        now_time = datetime.now()
+        crawl_update = f"INSERT INTO crawls (crawl_id, started_on) VALUES " \
+            f"('{self.crawl_id}', '{now_time}');"
+
+        cur.execute(crawl_update)
+        self.conn.commit()
 
         while not to_crawl.empty():
 
@@ -216,8 +233,8 @@ class GlobusCrawler(Crawler):
                                 with open("xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
                                     json.dump(group_info, f)
 
-                                self.add_group_to_db(str(group_info["group_id"]), self.grouper, len(group_info['files']))
-
+                                self.add_group_to_db(str(group_info["group_id"]), self.grouper,
+                                                     len(group_info['files']))
 
                             else:
                                 for filename in sub_gr:
@@ -236,11 +253,9 @@ class GlobusCrawler(Crawler):
 
         print("FILES PROCESSED: {}".format(self.count))
 
-        with open('result.json', 'w') as fp:
-            json.dump(mdata_blob, fp)
+        # TODO: HERE update DB to show that crawling is completed.
 
         with open('failed.json', 'w') as fp:
-            json.dump(mdata_blob, fp)
+            json.dump(failed_dirs, fp)
 
         return mdata_blob
-

@@ -13,6 +13,31 @@ owner VARCHAR(50) NOT NULL,
 crawl_type VARCHAR(50) NOT NULL
 );
 
-INSERT INTO files (path, size, extension, sample_type, metadata, created_on, last_extracted, owner, crawl_type)
-VALUES ('potato', 100, 'potato', 'potato', '', '2016-06-22 19:10:25-07', '2016-06-22 19:10:25-07', 'owner', 'crawl_type'
-);
+
+CREATE TABLE groups (
+    id serial PRIMARY KEY,
+    group_id VARCHAR(40) NOT NULL,
+    grouper VARCHAR(20) NOT NULL,
+    num_files INT NOT NULL,
+    created_on TIMESTAMP NOT NULL,
+    top_path VARCHAR(500)
+    );
+
+
+# TODO: I NEVER GOT THE FOREIGN KEYS WORKING HERE.
+CREATE TABLE group_status (
+    group_id VARCHAR(40) references groups(group_id),
+    group_status VARCHAR(20) NOT NULL DEFAULT 'crawling',
+    PRIMARY KEY (group_id)
+    );
+
+CREATE TABLE group_status (
+    group_id VARCHAR(40) PRIMARY KEY,
+    status VARCHAR(20) NOT NULL DEFAULT 'crawling'
+    );
+
+
+CREATE TABLE crawl (
+   crawl_id VARCHAR(40) PRIMARY KEY,
+   started_on TIMESTAMP NOT NULL
+   );
