@@ -88,10 +88,13 @@ class GlobusCrawler(Crawler):
         cur = self.conn.cursor()
 
         now_time = datetime.now()
-        query = f"INSERT INTO groups (group_id, grouper, num_files, created_on) VALUES " \
+        query1 = f"INSERT INTO groups (group_id, grouper, num_files, created_on) VALUES " \
             f"('{group_id}', '{grouper}', {num_files}, '{now_time}');"
 
-        cur.execute(query)
+        query2 = f"INSERT INTO group_status (group_id, status) VALUES ('{group_id}', 'crawled');"
+
+        cur.execute(query1)
+        cur.execute(query2)
 
         # TODO: Don't need to commit every dang single time.
         return self.conn.commit()
