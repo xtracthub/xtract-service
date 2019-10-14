@@ -63,9 +63,6 @@ def matio_test(event):
     dir_name = tempfile.mkdtemp()
     os.chdir(dir_name)
 
-    # copyfile('/rf-head-2019-08-26.pkl', f'{dir_name}/rf-head-2019-08-26.pkl')
-    # copyfile('/CLASS_TABLE.json', f'{dir_name}/CLASS_TABLE.json')
-
     # A list of file paths
     urls = event['data']['inputs']
 
@@ -88,12 +85,9 @@ def matio_test(event):
 
 
     for item in urls:
-       # try:
        t = Thread(target=download_url, args=(item,))
        threads.append(t)
        t.start()
-       # except:
-       #     pass
 
     for t in threads:
         t.join()
@@ -123,7 +117,6 @@ def matio_test(event):
 func_uuid = fxc.register_function("matio_test", func, "matio_test",
                                   description="A test function for the sample extractor.",
                                   container=container_uuid)
-# print(func_uuid)
 print(func_uuid)
 
 from fair_research_login import NativeClient
@@ -136,7 +129,6 @@ headers = {'Authorization': f'Bearer {auth_token}'}
 
 data = {'inputs': []}
 
-# print("Payload is {}".format(payload))
 
 import random
 
