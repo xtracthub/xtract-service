@@ -1,10 +1,11 @@
 
-from flask import Flask, request, redirect, url_for, jsonify, Response
-import pickle as pkl
-from funcx.sdk.client import FuncXClient
+from flask import Flask, request
+
 from crawlers.globus_base import GlobusCrawler
 from uuid import uuid4
 from status_checks import get_crawl_status
+import os
+import json
 
 import threading
 
@@ -36,12 +37,13 @@ def crawl_repo():
 
 
 @app.route('/get_crawl_status', methods=['GET'])
-def get_crawl_status():
+def get_cr_status():
 
     r = request.json
 
     crawl_id = r["crawl_id"]
     resp = get_crawl_status(crawl_id)
+    print(resp)
 
     return resp
 
@@ -64,20 +66,26 @@ def extract_mdata():
     r = request.json
     crawl_id = r["crawl_id"]
 
+    # TODO: Do stuff here.
+
     extract_id = uuid4()
 
     return extract_id
 
 
-# TODO: Why can't I auth here?!
-@app.route('/login', methods=['GET'])
+@app.route('/login', methods=['POST'])
 def login():
-    fxc = FuncXClient()
 
-    print(fxc)
+    headers = request.json
 
-    return jsonify({"fx_client": pkl.dumps(fxc)})
+    os.makedirs('session_tokens', exist_ok=True)
+    session_id = uuid4()
+
+    with open(f"session_tokens/{session_id}", 'w') as f:
+        json.dump(headers, f)
+
+    return {"session_id": session_id}
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)

@@ -22,5 +22,3 @@ def get_crawl_status(crawl_id):
 def get_group_status(group_id):
     print("Extract status")
 
-
-# print(get_crawl_status('3bb826e0-2d12-455e-a7a8-004ad162232e'))
