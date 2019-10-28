@@ -1,6 +1,7 @@
 
 from flask import Flask, request
 
+from container_lib.xtract_matio import MatioExtractor
 from crawlers.globus_base import GlobusCrawler
 from uuid import uuid4
 from status_checks import get_crawl_status
@@ -11,11 +12,14 @@ import threading
 
 
 app = Flask(__name__)
-
+#
 
 def crawl_launch(crawler, tc):
     crawler.crawl(tc)
     return "done"
+
+# def extract_launch(crawl_id):
+
 
 
 @app.route('/crawl', methods=['POST'])
@@ -29,7 +33,7 @@ def crawl_repo():
 
     crawl_id = uuid4()
     crawler = GlobusCrawler(endpoint_id, starting_dir, crawl_id, grouper)
-    tc = crawler.get_transfer()
+    tc = crawler.get_transfer()  # TODO: Finds my token on the machine. Need to read in the user's bearer token instead.
     crawl_thread = threading.Thread(target=crawl_launch, args=(crawler, tc))
     crawl_thread.start()
 
@@ -66,25 +70,24 @@ def extract_mdata():
     r = request.json
     crawl_id = r["crawl_id"]
 
-    # TODO: Do stuff here.
+    mex = MatioExtractor('731bad9b-5f8d-421b-88f5-a386e4b1e3e0', crawl_id)
 
-    extract_id = uuid4()
+    print("SENDING FILES...")
+    mex.send_files()
+
+    print("POLLING RESPONSES...")
+    mex.poll_responses()
+
+    extract_id = str(uuid4())
 
     return extract_id
 
 
 @app.route('/login', methods=['POST'])
 def login():
-
+    # Login is primarily handled in the notebooks now.
     headers = request.json
-
-    os.makedirs('session_tokens', exist_ok=True)
-    session_id = uuid4()
-
-    with open(f"session_tokens/{session_id}", 'w') as f:
-        json.dump(headers, f)
-
-    return {"session_id": session_id}
+    return json.dumps(headers)
 
 
 if __name__ == '__main__':
