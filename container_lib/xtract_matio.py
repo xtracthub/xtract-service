@@ -14,7 +14,7 @@ fx_ser = FuncXSerializer()
 class MatioExtractor:
     def __init__(self, eid, crawl_id):
         self.endpoint_uuid = eid  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
-        self.func_id = "eb5ea628-3c41-4ccd-b2e8-4e2cae45470c"
+        self.func_id = "f329d678-937f-4c8b-aa24-a660a9383c06"
         self.live_ids = []
         self.finished_ids = []
         self.crawl_id = crawl_id
@@ -27,7 +27,7 @@ class MatioExtractor:
         self.func_id = func_uuid
         print(f"MatIO Function ID: {self.func_id}")
 
-    def send_files(self):
+    def send_files(self, debug=False):
         headers = get_headers()
         data = {'inputs': []}
 
@@ -35,38 +35,47 @@ class MatioExtractor:
         cur = self.conn.cursor()
         cur.execute(query)
 
-        # TODO: MOAR EXTRACTIONS
-        for gid in cur.fetchall():
-            filename = f'../xtract_metadata/{gid[0]}.mdata'
+        if not debug:
+            for gid in cur.fetchall():
 
-            print(f"ATTEMPTING TO OPEN FILE: {filename}")
+                cur = self.conn.cursor()
+                update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
+                cur.execute(update_q)
+                self.conn.commit()
 
-            with open(filename, 'r') as f:
-                old_mdata = json.load(f)
-                print(f"Old metadata: {old_mdata}")
+                filename = f'../xtract_metadata/{gid[0]}.mdata'
 
-            # TODO: Partial groups can occur here.
-            for f_obj in old_mdata["files"]:
-                payload = {
-                    'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
-                    'headers': headers, 'file_id': str(random.randint(10000, 99999))}
-                data["inputs"].append(payload)
+                print(f"ATTEMPTING TO OPEN FILE: {filename}")
+
+                with open(filename, 'r') as f:
+                    old_mdata = json.load(f)
+                    print(f"Old metadata: {old_mdata}")
+
+                # TODO: Partial groups can occur here.
+                for f_obj in old_mdata["files"]:
+                    payload = {
+                        'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
+                        'headers': headers, 'file_id': gid[0]}
+                    data["inputs"].append(payload)
+
+                res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
+                self.live_ids.append(res)
+
+        # This is completely pointless, but it's just a well-defined file I use for testing funcX :)
+        else:
+            print("Sending debug file to funcX...")
+            payload = {
+                'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
+                'headers': headers, 'file_id': str(random.randint(10000, 99999))}
+
+            data["inputs"].append(payload)
 
             res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
+
+            print(f"Appending ID {res} to live_ids")
             self.live_ids.append(res)
+            print(res)
 
-            #print(row[0])
-        # payload = {
-        #     'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
-        #     'headers': headers, 'file_id': str(random.randint(10000, 99999))}
-        #
-        # data["inputs"].append(payload)
-        #
-        # res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
-        # self.live_ids.append(res)
-        # print(res)
-
-        # TODO: UPDATE DB.
 
     def poll_responses(self):
 
@@ -80,11 +89,19 @@ class MatioExtractor:
                 status_thing = fxc.get_task_status(ex_id)
                 print(status_thing)
 
-
                 if "result" in status_thing:
                     res = fx_ser.deserialize(status_thing['result'])
                     print(res)
-                    to_rem.append(ex_id)
+
+                    for g_obj in res["metadata"]:
+                        gid = g_obj["group_id"]
+                        to_rem.append(ex_id)
+
+                        cur = self.conn.cursor()
+                        update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
+                        cur.execute(update_q)
+                        self.conn.commit()
+
                     break
 
             for done_id in to_rem:
@@ -132,7 +149,7 @@ def matio_test(event):
 
         new_mdata = xtract_matio_main.extract_matio(extract_path)
 
-        new_mdata['file_id'] = file_id
+        new_mdata['group_id'] = file_id
         new_mdata['trans_time'] = tb-ta
         mdata_list.append(new_mdata)
 
@@ -155,7 +172,7 @@ def get_headers():
 mex = MatioExtractor('94a037b8-4eb2-4c00-b42c-1ca1421802e9', '0a235f37-307b-42c1-aec6-b09ebdb51efc')
 
 mex.register_func()
-mex.send_files()
+mex.send_files(debug=False)
 mex.poll_responses()
 
 

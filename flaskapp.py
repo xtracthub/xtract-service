@@ -4,7 +4,7 @@ from flask import Flask, request
 from container_lib.xtract_matio import MatioExtractor
 from crawlers.globus_base import GlobusCrawler
 from uuid import uuid4
-from status_checks import get_crawl_status
+from status_checks import get_crawl_status, get_extract_status
 import os
 import json
 
@@ -12,14 +12,19 @@ import threading
 
 
 app = Flask(__name__)
-#
+
 
 def crawl_launch(crawler, tc):
     crawler.crawl(tc)
     return "done"
 
-# def extract_launch(crawl_id):
 
+def extract_launch():
+    print("Hello")
+
+
+def results_poller_launch():
+    print("HI. ")
 
 
 @app.route('/crawl', methods=['POST'])
@@ -52,18 +57,6 @@ def get_cr_status():
     return resp
 
 
-@app.route('/get_extract_status', methods=['GET'])
-def get_extract_status():
-
-    # TODO: Return the entire extraction job.
-    r = request.json
-
-    extract_id = r["extract_id"]
-    resp = get_crawl_status(extract_id)  # TODO.
-
-    return resp
-
-
 @app.route('/extract', methods=['POST'])
 def extract_mdata():
 
@@ -76,12 +69,24 @@ def extract_mdata():
     mex.send_files()
 
     print("POLLING RESPONSES...")
+    # TODO: This needs to happen in its own thread.
     mex.poll_responses()
 
     extract_id = str(uuid4())
 
     return extract_id
 
+
+@app.route('/get_extract_status', methods=['GET'])
+def get_extr_status():
+
+    # TODO: Return the entire extraction job.
+    r = request.json
+
+    extract_id = r["extract_id"]
+    resp = get_crawl_status(extract_id)  # TODO.
+
+    return resp
 
 @app.route('/login', methods=['POST'])
 def login():
