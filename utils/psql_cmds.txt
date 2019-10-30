@@ -41,3 +41,11 @@ CREATE TABLE crawl (
    crawl_id VARCHAR(40) PRIMARY KEY,
    started_on TIMESTAMP NOT NULL
    );
+
+
+CREATE TABLE extracts (
+   extract_id VARCHAR(40) PRIMARY KEY,
+   started_on TIMESTAMP NOT NULL,
+   status VARCHAR(20) NOT NULL DEFAULT 'EXTRACTING',
+   groups_finished INT NOT NULL DEFAULT 0
+   );

@@ -63,7 +63,7 @@ def extract_mdata():
     r = request.json
     crawl_id = r["crawl_id"]
 
-    mex = MatioExtractor('731bad9b-5f8d-421b-88f5-a386e4b1e3e0', crawl_id)
+    mex = MatioExtractor('94a037b8-4eb2-4c00-b42c-1ca1421802e9', crawl_id)
 
     print("SENDING FILES...")
     mex.send_files()
@@ -83,8 +83,8 @@ def get_extr_status():
     # TODO: Return the entire extraction job.
     r = request.json
 
-    extract_id = r["extract_id"]
-    resp = get_crawl_status(extract_id)  # TODO.
+    extract_id = r["crawl_id"]
+    resp = get_extract_status(extract_id)  # TODO.
 
     return resp
 
