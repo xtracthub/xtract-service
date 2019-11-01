@@ -1,9 +1,9 @@
 
 from flask import Flask, request
 
-# from status_checks import get_crawl_status, get_extract_status
-# from container_lib.xtract_matio import MatioExtractor
-# from crawlers.globus_base import GlobusCrawler
+from status_checks import get_crawl_status, get_extract_status
+from container_lib.xtract_matio import MatioExtractor
+from crawlers.globus_base import GlobusCrawler
 from uuid import uuid4
 import os
 import json
