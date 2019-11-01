@@ -19,13 +19,17 @@ def crawl_launch(crawler, tc):
     return "done"
 
 
-def extract_launch():
-    print("Hello")
+def extract_launch(mex):
+    mex.send_files()
 
 
 def results_poller_launch():
     print("HI. ")
 
+
+@app.route('/')
+def hello():
+    return "Hello, Xtract. "
 
 @app.route('/crawl', methods=['POST'])
 def crawl_repo():
@@ -63,9 +67,10 @@ def extract_mdata():
     r = request.json
     crawl_id = r["crawl_id"]
 
-    mex = MatioExtractor('94a037b8-4eb2-4c00-b42c-1ca1421802e9', crawl_id)
+    mex = MatioExtractor(eid='e3a377f9-d046-41af-956d-141121ccf712', crawl_id=crawl_id)
 
     print("SENDING FILES...")
+    # threading.Thread(target=extract_launch, args=([1,2,3]))
     mex.send_files()
 
     print("POLLING RESPONSES...")
@@ -80,13 +85,13 @@ def extract_mdata():
 @app.route('/get_extract_status', methods=['GET'])
 def get_extr_status():
 
-    # TODO: Return the entire extraction job.
     r = request.json
 
     extract_id = r["crawl_id"]
     resp = get_extract_status(extract_id)  # TODO.
 
     return resp
+
 
 @app.route('/login', methods=['POST'])
 def login():

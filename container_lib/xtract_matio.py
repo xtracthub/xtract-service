@@ -4,6 +4,7 @@ from funcx.serialize import FuncXSerializer
 import random
 import time
 import json
+from queue import Queue
 from utils.pg_utils import pg_conn
 
 
@@ -15,10 +16,11 @@ class MatioExtractor:
     def __init__(self, eid, crawl_id):
         self.endpoint_uuid = eid  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
         self.func_id = "f329d678-937f-4c8b-aa24-a660a9383c06"
-        self.live_ids = []
+        self.live_ids = Queue()
         self.finished_ids = []
+        self.batch_size = 1
         self.crawl_id = crawl_id
-        self.mdata_base_dir = '../xtract_metadata'
+        self.mdata_base_dir = './xtract_metadata'
         self.conn = pg_conn()
 
     def register_func(self):
@@ -29,11 +31,14 @@ class MatioExtractor:
 
     def send_files(self, debug=False):
         headers = get_headers()
+        counter = 0
 
-        while True:
+        while counter < 2:
             data = {'inputs': []}
 
-            query = f"SELECT group_id FROM groups WHERE status='crawled' LIMIT 2;"
+            counter += 1
+
+            query = f"SELECT group_id FROM groups WHERE status='crawled' LIMIT {self.batch_size};"
             cur = self.conn.cursor()
             cur.execute(query)
 
@@ -62,13 +67,14 @@ class MatioExtractor:
                         data["inputs"].append(payload)
 
                     res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
-                    self.live_ids.append(res)
+                    self.live_ids.put(res)
 
             # This is completely pointless, but it's just a well-defined file I use for testing funcX :)
             else:
                 print("Sending debug file to funcX...")
                 payload = {
-                    'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
+                    'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data'
+                           '/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
                     'headers': headers, 'file_id': str(random.randint(10000, 99999))}
 
                 data["inputs"].append(payload)
@@ -76,38 +82,41 @@ class MatioExtractor:
                 res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
 
                 print(f"Appending ID {res} to live_ids")
-                self.live_ids.append(res)
+                self.live_ids.put(res)
                 print(res)
 
             while True:
-                if len(self.live_ids) < 25:
+                if self.live_ids.qsize() < 25:
                     print("FEWER THAN 25 LIVE TASKS! ")
                     break
                 else:
                     pass
 
-            cur = self.conn.cursor()
-            crawled_query = f"SELECT COUNT(*) FROM groups WHERE status='crawled' AND crawl_id='{self.crawl_id}';"
-            cur.execute(crawled_query)
-            count_val = cur.fetchall()[0][0]
+                cur = self.conn.cursor()
+                crawled_query = f"SELECT COUNT(*) FROM groups WHERE status='crawled' AND crawl_id='{self.crawl_id}';"
+                cur.execute(crawled_query)
+                count_val = cur.fetchall()[0][0]
 
-            print(f"FILES LEFT TO EXTRACT: {count_val}")
+                print(f"FILES LEFT TO EXTRACT: {count_val}")
 
-            if count_val == 0:
-                print("THERE ARE NO MORE UNPROCESSED OBJECTS!")
-                break
+                if count_val == 0:
+                    print("THERE ARE NO MORE UNPROCESSED OBJECTS!")
+                    break
 
-            time.sleep(1)
+                time.sleep(1)
 
     def poll_responses(self):
         while True:
-            if len(self.live_ids) == 0:
+            # print("New loop iter")
+            if self.live_ids.empty():
                 break
 
-            to_rem = []
-            for ex_id in self.live_ids:
+            num_elem = self.live_ids.qsize()
+            # print(num_elem)
+            for _ in range(0, num_elem):
+                ex_id = self.live_ids.get()
                 status_thing = fxc.get_task_status(ex_id)
-                print(status_thing)
+                print(f"Status: {status_thing}")
 
                 if "result" in status_thing:
                     res = fx_ser.deserialize(status_thing['result'])
@@ -125,19 +134,16 @@ class MatioExtractor:
                         with open(f"{self.mdata_base_dir}/{gid}.mdata", 'w') as g:
                             json.dump(mdata, g)
 
-                        # CHEATING here... why is to_rem getting duplicate elements??
-                        if ex_id not in to_rem:
-                            to_rem.append(ex_id)
-
                         cur = self.conn.cursor()
                         update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
                         cur.execute(update_q)
                         self.conn.commit()
                     break
-
-            for done_id in to_rem:
-                print(done_id)
-                self.live_ids.remove(done_id)
+                elif 'exception' in status_thing:
+                    exc = fx_ser.deserialize(status_thing['exception'])
+                    print(exc)
+                else:
+                    self.live_ids.put(ex_id)
             time.sleep(0.25)
 
 
@@ -171,12 +177,17 @@ def matio_test(event):
         ta = time.time()
         dir_name = tempfile.mkdtemp()
         file_id = item['file_id']
-        input_data = _get_file(item, dir_name)  # Download the file
+
+        try:
+            input_data = _get_file(item, dir_name)  # Download the file
+        except Exception as e:
+            return e
         tb = time.time()
 
         extract_path = '/'.join(input_data.split('/')[0:-1])
 
         new_mdata = xtract_matio_main.extract_matio(extract_path)
+        # return "Made it here!"
 
         new_mdata['group_id'] = file_id
         new_mdata['trans_time'] = tb-ta
@@ -199,8 +210,8 @@ def get_headers():
 
 
 # # DO NOT DELETE: Debugs for quick uncommenting outside of server context :)
-mex = MatioExtractor('94a037b8-4eb2-4c00-b42c-1ca1421802e9', '0a235f37-307b-42c1-aec6-b09ebdb51efc')
-
-mex.register_func()
-mex.send_files(debug=False)
-mex.poll_responses()
+# mex = MatioExtractor(eid='e3a377f9-d046-41af-956d-141121ccf712', crawl_id='189a016c-62e0-49d4-a09c-63e7217954a0')
+#
+# mex.register_func()
+# mex.send_files(debug=False)
+# mex.poll_responses()
