@@ -1,8 +1,8 @@
 
 from flask import Flask, request
 
-from status_checks import get_crawl_status, get_extract_status
-from container_lib.xtract_matio import MatioExtractor
+from status_checks import get_crawl_status  # , get_extract_status
+# from container_lib.xtract_matio import MatioExtractor
 from crawlers.globus_base import GlobusCrawler
 from uuid import uuid4
 import os
@@ -14,10 +14,10 @@ import threading
 application = Flask(__name__)
 
 
-# def crawl_launch(crawler, tc):
-#     crawler.crawl(tc)
-#     return "done"
-#
+def crawl_launch(crawler, tc):
+    crawler.crawl(tc)
+    return "done"
+
 #
 # def extract_launch(mex):
 #     mex.send_files()
@@ -31,36 +31,40 @@ application = Flask(__name__)
 def hello():
     return "Hello, Xtract. HELLO RYAN."
 
-# @application.route('/crawl', methods=['POST'])
-# def crawl_repo():
-#
-#     r = request.json
-#
-#     endpoint_id = r['eid']
-#     starting_dir = r['dir_path']
-#     grouper = r['grouper']
-#
-#     crawl_id = uuid4()
-#     crawler = GlobusCrawler(endpoint_id, starting_dir, crawl_id, grouper)
-#     tc = crawler.get_transfer()  # TODO: Finds my token on the machine. Need to read in the user's bearer token instead.
-#     crawl_thread = threading.Thread(target=crawl_launch, args=(crawler, tc))
-#     crawl_thread.start()
-#
-#     return {"crawl_id": str(crawl_id)}
-#
-#
-# @application.route('/get_crawl_status', methods=['GET'])
-# def get_cr_status():
-#
-#     r = request.json
-#
-#     crawl_id = r["crawl_id"]
-#     resp = get_crawl_status(crawl_id)
-#     print(resp)
-#
-#     return resp
-#
-#
+
+@application.route('/crawl', methods=['POST'])
+def crawl_repo():
+
+    r = request.json
+
+    endpoint_id = r['eid']
+    starting_dir = r['dir_path']
+    grouper = r['grouper']
+    transfer_token = r['Transfer']
+
+    print(transfer_token)
+    # TODO: Continue patching this token all the way through.
+
+    crawl_id = uuid4()
+    crawler = GlobusCrawler(endpoint_id, starting_dir, crawl_id, transfer_token, grouper)
+    tc = crawler.get_transfer()
+    crawl_thread = threading.Thread(target=crawl_launch, args=(crawler, tc))
+    crawl_thread.start()
+
+    return {"crawl_id": str(crawl_id)}
+
+
+@application.route('/get_crawl_status', methods=['GET'])
+def get_cr_status():
+
+    r = request.json
+
+    crawl_id = r["crawl_id"]
+    resp = get_crawl_status(crawl_id)
+    print(resp)
+
+    return resp
+
 # @application.route('/extract', methods=['POST'])
 # def extract_mdata():
 #

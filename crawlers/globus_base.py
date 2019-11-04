@@ -10,7 +10,7 @@ from datetime import datetime
 
 from queue import Queue
 from globus_sdk.exc import GlobusAPIError, TransferAPIError
-from globus_sdk import (NativeAppAuthClient, TransferClient, RefreshTokenAuthorizer)
+from globus_sdk import (NativeAppAuthClient, TransferClient, RefreshTokenAuthorizer, AccessTokenAuthorizer)
 
 # TODO: Stevedore to discover these??
 from .groupers import matio_grouper
@@ -24,17 +24,16 @@ grouper = matio_grouper.MatIOGrouper()
 
 class GlobusCrawler(Crawler):
 
-    def __init__(self, eid, path, crawl_id, grouper=None):
+    def __init__(self, eid, path, crawl_id, trans_token, grouper=None):
         Crawler.__init__(self)
         self.path = path
         self.eid = eid
         self.cid = '079bdf4e-9666-4816-ac01-7eab9dc82b93'
         self.count = 0
-        self.token_file = 'refresh-tokens.json'
+        self.token_file = 'refresh-tokens.json'  # TODO: Probably don't need this either.
+        self.transfer_token = trans_token
         self.redirect_uri = 'https://auth.globus.org/v2/web/auth-code'
         self.get_input = getattr(__builtins__, 'raw_input', input)
-        self.scopes = ('openid email profile '
-                       'urn:globus:auth:scope:transfer.api.globus.org:all')
         self.grouper = grouper
         self.conn = pg_conn()
         self.crawl_id = crawl_id
@@ -127,32 +126,36 @@ class GlobusCrawler(Crawler):
         return uuid.uuid4()
 
     def get_transfer(self):
-        tokens = None
-        try:
-            # if we already have tokens, load and use them
-            tokens = self.load_tokens_from_file(self.token_file)
-        except:
-            pass
+        # tokens = None
+        # try:
+        #     raise Exception  # TODO: Remove this.
+        #     # if we already have tokens, load and use them
+        #     tokens = self.load_tokens_from_file(self.token_file)
+        # except:
+        #     pass
+        #
+        # if not tokens:
+        #     # if we need to get tokens, start the Native App authentication process
+        #     tokens = self.do_native_app_authentication(self.cid, self.redirect_uri, self.scopes)
+        #
+        #     try:
+        #         self.save_tokens_to_file(self.token_file, tokens)
+        #     except:
+        #         pass
 
-        if not tokens:
-            # if we need to get tokens, start the Native App authentication process
-            tokens = self.do_native_app_authentication(self.cid, self.redirect_uri, self.scopes)
+        # TODO: Just pass in the transfer token here.
+        transfer_token = self.transfer_token
 
-            try:
-                self.save_tokens_to_file(self.token_file, tokens)
-            except:
-                pass
+        # auth_client = NativeAppAuthClient(client_id=self.cid)
 
-        transfer_tokens = tokens['transfer.api.globus.org']
+        # authorizer = RefreshTokenAuthorizer(
+        #     tokens['refresh_token'],
+        #     auth_client,
+        #     access_token=tokens['access_token'],
+        #     expires_at=tokens['expires_at_seconds'],
+        #     on_refresh=self.update_tokens_file_on_refresh)
 
-        auth_client = NativeAppAuthClient(client_id=self.cid)
-
-        authorizer = RefreshTokenAuthorizer(
-            transfer_tokens['refresh_token'],
-            auth_client,
-            access_token=transfer_tokens['access_token'],
-            expires_at=transfer_tokens['expires_at_seconds'],
-            on_refresh=self.update_tokens_file_on_refresh)
+        authorizer = AccessTokenAuthorizer(transfer_token)
 
         transfer = TransferClient(authorizer=authorizer)
 

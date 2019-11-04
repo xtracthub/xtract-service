@@ -198,6 +198,9 @@ def matio_test(event):
     return {'metadata': mdata_list, 'tot_time': t1-t0}
 
 
+# TODO: Send the Petrel token, transfer token (might need to create an authorizer), and funcX login from the Notebook,
+#  and then send all 3 every time.
+# TODO: Then on the service pull them out and use them in places.
 def get_headers():
     from fair_research_login import NativeClient
 
