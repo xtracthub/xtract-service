@@ -2,6 +2,7 @@
 funcx
 globus_sdk
 psycopg2-binary
+dfttopif
 flask
 flask_wtf
 requests
