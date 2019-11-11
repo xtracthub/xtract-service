@@ -33,7 +33,7 @@ class MatioExtractor:
         self.headers = headers
         self.batch_size = 1
         self.crawl_id = crawl_id
-        self.mdata_base_dir = './xtract_metadata'
+        self.mdata_base_dir = '~/xtract_metadata'
         self.conn = pg_conn()
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}"}
         self.post_url = 'https://dev.funcx.org/api/v1/submit'
