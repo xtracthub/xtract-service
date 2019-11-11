@@ -173,9 +173,11 @@ class GlobusCrawler(Crawler):
 
     def crawl(self, transfer):
 
-        dir_name = "~/xtract_metadata"
-        if not os.path.exists(dir_name):
-            os.makedirs(dir_name)
+        dir_name = "./xtract_metadata"
+        # if not os.path.exists(dir_name):
+        os.makedirs(dir_name, exist_ok=True)
+
+        # print(_metadata'))
 
         mdata_blob = {}
         failed_dirs = {"failed": []}
@@ -233,7 +235,7 @@ class GlobusCrawler(Crawler):
                                 group_info["files"].append(sub_gr)
                                 group_info["mdata"].append({"file": sub_gr, "blob": mdata_blob[sub_gr]})
 
-                                with open("~/xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
+                                with open("./xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
                                     json.dump(group_info, f)
 
                                 self.add_group_to_db(str(group_info["group_id"]), self.grouper,
@@ -244,7 +246,7 @@ class GlobusCrawler(Crawler):
                                     group_info["files"].append(filename)
                                     group_info["mdata"].append({"file": filename, "blob": mdata_blob[filename]})
 
-                                    with open("~/xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
+                                    with open("./xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
                                         json.dump(group_info, f)
 
             except TransferAPIError as e:
