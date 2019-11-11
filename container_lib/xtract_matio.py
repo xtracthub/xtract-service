@@ -13,11 +13,12 @@ fx_ser = FuncXSerializer()
 
 
 class MatioExtractor:
-    def __init__(self, eid, crawl_id):
+    def __init__(self, eid, crawl_id, headers):
         self.endpoint_uuid = eid  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
         self.func_id = "f329d678-937f-4c8b-aa24-a660a9383c06"
         self.live_ids = Queue()
         self.finished_ids = []
+        self.headers = headers
         self.batch_size = 1
         self.crawl_id = crawl_id
         self.mdata_base_dir = './xtract_metadata'
@@ -30,7 +31,7 @@ class MatioExtractor:
         print(f"MatIO Function ID: {self.func_id}")
 
     def send_files(self, debug=False):
-        headers = get_headers()
+        # headers = get_headers()
         counter = 0
 
         while counter < 2:
@@ -62,8 +63,9 @@ class MatioExtractor:
                     # TODO: Partial groups can occur here.
                     for f_obj in old_mdata["files"]:
                         payload = {
+                            # TODO: Remove the
                             'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
-                            'headers': headers, 'file_id': gid[0]}
+                            'headers': self.headers, 'file_id': gid[0]}
                         data["inputs"].append(payload)
 
                     res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
@@ -75,7 +77,7 @@ class MatioExtractor:
                 payload = {
                     'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data'
                            '/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
-                    'headers': headers, 'file_id': str(random.randint(10000, 99999))}
+                    'headers': self.headers, 'file_id': str(random.randint(10000, 99999))}
 
                 data["inputs"].append(payload)
 
@@ -196,25 +198,3 @@ def matio_test(event):
         shutil.rmtree(dir_name)
     t1 = time.time()
     return {'metadata': mdata_list, 'tot_time': t1-t0}
-
-
-# TODO: Send the Petrel token, transfer token (might need to create an authorizer), and funcX login from the Notebook,
-#  and then send all 3 every time.
-# TODO: Then on the service pull them out and use them in places.
-def get_headers():
-    from fair_research_login import NativeClient
-
-    client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
-    tokens = client.login(
-        requested_scopes=['https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all'])
-    auth_token = tokens["petrel_https_server"]['access_token']
-    headers = {'Authorization': f'Bearer {auth_token}'}
-    return headers
-
-
-# # DO NOT DELETE: Debugs for quick uncommenting outside of server context :)
-# mex = MatioExtractor(eid='e3a377f9-d046-41af-956d-141121ccf712', crawl_id='189a016c-62e0-49d4-a09c-63e7217954a0')
-#
-# mex.register_func()
-# mex.send_files(debug=False)
-# mex.poll_responses()
