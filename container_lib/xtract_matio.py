@@ -5,16 +5,28 @@ import random
 import time
 import json
 from queue import Queue
+import requests
 from utils.pg_utils import pg_conn
 
-
-fxc = FuncXClient()
+# TODO: Have to use POST request.
+# fxc = FuncXClient()
 fx_ser = FuncXSerializer()
+
+
+def serialize_fx_inputs(*args, **kwargs):
+    from funcx.serialize import FuncXSerializer
+    fx_serializer = FuncXSerializer()
+    ser_args = fx_serializer.serialize(args)
+    ser_kwargs = fx_serializer.serialize(kwargs)
+    payload = fx_serializer.pack_buffers([ser_args, ser_kwargs])
+    return payload
 
 
 class MatioExtractor:
     def __init__(self, eid, crawl_id, headers):
-        self.endpoint_uuid = eid  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
+
+        self.process_endpoint_uuid = eid  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
+        self.data_endpoint_uuid = "TODO"
         self.func_id = "f329d678-937f-4c8b-aa24-a660a9383c06"
         self.live_ids = Queue()
         self.finished_ids = []
@@ -23,12 +35,22 @@ class MatioExtractor:
         self.crawl_id = crawl_id
         self.mdata_base_dir = './xtract_metadata'
         self.conn = pg_conn()
+        self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}"}
+        self.post_url = 'https://dev.funcx.org/api/v1/submit'
+        self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
-    def register_func(self):
-        func_uuid = fxc.register_function(matio_test,
-                                          description="A test function for the matio extractor.")
-        self.func_id = func_uuid
-        print(f"MatIO Function ID: {self.func_id}")
+
+        # request.post dev/funcx.org/api/v1/submit  -- set authorization header with funcx called Authorization (with 'Bearer' stuff)
+        # func, endpoint_id, payload
+
+
+    # TODO: Move register_func elsewhere since not using the client anymore.
+    # def register_func(self):
+    #     func_uuid = fxc.register_function(matio_test,
+    #                                       description="A test function for the matio extractor.")
+    #     self.func_id = func_uuid
+    #     print(f"MatIO Function ID: {self.func_id}")
+
 
     def send_files(self, debug=False):
         # headers = get_headers()
@@ -63,29 +85,43 @@ class MatioExtractor:
                     # TODO: Partial groups can occur here.
                     for f_obj in old_mdata["files"]:
                         payload = {
-                            # TODO: Remove the
+                            # TODO: Un-hardcode.
                             'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
                             'headers': self.headers, 'file_id': gid[0]}
                         data["inputs"].append(payload)
 
-                    res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
-                    self.live_ids.put(res)
+                    res = requests.post(url=self.post_url,
+                                        headers=self.fx_headers,
+                                        json={'endpoint': self.process_endpoint_uuid,
+                                              'func': self.func_id,
+                                              'payload': serialize_fx_inputs(
+                                                  event=data)}
+                                        )
+
+                    task_uuid = json.loads(res.content)['task_uuid']
+
+                    self.live_ids.put(task_uuid)
 
             # This is completely pointless, but it's just a well-defined file I use for testing funcX :)
-            else:
-                print("Sending debug file to funcX...")
-                payload = {
-                    'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data'
-                           '/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
-                    'headers': self.headers, 'file_id': str(random.randint(10000, 99999))}
-
-                data["inputs"].append(payload)
-
-                res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
-
-                print(f"Appending ID {res} to live_ids")
-                self.live_ids.put(res)
-                print(res)
+            # else:
+            #     print("Sending debug file to funcX...")
+            #     payload = {
+            #         'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data'
+            #                '/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
+            #         'headers': self.headers, 'file_id': str(random.randint(10000, 99999))}
+            #
+            #     data["inputs"].append(payload)
+            #
+            #     # res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
+            #     res = requests.post(url=self.post_url,
+            #                         headers=self.fx_headers,
+            #                         json={'endpoint': '068def43-3838-43b7-ae4e-5b13c24424fb',
+            #                               'func': self.func_id,
+            #                               'payload': serialize_fx_inputs(data=data)})
+            #
+            #     print(f"Appending ID {res} to live_ids")
+            #     self.live_ids.put(res)
+            #     print(res)
 
             while True:
                 if self.live_ids.qsize() < 25:
@@ -108,6 +144,8 @@ class MatioExtractor:
                 time.sleep(1)
 
     def poll_responses(self):
+
+        # print(self.live_ids)
         while True:
             # print("New loop iter")
             if self.live_ids.empty():
@@ -117,7 +155,12 @@ class MatioExtractor:
             # print(num_elem)
             for _ in range(0, num_elem):
                 ex_id = self.live_ids.get()
-                status_thing = fxc.get_task_status(ex_id)
+                # status_thing = f.get_task_status(ex_id)
+                status_thing = requests.get(self.get_url.format(ex_id), headers=self.fx_headers)
+
+                # print(status_thing.content)
+                status_thing = json.loads(status_thing.content)
+
                 print(f"Status: {status_thing}")
 
                 if "result" in status_thing:
