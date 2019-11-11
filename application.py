@@ -1,7 +1,7 @@
 
 from flask import Flask, request
 
-from status_checks import get_crawl_status, get_extract_status
+from status_checks import get_crawl_status# , get_extract_status
 from container_lib.xtract_matio import MatioExtractor
 from crawlers.globus_base import GlobusCrawler
 from uuid import uuid4
@@ -88,15 +88,15 @@ def extract_mdata():
     return extract_id
 
 
-@application.route('/get_extract_status', methods=['GET'])
-def get_extr_status():
-
-    r = request.json
-
-    extract_id = r["crawl_id"]
-    resp = get_extract_status(extract_id)  # TODO.
-
-    return resp
+# @application.route('/get_extract_status', methods=['GET'])
+# def get_extr_status():
+#
+#     r = request.json
+#
+#     extract_id = r["crawl_id"]
+#     resp = get_extract_status(extract_id)  # TODO.
+#
+#     return resp
 
 
 @application.route('/login', methods=['POST'])
