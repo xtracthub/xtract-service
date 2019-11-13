@@ -6,6 +6,10 @@ import uuid
 import os
 from utils.pg_utils import pg_conn
 
+import psycopg2
+
+import psycopg2.extras
+
 from datetime import datetime
 
 from queue import Queue
@@ -230,19 +234,46 @@ class GlobusCrawler(Crawler):
 
                             if type(sub_gr) == str:  # str is length 1, then single-file group.
                                 # Group is reset here, because single-file group.
-                                group_info = {"group_id": str(self.gen_group_id()), "files": [], "mdata": []}
+                                gr_id = str(self.gen_group_id())
+                                group_info = {"group_id": gr_id, "files": [], "mdata": []}
 
                                 group_info["files"].append(sub_gr)
                                 group_info["mdata"].append({"file": sub_gr, "blob": mdata_blob[sub_gr]})
 
-                                with open("./xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
-                                    json.dump(group_info, f)
+                                # TODO: Write to DB instead of disk.
+                                # with open("./xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
+                                #     json.dump(group_info, f)
+                                from psycopg2.extras import Json
+
+                                cur = self.conn.cursor()
+
+                                # TODO: Don't convert lists in this way.
+                                files = group_info["files"]
+                                l2 = str(files)
+                                l3 = l2.replace('[', '{')
+                                l4 = l3.replace(']', '}')
+                                l5 = l4.replace('\'', '')
+
+                                parsers = ['crawler']
+                                p2 = str(parsers)
+                                p3 = p2.replace('[', '{')
+                                p4 = p3.replace(']', '}')
+                                p5 = p4.replace('\'', '')
+
+                                query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) VALUES ('{gr_id}', {Json(group_info)}, '{l5}', '{p5}', 'Tyler')"
+                                # query2 = cur.mogrify(query)
+                                # print(query2)
+                                cur.execute(query)
+                                self.conn.commit()
 
                                 self.add_group_to_db(str(group_info["group_id"]), self.grouper,
                                                      len(group_info['files']))
 
                             else:
                                 for filename in sub_gr:
+                                    # raise Exception ("FUCK")
+                                    # TODO: This is somewhat untested since most all cases are from the 'if' clause.
+
                                     group_info["files"].append(filename)
                                     group_info["mdata"].append({"file": filename, "blob": mdata_blob[filename]})
 
