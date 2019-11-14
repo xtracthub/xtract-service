@@ -227,7 +227,7 @@ class MatioExtractor:
                     print(exc)
                 else:
                     self.live_ids.put(ex_id)
-            time.sleep(0.25)
+            time.sleep(2)
 
 
 # TODO: Smarter separation of groups in file system (but not important at smaller scale).
