@@ -76,7 +76,7 @@ def extract_mdata():
     mex = MatioExtractor(eid='068def43-3838-43b7-ae4e-5b13c24424fb', crawl_id=crawl_id, headers=headers)
 
     print("SENDING FILES...")
-    # threading.Thread(target=extract_launch, args=([1,2,3]))
+    threading.Thread(target=extract_launch)
     mex.send_files()
 
     print("POLLING RESPONSES...")

@@ -49,3 +49,13 @@ CREATE TABLE extracts (
    status VARCHAR(20) NOT NULL DEFAULT 'EXTRACTING',
    groups_finished INT NOT NULL DEFAULT 0
    );
+
+
+CREATE TABLE group_metadata (
+  group_id VARCHAR(40) PRIMARY KEY,
+  metadata JSON NOT NULL,
+  files text[],
+  parsers text[],
+  owner varchar(50)
+  );
+

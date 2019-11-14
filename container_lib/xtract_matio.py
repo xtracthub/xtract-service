@@ -1,14 +1,11 @@
 
-from funcx.sdk.client import FuncXClient
 from funcx.serialize import FuncXSerializer
-import random
 import time
 import json
 from queue import Queue
 import requests
 from utils.pg_utils import pg_conn
 
-# TODO: Have to use POST request.
 # fxc = FuncXClient()
 fx_ser = FuncXSerializer()
 
@@ -25,7 +22,7 @@ def serialize_fx_inputs(*args, **kwargs):
 class MatioExtractor:
     def __init__(self, eid, crawl_id, headers):
 
-        self.process_endpoint_uuid = eid  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
+        self.process_endpoint_uuid = '068def43-3838-43b7-ae4e-5b13c24424fb'  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
         self.data_endpoint_uuid = "TODO"
         self.func_id = "f329d678-937f-4c8b-aa24-a660a9383c06"
         self.live_ids = Queue()
@@ -33,16 +30,12 @@ class MatioExtractor:
         self.headers = headers
         self.batch_size = 1
         self.crawl_id = crawl_id
-        self.mdata_base_dir = './xtract_metadata'
+        self.mdata_base_dir = '/projects/DLHub/mdf_metadata/'
         self.conn = pg_conn()
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}"}
         self.post_url = 'https://dev.funcx.org/api/v1/submit'
         self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
-
-
-        # request.post dev/funcx.org/api/v1/submit  -- set authorization header with funcx called Authorization (with 'Bearer' stuff)
-        # func, endpoint_id, payload
-
+        self.suppl_store = False# True
 
     # TODO: Move register_func elsewhere since not using the client anymore.
     # def register_func(self):
@@ -51,11 +44,8 @@ class MatioExtractor:
     #     self.func_id = func_uuid
     #     print(f"MatIO Function ID: {self.func_id}")
 
-
     def send_files(self, debug=False):
-        # headers = get_headers()
         counter = 0
-
         while counter < 2:
             data = {'inputs': []}
 
@@ -67,19 +57,19 @@ class MatioExtractor:
             if not debug:
 
                 for gid in cur.fetchall():
-
+                    # Update DB to flag group_id as 'EXTRACTING'.
                     cur = self.conn.cursor()
                     update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
                     cur.execute(update_q)
                     self.conn.commit()
 
-                    filename = f'{self.mdata_base_dir}/{gid[0]}.mdata'
+                    # Get the metadata for each group_id
+                    get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}';"
+                    cur.execute(get_mdata)
+                    cur.execute(get_mdata)
 
-                    print(f"ATTEMPTING TO OPEN FILE: {filename}")
-
-                    with open(filename, 'r') as f:
-                        old_mdata = json.load(f)
-                        print(f"Old metadata: {old_mdata}")
+                    old_mdata = cur.fetchone()[0]
+                    print(old_mdata)
 
                     # TODO: Partial groups can occur here.
                     for f_obj in old_mdata["files"]:
@@ -100,27 +90,6 @@ class MatioExtractor:
                     task_uuid = json.loads(res.content)['task_uuid']
 
                     self.live_ids.put(task_uuid)
-
-            # This is completely pointless, but it's just a well-defined file I use for testing funcX :)
-            # else:
-            #     print("Sending debug file to funcX...")
-            #     payload = {
-            #         'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data'
-            #                '/au_sr_polymorphism_v1/Au144_MD6341surface1.xyz',
-            #         'headers': self.headers, 'file_id': str(random.randint(10000, 99999))}
-            #
-            #     data["inputs"].append(payload)
-            #
-            #     # res = fxc.run(data, endpoint_id=self.endpoint_uuid, function_id=self.func_id)
-            #     res = requests.post(url=self.post_url,
-            #                         headers=self.fx_headers,
-            #                         json={'endpoint': '068def43-3838-43b7-ae4e-5b13c24424fb',
-            #                               'func': self.func_id,
-            #                               'payload': serialize_fx_inputs(data=data)})
-            #
-            #     print(f"Appending ID {res} to live_ids")
-            #     self.live_ids.put(res)
-            #     print(res)
 
             while True:
                 if self.live_ids.qsize() < 25:
@@ -148,7 +117,9 @@ class MatioExtractor:
         while True:
             # print("New loop iter")
             if self.live_ids.empty():
-                break
+                print("No live IDs... sleeping...")
+                time.sleep(1)
+                continue
 
             num_elem = self.live_ids.qsize()
             # print(num_elem)
@@ -169,14 +140,41 @@ class MatioExtractor:
                     for g_obj in res["metadata"]:
                         gid = g_obj["group_id"]
 
-                        # Get the metadata from the old file.
-                        with open(f"{self.mdata_base_dir}/{gid}.mdata", 'r') as f:
-                            mdata = json.load(f)
-                            mdata["matio"] = g_obj["matio"]
+                        cur = self.conn.cursor()
+                        # TODO: Do something smarter than pulling this down a second time (cache somewhere???)
+                        get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid}';"
+                        cur.execute(get_mdata)
+                        cur.execute(get_mdata)
+
+                        old_mdata = cur.fetchone()[0]
+                        old_mdata["matio"] = g_obj["matio"]
+
+                        from psycopg2.extras import Json
+                        update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)};"
+                        cur.execute(update_mdata)
+                        self.conn.commit()
 
                         # Save ALL the metadata as a new (replacement) file.
-                        with open(f"{self.mdata_base_dir}/{gid}.mdata", 'w') as g:
-                            json.dump(mdata, g)
+                        # TODO: Send a funcx function to save data LOL.
+# LOL                        with open(f"{self.mdata_base_dir}/{gid}.mdata", 'w') as g:
+#                             json.dump(old_mdata, g)
+                        # TODO: Update the parser list as well.
+
+                        payload = {'group_id': gid, 'metadata': old_mdata,
+                                   'crawl_id': self.crawl_id, 'dirname': 'mdf_metadata/'} # self.mdata_base_dir}
+
+                        print(f"Sending data to FuncX Endpoint: {self.process_endpoint_uuid}")
+
+                        if self.suppl_store:
+                            res = requests.post(url=self.post_url,
+                                                headers=self.fx_headers,
+                                                json={'endpoint': self.process_endpoint_uuid,
+                                                      'func': '0797ee6c-0161-4297-a634-8ff3d450c49f',
+                                                      'payload': serialize_fx_inputs(
+                                                          event=payload)}
+                                                )
+
+
 
                         cur = self.conn.cursor()
                         update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
@@ -240,3 +238,20 @@ def matio_test(event):
         shutil.rmtree(dir_name)
     t1 = time.time()
     return {'metadata': mdata_list, 'tot_time': t1-t0}
+
+
+# TODO: Batch metadata saving requests.
+def save_mdata(event):
+
+    import json
+
+    main_dir = event['dirname']
+    crawl_id = str(event['crawl_id'])
+    group_id = str(event['group_id'])
+    mdata = event['metadata']
+
+    with open(f"{main_dir}{crawl_id}/{group_id}", 'w') as f:
+        json.dump(mdata, f)
+
+    return None
+

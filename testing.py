@@ -1,13 +1,9 @@
 
-from fair_research_login import NativeClient
-import requests
-import json
-
 from funcx import FuncXClient
-from funcx.serialize import FuncXSerializer
+
 
 fxc = FuncXClient()
-fx_ser = FuncXSerializer()
+
 
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
 tokens = client.login(
@@ -17,45 +13,37 @@ tokens = client.login(
     no_local_server=True,
     no_browser=True)
 
-
+auth_token = tokens["petrel_https_server"]['access_token']
+transfer_token = tokens['transfer.api.globus.org']['access_token']
 funcx_token = tokens['funcx_service']['access_token']
-headers = {'Authorization': f"Bearer {funcx_token}"}
-post_url = 'https://dev.funcx.org/api/v1/submit'
+
+# TODO: RYAN -- how to nicely read these headers in auth?
+headers = {'Authorization': f"Bearer {auth_token}", 'Transfer': transfer_token, 'FuncX': funcx_token}
+print(headers)
+
+def save_mdata(event):
+    import json
+    import os
+
+    main_dir = event['dirname']
+    crawl_id = str(event['crawl_id'])
+    group_id = str(event['group_id'])
+    mdata = event['metadata']
+
+    os.makedirs(f"{main_dir}{crawl_id}", exist_ok=True)
+
+    with open(f"{main_dir}{crawl_id}/{group_id}", 'w') as f:
+        json.dump(mdata, f)
+
+    return None
 
 
-def apple(num1, num2):
-    return num1+num2
-
-def serialize_fx_inputs(*args, **kwargs):
-    from funcx.serialize import FuncXSerializer
-    fx_serializer = FuncXSerializer()
-    ser_args = fx_serializer.serialize(args)
-    ser_kwargs = fx_serializer.serialize(kwargs)
-    payload = fx_serializer.pack_buffers([ser_args, ser_kwargs])
-    return payload
-
-func_uuid = fxc.register_function(apple, description="A test function for the matio extractor.")
+def register_func():
+    func_uuid = fxc.register_function(save_mdata,
+                                      description="A test function for the matio extractor.")
+    print(f"Metadata save function: {func_uuid}")
 
 
-res = requests.post(url=post_url, headers=headers, json={'endpoint': '068def43-3838-43b7-ae4e-5b13c24424fb', 'func': func_uuid, 'payload': serialize_fx_inputs(num1=2, num2=4)})
-cont = json.loads(res.content)
+register_func()
 
-task_id = cont['task_uuid']
-
-import time
-while True:
-    status_url = f'https://dev.funcx.org/api/v1/{task_id}/status'
-    status_thing = requests.get(status_url, headers=headers)
-    cont2 = json.loads(status_thing.content)
-    print(cont2)
-
-    if "result" in cont2:
-        res = fx_ser.deserialize(cont2['result'])
-        print(res)
-
-    elif "exception" in cont2:
-        res = fx_ser.deserialize(cont2['exception'])
-        print(res)
-
-    time.sleep(1)
 
