@@ -20,10 +20,10 @@ def crawl_launch(crawler, tc):
 
 def extract_launch(mex):
     mex.send_files()
-#
-#
-# def results_poller_launch():
-#     print("HI. ")
+
+
+def results_poller_launch(mex):
+    mex.poll_responses()
 
 
 @application.route('/')
@@ -76,12 +76,15 @@ def extract_mdata():
     mex = MatioExtractor(eid='068def43-3838-43b7-ae4e-5b13c24424fb', crawl_id=crawl_id, headers=headers)
 
     print("SENDING FILES...")
-    threading.Thread(target=extract_launch)
-    mex.send_files()
+    # threading.Thread(target=extract_launch, args=(mex))
+    # mex.send_files()
+    mex.launch_extract()
 
     print("POLLING RESPONSES...")
     # TODO: This needs to happen in its own thread.
-    mex.poll_responses()
+    # threading.Thread(
+    # mex.poll_responses()
+    mex.launch_poll()
 
     extract_id = str(uuid4())
 
@@ -94,7 +97,7 @@ def get_extr_status():
     r = request.json
 
     extract_id = r["crawl_id"]
-    resp = get_extract_status(extract_id)  # TODO.
+    resp = get_extract_status(extract_id)
 
     return resp
 

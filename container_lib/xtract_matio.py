@@ -5,6 +5,8 @@ import json
 from queue import Queue
 import requests
 from utils.pg_utils import pg_conn
+import threading
+import logging
 
 # fxc = FuncXClient()
 fx_ser = FuncXSerializer()
@@ -19,8 +21,22 @@ def serialize_fx_inputs(*args, **kwargs):
     return payload
 
 
+class ExtractionQueue:
+    def __init__(self):
+        self.queue = Queue()
+
+
+class ResultsPoller:
+    def __init__(self):
+        print("HELLO2")
+
+
 class MatioExtractor:
     def __init__(self, eid, crawl_id, headers):
+
+        # logging.basicConfig(level=logging.INFO, format='%(relativeCreated)6d %(threadName)s %(message)s')
+
+        # logging.debug("hello")
 
         self.process_endpoint_uuid = '068def43-3838-43b7-ae4e-5b13c24424fb'  # "731bad9b-5f8d-421b-88f5-a386e4b1e3e0"
         self.data_endpoint_uuid = "TODO"
@@ -46,17 +62,30 @@ class MatioExtractor:
 
     def send_files(self, debug=False):
         counter = 0
-        while counter < 2:
+
+        while True:
+            print(f"Counter: {counter}")
             data = {'inputs': []}
 
             counter += 1
-            query = f"SELECT group_id FROM groups WHERE status='crawled' and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
-            cur = self.conn.cursor()
-            cur.execute(query)
+
+            try:
+                query = f"SELECT group_id FROM groups WHERE status='crawled' and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
+                cur = self.conn.cursor()
+                cur.execute(query)
+                print("SUCCESSFULY PULLED DOWN DATA")
+            except:
+                print("OOPS. ")
+
+            print(debug)
 
             if not debug:
 
+                print("MADE IT HERE 1. ")
+                # print(cur.fetchall())
+
                 for gid in cur.fetchall():
+                    print(f"GID: {gid[0]}")
                     # Update DB to flag group_id as 'EXTRACTING'.
                     cur = self.conn.cursor()
                     update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
@@ -69,6 +98,7 @@ class MatioExtractor:
                     cur.execute(get_mdata)
 
                     old_mdata = cur.fetchone()[0]
+                    # pr
                     print(old_mdata)
 
                     # TODO: Partial groups can occur here.
@@ -110,6 +140,17 @@ class MatioExtractor:
                     break
 
                 time.sleep(1)
+
+    def launch_extract(self):
+        # logging.debug("Hello from thread launcher")
+        ex_thr = threading.Thread(target=self.send_files, args=())
+        ex_thr.start()
+
+    def launch_poll(self):
+        # logging.debug("Hello from ")
+        po_thr = threading.Thread(target=self.poll_responses, args=())
+        po_thr.start()
+
 
     def poll_responses(self):
 

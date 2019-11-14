@@ -39,7 +39,7 @@ def get_extract_status(crawl_id):
     status_val = cur2.fetchall()[0][0]
     crawled_val = cur3.fetchall()[0][0]
 
-    return {"crawl_id": crawl_id, "FINISHED": count_val, "PENDING": status_val, "IDLE": crawled_val}
+    return {"crawl_id": crawl_id, "FINISHED": status_val, "PENDING": count_val, "IDLE": crawled_val}
 
 
 def get_group_status(group_id):
