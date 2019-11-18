@@ -10,6 +10,10 @@ import json
 import threading
 
 
+# TODO: DLHUb latency tests and some writing
+# TODO: Xtract+MDF, and pushing that into Elastic Beanstalk (funcX, Beanstalk)
+# TODO: Getting it running on Cooley.
+
 application = Flask(__name__)
 
 
@@ -116,4 +120,4 @@ def get_mdata():
 
 
 if __name__ == '__main__':
-    application.run(debug=True)
+    application.run(debug=True, threaded=True)
