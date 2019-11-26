@@ -6,12 +6,12 @@ from queue import Queue
 import requests
 from utils.pg_utils import pg_conn
 import threading
-import logging
 
 fx_ser = FuncXSerializer()
 
 # TODO: Figure out how to be smart about these DB requests -- should I have multiple cursors? Commit each? Batch commit?
 # TODO: Do a proper logger to a file. 
+
 
 def serialize_fx_inputs(*args, **kwargs):
     from funcx.serialize import FuncXSerializer
@@ -151,7 +151,7 @@ class MatioExtractor:
                         gid = g_obj["group_id"]
 
                         cur = self.conn.cursor()
-                        # TODO: Do something smarter than pulling this down a second time (cache somewhere???)
+                        # TODO: [Optimization] Do something smarter than pulling this down a second time (cache somewhere???)
                         get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid}';"
                         cur.execute(get_mdata)
                         cur.execute(get_mdata)
@@ -163,7 +163,7 @@ class MatioExtractor:
                         print("PUSHING METADATA TO DB (Update #1)")
                         update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
                         cur.execute(update_mdata)
-                        #self.conn.commit()
+
 
                         # Save ALL the metadata as a new (replacement) file.
                         # TODO: Send a funcx function to save data LOL.

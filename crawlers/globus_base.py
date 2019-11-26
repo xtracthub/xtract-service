@@ -6,9 +6,6 @@ import uuid
 import os
 from utils.pg_utils import pg_conn
 
-import psycopg2
-
-import psycopg2.extras
 
 from datetime import datetime
 
@@ -22,7 +19,7 @@ from .groupers import matio_grouper
 
 from .base import Crawler
 
-# TODO: Tidy this.
+# TODO: [cleanup] Tidy this
 grouper = matio_grouper.MatIOGrouper()
 
 
@@ -46,7 +43,6 @@ class GlobusCrawler(Crawler):
         """Load a set of saved tokens."""
         with open(token_filepath, 'r') as f:
             tokens = json.load(f)
-
         return tokens
 
     def save_tokens_to_file(self, token_filepath, tokens):
@@ -130,37 +126,9 @@ class GlobusCrawler(Crawler):
         return uuid.uuid4()
 
     def get_transfer(self):
-        # tokens = None
-        # try:
-        #     raise Exception  # TODO: Remove this.
-        #     # if we already have tokens, load and use them
-        #     tokens = self.load_tokens_from_file(self.token_file)
-        # except:
-        #     pass
-        #
-        # if not tokens:
-        #     # if we need to get tokens, start the Native App authentication process
-        #     tokens = self.do_native_app_authentication(self.cid, self.redirect_uri, self.scopes)
-        #
-        #     try:
-        #         self.save_tokens_to_file(self.token_file, tokens)
-        #     except:
-        #         pass
 
-        # TODO: Just pass in the transfer token here.
         transfer_token = self.transfer_token
-
-        # auth_client = NativeAppAuthClient(client_id=self.cid)
-
-        # authorizer = RefreshTokenAuthorizer(
-        #     tokens['refresh_token'],
-        #     auth_client,
-        #     access_token=tokens['access_token'],
-        #     expires_at=tokens['expires_at_seconds'],
-        #     on_refresh=self.update_tokens_file_on_refresh)
-
         authorizer = AccessTokenAuthorizer(transfer_token)
-
         transfer = TransferClient(authorizer=authorizer)
 
         # print out a directory listing from an endpoint
@@ -178,10 +146,7 @@ class GlobusCrawler(Crawler):
     def crawl(self, transfer):
 
         dir_name = "./xtract_metadata"
-        # if not os.path.exists(dir_name):
         os.makedirs(dir_name, exist_ok=True)
-
-        # print(_metadata'))
 
         mdata_blob = {}
         failed_dirs = {"failed": []}
@@ -224,61 +189,60 @@ class GlobusCrawler(Crawler):
                         to_crawl.put(full_path)
 
                 if self.grouper == 'matio':
-                    group_list = grouper.group(f_names)
+                    gr_dict = grouper.group(f_names)
 
-                    for gr in group_list:
-                        group_info = {"group_id": self.gen_group_id(), "files": [], "mdata": []}
+                    # TODO: [URGENT BUGFIX] -- get this working.
+                    for parser in gr_dict:
 
-                        # TODO: It's like the groups are triple nested (require 3 for-loops)... ask Logan about this.
-                        for sub_gr in gr:
+                        for gr in gr_dict[parser]:
+                            print(f"Group: {gr}")
+                            group_info = {"group_id": self.gen_group_id(), "files": [], "mdata": []}
 
-                            if type(sub_gr) == str:  # str is length 1, then single-file group.
-                                # Group is reset here, because single-file group.
-                                gr_id = str(self.gen_group_id())
-                                group_info = {"group_id": gr_id, "files": [], "mdata": []}
+                            print(f"Parser: {parser}")
 
-                                group_info["files"].append(sub_gr)
-                                group_info["mdata"].append({"file": sub_gr, "blob": mdata_blob[sub_gr]})
+                            gr_id = str(self.gen_group_id())
+                            group_info = {"group_id": gr_id, "files": [], "mdata": []}
 
-                                # TODO: Write to DB instead of disk.
-                                # with open("./xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
-                                #     json.dump(group_info, f)
-                                from psycopg2.extras import Json
+                            # TODO: [URGENT BUGFIX] Extend this to have multiple-file groups.
 
-                                cur = self.conn.cursor()
+                            file_list = list(gr)
 
-                                # TODO: Don't convert lists in this way.
-                                files = group_info["files"]
-                                l2 = str(files)
-                                l3 = l2.replace('[', '{')
-                                l4 = l3.replace(']', '}')
-                                l5 = l4.replace('\'', '')
+                            if len(file_list) > 1:
+                                print("BANANAS!!!")
 
-                                parsers = ['crawler']
-                                p2 = str(parsers)
-                                p3 = p2.replace('[', '{')
-                                p4 = p3.replace(']', '}')
-                                p5 = p4.replace('\'', '')
+                            group_info["files"] = file_list
 
-                                query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) VALUES ('{gr_id}', {Json(group_info)}, '{l5}', '{p5}', 'Tyler')"
-                                # query2 = cur.mogrify(query)
-                                # print(query2)
-                                cur.execute(query)
-                                self.conn.commit()
+                            for f in file_list:
+                                group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
 
-                                self.add_group_to_db(str(group_info["group_id"]), self.grouper,
-                                                     len(group_info['files']))
+                            print(group_info)
 
-                            else:
-                                for filename in sub_gr:
-                                    # raise Exception ("FUCK")
-                                    # TODO: This is somewhat untested since most all cases are from the 'if' clause.
+                            from psycopg2.extras import Json
 
-                                    group_info["files"].append(filename)
-                                    group_info["mdata"].append({"file": filename, "blob": mdata_blob[filename]})
+                            cur = self.conn.cursor()
 
-                                    with open("./xtract_metadata/" + str(group_info['group_id'])+".mdata", 'w') as f:
-                                        json.dump(group_info, f)
+                            # TODO [enhancement]: Don't convert lists in this way.  This is horrible
+                            files = group_info["files"]
+                            l2 = str(files)
+                            l3 = l2.replace('[', '{')
+                            l4 = l3.replace(']', '}')
+                            l5 = l4.replace('\'', '')
+
+                            parsers = ['crawler']
+                            p2 = str(parsers)
+                            p3 = p2.replace('[', '{')
+                            p4 = p3.replace(']', '}')
+                            p5 = p4.replace('\'', '')
+
+                            print(f"Group Info: {group_info}")
+
+                            query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) VALUES ('{gr_id}', {Json(group_info)}, '{l5}', '{p5}', 'Tyler')"
+                            cur.execute(query)
+                            self.conn.commit()
+
+                            self.add_group_to_db(str(group_info["group_id"]), self.grouper,
+                                                 len(group_info['files']))
+
 
             except TransferAPIError as e:
                 print("Problem directory {}".format(cur_dir))
