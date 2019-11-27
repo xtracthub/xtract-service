@@ -21,7 +21,6 @@ except Exception as e:
     raise e
 
 
-
 @application.route('/', methods=['POST'])
 def crawl_repo():
 
@@ -39,41 +38,38 @@ def crawl_repo():
     tc = TransferClient(authorizer=authorizer)
 
     cur = conn.cursor()
-    eligible_files_query = f"SELECT group_id FROM groups WHERE status='crawled' and crawl_id='{crawl_id}' LIMIT 5;"
+    eligible_files_query = f"SELECT group_id FROM groups WHERE status='EXTRACTED' and crawl_id='{crawl_id}' LIMIT 2;"
     cur.execute(eligible_files_query)
 
     mdata_to_transfer = []
 
+    os.makedirs(f'/Users/tylerskluzacek/mdata_to_transfer/{crawl_id}', exist_ok=True)
     for gid in cur.fetchall():
         get_mdata_query = f"SELECT metadata from group_metadata where group_id='{gid[0]}';"
         cur.execute(get_mdata_query)
 
-        gid = cur.fetchone()
-        mdata_to_transfer.append(gid[0])
-
-    # TODO: Start here. 
-    os.makedirs(f'mdata_to_transfer/{crawl_id}', exist_ok=True)
+        mdata = cur.fetchone()
+        print(mdata[0])
+        mdata_to_transfer.append(mdata[0])
 
     for item in mdata_to_transfer:
-        with open(f"{crawl_id}/{item['group_id']}.mdata", 'w') as f:
+        print(item['group_id'])
+        with open(os.path.expanduser(f"~/mdata_to_transfer/{crawl_id}/{item['group_id']}.mdata"), 'w') as f:
             json.dump(item, f)
 
     tdata = globus_sdk.TransferData(tc, source_endpoint,
                                     dest_endpoint,
                                     label='nice transfer')
 
-    f
-
-    tdata.add_item('~/PycharmProjects/xtracthub-service/poop.txt', f'/home/ubuntu/{crawl_id}/poop.txt')
+    tdata.add_item(os.path.expanduser('~/mdata_to_transfer'), f'/home/ubuntu', recursive=True)
 
     # Ensure endpoints are activated
     tc.endpoint_autoactivate(source_endpoint)
     tc.endpoint_autoactivate(dest_endpoint)
 
     submit_result = tc.submit_transfer(tdata)
-    print(submit_result)
+    return "[200] Submitted"
 
-    return "Nice"
 
 if __name__ == '__main__':
     application.run(debug=True, port=50001)
