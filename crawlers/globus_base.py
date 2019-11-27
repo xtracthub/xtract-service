@@ -5,6 +5,7 @@ import webbrowser
 import uuid
 import os
 from utils.pg_utils import pg_conn
+import time
 
 
 from datetime import datetime
@@ -168,8 +169,14 @@ class GlobusCrawler(Crawler):
             cur_dir = to_crawl.get()
 
             try:
+                while True:
 
-                dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
+                    try:
+                        dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
+                        break
+                    except:
+                        print("Retrying!")
+                        time.sleep(1)  # TODO: Lose the sleep. Cleanup^^^
 
                 f_names = []
                 for entry in dir_contents:

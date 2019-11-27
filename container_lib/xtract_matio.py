@@ -26,7 +26,7 @@ class MatioExtractor:
     def __init__(self, eid, crawl_id, headers):
 
         # TODO: Pass in these 3 args from user.
-        self.process_endpoint_uuid = '8d3a13fe-9dba-4c41-9a6c-71c8fa5a5376'
+        self.process_endpoint_uuid = '5e3eed81-1f54-493f-b3fd-b66c6437473b'
         self.data_endpoint_uuid = "TODO"
         self.func_id = "f329d678-937f-4c8b-aa24-a660a9383c06"
 
