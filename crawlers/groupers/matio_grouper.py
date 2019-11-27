@@ -17,15 +17,13 @@ class MatIOGrouper:
         group_coll = {}
 
         for parser in parsers:
-            parser = get_parser(parser)
-            group = parser.group(file_ls)
+
+            if parser in ['noop', 'generic']:
+                continue
+
+            p = get_parser(parser)
+            group = p.group(file_ls)
 
             group_coll[parser] = group
 
         return group_coll
-
-
-# mig = MatIOGrouper()
-# files = ['a', 'b', 'c']
-#
-# mig.group(files)

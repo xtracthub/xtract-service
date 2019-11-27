@@ -201,9 +201,7 @@ class GlobusCrawler(Crawler):
                             print(f"Parser: {parser}")
 
                             gr_id = str(self.gen_group_id())
-                            group_info = {"group_id": gr_id, "files": [], "mdata": []}
-
-                            # TODO: [URGENT BUGFIX] Extend this to have multiple-file groups.
+                            group_info = {"group_id": gr_id, "parser": parser, "files": [], "mdata": []}
 
                             file_list = list(gr)
 
