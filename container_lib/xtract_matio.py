@@ -1,11 +1,15 @@
 
-from funcx.serialize import FuncXSerializer
+import threading
+import requests
 import time
 import json
+
+from funcx.serialize import FuncXSerializer
+from psycopg2.extras import Json
 from queue import Queue
-import requests
+
 from utils.pg_utils import pg_conn
-import threading
+
 
 fx_ser = FuncXSerializer()
 
@@ -159,7 +163,6 @@ class MatioExtractor:
                         old_mdata = cur.fetchone()[0]
                         old_mdata["matio"] = g_obj["matio"]
 
-                        from psycopg2.extras import Json
                         print("PUSHING METADATA TO DB (Update #1)")
                         update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
                         cur.execute(update_mdata)
