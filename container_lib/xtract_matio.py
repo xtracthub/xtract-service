@@ -167,7 +167,6 @@ class MatioExtractor:
                         update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
                         cur.execute(update_mdata)
 
-
                         # Save ALL the metadata as a new (replacement) file.
                         # TODO: Send a funcx function to save data LOL.
                         # TODO: Update the parser list as well.
