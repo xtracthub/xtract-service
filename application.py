@@ -10,20 +10,11 @@ import json
 import threading
 
 
-# TODO: DLHUb latency tests and some writing
-# TODO: Xtract+MDF, and pushing that into Elastic Beanstalk (funcX, Beanstalk)
-# TODO: Getting it running on Cooley.
-
 application = Flask(__name__)
 
 
 def crawl_launch(crawler, tc):
     crawler.crawl(tc)
-    return "done"
-
-
-def extract_launch(mex):
-    mex.send_files()
 
 
 def results_poller_launch(mex):
@@ -45,8 +36,7 @@ def crawl_repo():
     grouper = r['grouper']
     transfer_token = r['Transfer']
 
-    print(transfer_token)
-    # TODO: Continue patching this token all the way through.
+    print(f"Received Transfer Token: {transfer_token}")
 
     crawl_id = uuid4()
     crawler = GlobusCrawler(endpoint_id, starting_dir, crawl_id, transfer_token, grouper)
@@ -80,14 +70,9 @@ def extract_mdata():
     mex = MatioExtractor(eid='068def43-3838-43b7-ae4e-5b13c24424fb', crawl_id=crawl_id, headers=headers)
 
     print("SENDING FILES...")
-    # threading.Thread(target=extract_launch, args=(mex))
-    # mex.send_files()
     mex.launch_extract()
 
     print("POLLING RESPONSES...")
-    # TODO: This needs to happen in its own thread.
-    # threading.Thread(
-    # mex.poll_responses()
     mex.launch_poll()
 
     extract_id = str(uuid4())
@@ -113,6 +98,7 @@ def login():
     return json.dumps(headers)
 
 
+# TODO: This is incomplete.
 @application.route('/get_mdata', methods=['POST'])
 def get_mdata():
     r = request
