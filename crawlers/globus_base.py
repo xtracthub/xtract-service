@@ -1,97 +1,65 @@
 
+import os
 import sys
 import json
-import webbrowser
 import uuid
-import os
-from utils.pg_utils import pg_conn
 import time
+import logging
 
 
 from datetime import datetime
+from utils.pg_utils import pg_conn
+
 
 from queue import Queue
 from globus_sdk.exc import GlobusAPIError, TransferAPIError
-from globus_sdk import (NativeAppAuthClient, TransferClient, RefreshTokenAuthorizer, AccessTokenAuthorizer)
+from globus_sdk import (TransferClient, AccessTokenAuthorizer, ConfidentialAppAuthClient)
 
-# TODO: Stevedore to discover these??
+
 from .groupers import matio_grouper
 
-
 from .base import Crawler
-
-# TODO: [cleanup] Tidy this
-grouper = matio_grouper.MatIOGrouper()
 
 
 class GlobusCrawler(Crawler):
 
-    def __init__(self, eid, path, crawl_id, trans_token, grouper=None):
+    def __init__(self, eid, path, crawl_id, trans_token, auth_token, grouper_name=None, logging_level='info'):
         Crawler.__init__(self)
         self.path = path
         self.eid = eid
-        self.cid = '079bdf4e-9666-4816-ac01-7eab9dc82b93'
-        self.count = 0
-        self.token_file = 'refresh-tokens.json'  # TODO: Probably don't need this either.
+        self.cid = '079bdf4e-9666-4816-ac01-7eab9dc82b93'  # TODO: This should not be hardcoded beyond MDF work.
+        self.group_count = 0
         self.transfer_token = trans_token
-        self.redirect_uri = 'https://auth.globus.org/v2/web/auth-code'
-        self.get_input = getattr(__builtins__, 'raw_input', input)
-        self.grouper = grouper
+        self.auth_token = auth_token
         self.conn = pg_conn()
         self.crawl_id = crawl_id
+        self.crawl_hb = 10
 
-    def load_tokens_from_file(self, token_filepath):
-        """Load a set of saved tokens."""
-        with open(token_filepath, 'r') as f:
-            tokens = json.load(f)
-        return tokens
+        if grouper_name == 'matio':
+            self.grouper = matio_grouper.MatIOGrouper()
 
-    def save_tokens_to_file(self, token_filepath, tokens):
-        """Save a set of tokens for later use."""
-        with open(token_filepath, 'w') as f:
-            json.dump(tokens, f)
+        try:
+            self.token_owner = self.get_uid_from_token()
+        except:
+            print("Unable to authenticate user: Invalid Token. Aborting crawl.")
 
-    def update_tokens_file_on_refresh(self, token_response):
-        """
-        Callback function passed into the RefreshTokenAuthorizer.
-        Will be invoked any time a new access token is fetched.
-        """
-        self.save_tokens_to_file(self.token_file, token_response.by_resource_server)
+        self.logging_level = logging_level
 
-    def do_native_app_authentication(self, client_id, redirect_uri,
-                                     requested_scopes=None):
-        """
-        Does a Native App authentication flow and returns a
-        dict of tokens keyed by service name.
-        """
-        client = NativeAppAuthClient(client_id=client_id)
-        # pass refresh_tokens=True to request refresh tokens
-        client.oauth2_start_flow(requested_scopes=requested_scopes,
-                                 redirect_uri=redirect_uri,
-                                 refresh_tokens=True)
+        if self.logging_level == 'debug':
+            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler.log', level=logging.DEBUG)
+        elif self.logging_level == 'info':
+            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler.log', level=logging.INFO)
+        else:
+            raise KeyError("Only logging levels '-d / debug' and '-i / info' are supported.")
 
-        url = client.oauth2_get_authorize_url()
-
-        print('Native App Authorization URL: \n{}'.format(url))
-
-        # if not is_remote_session():
-        webbrowser.open(url, new=1)
-
-        auth_code = self.get_input('Enter the auth code: ').strip()
-
-        token_response = client.oauth2_exchange_code_for_tokens(auth_code)
-
-        # return a set of tokens, organized by resource server name
-        return token_response.by_resource_server
-
-    def add_group_to_db(self, group_id, grouper, num_files):
+    def add_group_to_db(self, group_id, num_files):
 
         # TODO try/catch the postgres things.
         cur = self.conn.cursor()
 
         now_time = datetime.now()
         query1 = f"INSERT INTO groups (group_id, grouper, num_files, created_on, crawl_id) VALUES " \
-            f"('{group_id}', '{grouper}', {num_files}, '{now_time}', '{self.crawl_id}');"
+            f"('{group_id}', '{self.grouper.name}', {num_files}, '{now_time}', '{self.crawl_id}');"
 
         query2 = f"INSERT INTO group_status (group_id, status) VALUES ('{group_id}', 'crawled');"
 
@@ -120,23 +88,38 @@ class GlobusCrawler(Crawler):
 
         if '.' in filename:
             extension = filename.split('.')[-1]
-
         return extension
+
+    def get_uid_from_token(self):
+        # Step 1: Get Auth Client with Secrets.
+        client_id = os.getenv("GLOBUS_FUNCX_CLIENT")
+        secret = os.getenv("GLOBUS_FUNCX_SECRET")
+
+        print(client_id)
+        print(secret)
+
+        # Step 2: Transform token and introspect it.
+        conf_app_client = ConfidentialAppAuthClient(client_id, secret)
+        token = str.replace(str(self.auth_token), 'Bearer ', '')
+        auth_detail = conf_app_client.oauth2_token_introspect(token)
+
+        uid = auth_detail['username']
+
+        return uid
 
     def gen_group_id(self):
         return uuid.uuid4()
 
     def get_transfer(self):
-
         transfer_token = self.transfer_token
         authorizer = AccessTokenAuthorizer(transfer_token)
         transfer = TransferClient(authorizer=authorizer)
 
-        # print out a directory listing from an endpoint
+        # Print out a directory listing from an endpoint
         try:
             transfer.endpoint_autoactivate(self.eid)
         except GlobusAPIError as ex:
-            print(ex)
+            logging.error(ex)
             if ex.http_status == 401:
                 sys.exit('Refresh token has expired. '
                          'Please delete refresh-tokens.json and try again.')
@@ -145,7 +128,6 @@ class GlobusCrawler(Crawler):
         return transfer
 
     def crawl(self, transfer):
-
         dir_name = "./xtract_metadata"
         os.makedirs(dir_name, exist_ok=True)
 
@@ -156,14 +138,13 @@ class GlobusCrawler(Crawler):
         to_crawl.put(self.path)
 
         cur = self.conn.cursor()
-
         now_time = datetime.now()
         crawl_update = f"INSERT INTO crawls (crawl_id, started_on) VALUES " \
             f"('{self.crawl_id}', '{now_time}');"
-
         cur.execute(crawl_update)
         self.conn.commit()
 
+        t_last = time.time()
         while not to_crawl.empty():
 
             cur_dir = to_crawl.get()
@@ -174,9 +155,10 @@ class GlobusCrawler(Crawler):
                     try:
                         dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
                         break
+                    # TODO: Be less broad here.
                     except:
-                        print("Retrying!")
-                        time.sleep(1)  # TODO: Lose the sleep. Cleanup^^^
+                        logging.error("Retrying!")
+                        time.sleep(0.5)
 
                 f_names = []
                 for entry in dir_contents:
@@ -187,78 +169,74 @@ class GlobusCrawler(Crawler):
                         extension = self.get_extension(entry["name"])
                         mdata_blob[full_path] = {"physical": {'size': entry['size'],
                                                               "extension": extension, "path_type": "globus"}}
-                        self.count += 1
-                        if self.count % 20000 == 0:
-                            print("COUNT: {}".format(self.count))
 
                     elif entry['type'] == 'dir':
                         full_path = cur_dir + "/" + entry['name']
                         to_crawl.put(full_path)
 
-                if self.grouper == 'matio':
-                    gr_dict = grouper.group(f_names)
+                # if self.grouper == 'matio':
+                gr_dict = self.grouper.group(f_names)
 
-                    # TODO: [URGENT BUGFIX] -- get this working.
-                    for parser in gr_dict:
+                for parser in gr_dict:
 
-                        for gr in gr_dict[parser]:
-                            print(f"Group: {gr}")
-                            group_info = {"group_id": self.gen_group_id(), "files": [], "mdata": []}
+                    for gr in gr_dict[parser]:
+                        logging.debug(f"Group: {gr}")
+                        logging.debug(f"Parser: {parser}")
 
-                            print(f"Parser: {parser}")
+                        gr_id = str(self.gen_group_id())
+                        group_info = {"group_id": gr_id, "parser": parser, "files": [], "mdata": []}
 
-                            gr_id = str(self.gen_group_id())
-                            group_info = {"group_id": gr_id, "parser": parser, "files": [], "mdata": []}
+                        file_list = list(gr)
 
-                            file_list = list(gr)
+                        group_info["files"] = file_list
 
-                            if len(file_list) > 1:
-                                print("BANANAS!!!")
+                        for f in file_list:
+                            group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
 
-                            group_info["files"] = file_list
+                        logging.debug(group_info)
 
-                            for f in file_list:
-                                group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
+                        from psycopg2.extras import Json
 
-                            print(group_info)
+                        cur = self.conn.cursor()
 
-                            from psycopg2.extras import Json
+                        # TODO [enhancement]: Don't convert lists in this way.  This is horrible
+                        files = group_info["files"]
+                        l2 = str(files)
+                        l3 = l2.replace('[', '{')
+                        l4 = l3.replace(']', '}')
+                        l5 = l4.replace('\'', '')
 
-                            cur = self.conn.cursor()
+                        parsers = ['crawler']
+                        p2 = str(parsers)
+                        p3 = p2.replace('[', '{')
+                        p4 = p3.replace(']', '}')
+                        p5 = p4.replace('\'', '')
 
-                            # TODO [enhancement]: Don't convert lists in this way.  This is horrible
-                            files = group_info["files"]
-                            l2 = str(files)
-                            l3 = l2.replace('[', '{')
-                            l4 = l3.replace(']', '}')
-                            l5 = l4.replace('\'', '')
+                        query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
+                            f"VALUES ('{gr_id}', {Json(group_info)}, '{l5}', '{p5}', 'skluzacek@uchicago.edu')"
+                        self.group_count += 1
+                        cur.execute(query)
+                        self.conn.commit()
 
-                            parsers = ['crawler']
-                            p2 = str(parsers)
-                            p3 = p2.replace('[', '{')
-                            p4 = p3.replace(']', '}')
-                            p5 = p4.replace('\'', '')
+                        self.add_group_to_db(str(group_info["group_id"]), len(group_info['files']))
 
-                            print(f"Group Info: {group_info}")
+                        t_new = time.time()
 
-                            query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) VALUES ('{gr_id}', {Json(group_info)}, '{l5}', '{p5}', 'Tyler')"
-                            cur.execute(query)
-                            self.conn.commit()
-
-                            self.add_group_to_db(str(group_info["group_id"]), self.grouper,
-                                                 len(group_info['files']))
-
+                        if t_new - t_last >= self.crawl_hb:
+                            logging.info(f"Total groups processed for crawl_id {self.crawl_id}: {self.group_count}")
+                            t_last = t_new
 
             except TransferAPIError as e:
-                print("Problem directory {}".format(cur_dir))
-                print("Transfer client received the following error:")
-                print(e)
+                logging.error("Problem directory {}".format(cur_dir))
+                logging.error("Transfer client received the following error:")
+                logging.error(e)
                 failed_dirs["failed"].append(cur_dir)
                 continue
 
-        print("FILES PROCESSED: {}".format(self.count))
+        logging.info(f"\n***FINAL groups processed for crawl_id {self.crawl_id}: {self.group_count}***")
+        logging.info(f"\n*** CRAWL COMPLETE  (ID: {self.crawl_id})***")
 
-        # TODO: HERE update DB to show that crawling is completed.
+        self.db_crawl_end()
 
         with open('failed.json', 'w') as fp:
             json.dump(failed_dirs, fp)
