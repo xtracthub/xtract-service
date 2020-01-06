@@ -1,5 +1,6 @@
 
 from flask import Flask, request
+from flask_api import status
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
@@ -23,7 +24,8 @@ def results_poller_launch(mex):
 
 @application.route('/')
 def hello():
-    return "Status: 200 (OK). Welcome to Xtract!"
+    st = status.HTTP_200_OK
+    return f"Welcome to Xtract! \n Status: {str(st)}", st
 
 
 @application.route('/crawl', methods=['POST'])
@@ -35,16 +37,17 @@ def crawl_repo():
     starting_dir = r['dir_path']
     grouper = r['grouper']
     transfer_token = r['Transfer']
+    auth_token = r['Authorization']
 
     print(f"Received Transfer Token: {transfer_token}")
 
     crawl_id = uuid4()
-    crawler = GlobusCrawler(endpoint_id, starting_dir, crawl_id, transfer_token, grouper)
+    crawler = GlobusCrawler(endpoint_id, starting_dir, crawl_id, transfer_token, auth_token, grouper)
     tc = crawler.get_transfer()
     crawl_thread = threading.Thread(target=crawl_launch, args=(crawler, tc))
     crawl_thread.start()
 
-    return {"crawl_id": str(crawl_id)}
+    return {"crawl_id": str(crawl_id)}, status.HTTP_200_OK
 
 
 @application.route('/get_crawl_status', methods=['GET'])
@@ -75,6 +78,7 @@ def extract_mdata():
     print("POLLING RESPONSES...")
     mex.launch_poll()
 
+    # TODO: Shouldn't this extract_id be stored somewhere? 
     extract_id = str(uuid4())
 
     return extract_id

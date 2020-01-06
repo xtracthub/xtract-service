@@ -4,6 +4,7 @@ globus_sdk
 psycopg2-binary
 dfttopif
 flask
+flask_api
 flask_wtf
 requests
 -e git+git://github.com/materials-data-facility/MaterialsIO.git#egg=materials_io
