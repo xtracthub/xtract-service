@@ -14,7 +14,7 @@ from utils.pg_utils import pg_conn
 fx_ser = FuncXSerializer()
 
 # TODO: Figure out how to be smart about these DB requests -- should I have multiple cursors? Commit each? Batch commit?
-# TODO: Do a proper logger to a file. 
+# TODO: Do a proper logger to a file.
 
 
 def serialize_fx_inputs(*args, **kwargs):
@@ -81,7 +81,7 @@ class MatioExtractor:
                     # Get the metadata for each group_id
                     get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}';"
                     cur.execute(get_mdata)
-                    cur.execute(get_mdata)
+                    # cur.execute(get_mdata)  # TODO: Why was this executed twice??
 
                     old_mdata = cur.fetchone()[0]
 
@@ -167,25 +167,7 @@ class MatioExtractor:
                         update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
                         cur.execute(update_mdata)
 
-                        # Save ALL the metadata as a new (replacement) file.
-                        # TODO: Send a funcx function to save data LOL.
-                        # TODO: Update the parser list as well.
-
-                        # payload = {'group_id': gid, 'metadata': old_mdata,
-                        #            'crawl_id': self.crawl_id, 'dirname': 'mdf_metadata/'} # self.mdata_base_dir}
-                        #
-                        # print(f"Sending data to FuncX Endpoint: {self.process_endpoint_uuid}")
-                        #
-                        # if self.suppl_store:
-                        #     # TODO: Need to poll this somehow to ensure success.
-                        #     res = requests.post(url=self.post_url,
-                        #                         headers=self.fx_headers,
-                        #                         json={'endpoint': self.process_endpoint_uuid,
-                        #                               # TODO: Un-hardcode (put in class __init__)
-                        #                               'func': '0797ee6c-0161-4297-a634-8ff3d450c49f',
-                        #                               'payload': serialize_fx_inputs(
-                        #                                   event=payload)}
-                        #                         )
+                        # TODO: Make sure we're updating the parser-list in the db.
 
                         print("DB UPDATE #2")
                         update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
