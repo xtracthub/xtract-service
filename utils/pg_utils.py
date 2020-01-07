@@ -15,6 +15,14 @@ def pg_conn():
     return conn
 
 
+def pg_list(py_list):
+    for item in py_list:
+        if "'" in item:
+            raise ValueError("Filename contains illegal Postgres character --> ' <--")
+
+    new_list = ((str(py_list).replace('[', '{')).replace(']', '}')).replace('\'', '')
+    return new_list
+
 def pg_update(cur, update_string):
 
     try:
@@ -22,3 +30,5 @@ def pg_update(cur, update_string):
     except Exception as e:
         print(e)
         raise ConnectionError("Unable to connect to database.")
+
+

@@ -8,7 +8,7 @@ import logging
 
 
 from datetime import datetime
-from utils.pg_utils import pg_conn
+from utils.pg_utils import pg_conn, pg_list
 
 
 from queue import Queue
@@ -40,8 +40,8 @@ class GlobusCrawler(Crawler):
 
         try:
             self.token_owner = self.get_uid_from_token()
-        except:
-            print("Unable to authenticate user: Invalid Token. Aborting crawl.")
+        except:  # TODO: Real auth that's not just printing.
+            logging.info("Unable to authenticate user: Invalid Token. Aborting crawl.")
 
         self.logging_level = logging_level
 
@@ -95,9 +95,6 @@ class GlobusCrawler(Crawler):
         client_id = os.getenv("GLOBUS_FUNCX_CLIENT")
         secret = os.getenv("GLOBUS_FUNCX_SECRET")
 
-        print(client_id)
-        print(secret)
-
         # Step 2: Transform token and introspect it.
         conf_app_client = ConfidentialAppAuthClient(client_id, secret)
         token = str.replace(str(self.auth_token), 'Bearer ', '')
@@ -133,6 +130,7 @@ class GlobusCrawler(Crawler):
 
         mdata_blob = {}
         failed_dirs = {"failed": []}
+        failed_groups = {"illegal_char": []}
 
         to_crawl = Queue()
         to_crawl.put(self.path)
@@ -174,7 +172,6 @@ class GlobusCrawler(Crawler):
                         full_path = cur_dir + "/" + entry['name']
                         to_crawl.put(full_path)
 
-                # if self.grouper == 'matio':
                 gr_dict = self.grouper.group(f_names)
 
                 for parser in gr_dict:
@@ -199,26 +196,23 @@ class GlobusCrawler(Crawler):
 
                         cur = self.conn.cursor()
 
-                        # TODO [enhancement]: Don't convert lists in this way.  This is horrible
-                        files = group_info["files"]
-                        l2 = str(files)
-                        l3 = l2.replace('[', '{')
-                        l4 = l3.replace(']', '}')
-                        l5 = l4.replace('\'', '')
+                        try:
+                            files = pg_list(group_info["files"])
+                            parsers = pg_list(['crawler'])
 
-                        parsers = ['crawler']
-                        p2 = str(parsers)
-                        p3 = p2.replace('[', '{')
-                        p4 = p3.replace(']', '}')
-                        p5 = p4.replace('\'', '')
+                        except ValueError as e:
+                            logging.error(f"Caught ValueError {e}")
+                            failed_groups["illegal_char"].append((group_info["files"], ['crawler']))
+                            logging.error("Continuing!")
 
-                        query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
-                            f"VALUES ('{gr_id}', {Json(group_info)}, '{l5}', '{p5}', 'skluzacek@uchicago.edu')"
-                        self.group_count += 1
-                        cur.execute(query)
-                        self.conn.commit()
+                        else:
+                            query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
+                                f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
+                            self.group_count += 1
+                            cur.execute(query)
+                            self.conn.commit()
 
-                        self.add_group_to_db(str(group_info["group_id"]), len(group_info['files']))
+                            self.add_group_to_db(str(group_info["group_id"]), len(group_info['files']))
 
                         t_new = time.time()
 
@@ -238,7 +232,10 @@ class GlobusCrawler(Crawler):
 
         self.db_crawl_end()
 
-        with open('failed.json', 'w') as fp:
+        with open('failed_dirs.json', 'w') as fp:
             json.dump(failed_dirs, fp)
+
+        with open('failed_groups.json', 'w') as gp:
+            json.dump(failed_groups, gp)
 
         return mdata_blob
