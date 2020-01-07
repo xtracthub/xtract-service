@@ -1,6 +1,7 @@
 
 import threading
 import requests
+import logging
 import time
 import json
 
@@ -50,12 +51,9 @@ class MatioExtractor:
         self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
     def send_files(self, debug=False):
-        counter = 0
 
         while True:
-
             data = {'inputs': []}
-
 
             try:
                 query = f"SELECT group_id FROM groups WHERE status='crawled' and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"

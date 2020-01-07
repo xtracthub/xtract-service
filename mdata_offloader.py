@@ -1,10 +1,8 @@
 
 from flask import Flask, request
-from globus_sdk.exc import GlobusAPIError, TransferAPIError
-from globus_sdk import (NativeAppAuthClient, TransferClient, RefreshTokenAuthorizer, AccessTokenAuthorizer)
+from globus_sdk import (TransferClient, AccessTokenAuthorizer)
 import json
 import psycopg2
-import sys
 import os
 import globus_sdk
 
