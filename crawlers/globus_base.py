@@ -187,7 +187,6 @@ class GlobusCrawler(Crawler):
                         group_info["files"] = file_list
 
                         for f in file_list:
-                            print(mdata_blob)
                             group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
 
                         logging.debug(group_info)
