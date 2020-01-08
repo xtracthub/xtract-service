@@ -27,7 +27,6 @@ class GlobusCrawler(Crawler):
         Crawler.__init__(self)
         self.path = path
         self.eid = eid
-        self.cid = '079bdf4e-9666-4816-ac01-7eab9dc82b93'  # TODO: This should not be hardcoded beyond MDF work.
         self.group_count = 0
         self.transfer_token = trans_token
         self.auth_token = auth_token
@@ -188,6 +187,7 @@ class GlobusCrawler(Crawler):
                         group_info["files"] = file_list
 
                         for f in file_list:
+                            print(mdata_blob)
                             group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
 
                         logging.debug(group_info)

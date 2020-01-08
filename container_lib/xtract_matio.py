@@ -65,7 +65,6 @@ class MatioExtractor:
                 print("OOPS. ")
 
             if not debug:
-
                 for gid in cur.fetchall():
                     print(f"Processing GID: {gid[0]}")
 
@@ -249,4 +248,5 @@ def save_mdata(event):
         json.dump(mdata, f)
 
     return None
+
 
