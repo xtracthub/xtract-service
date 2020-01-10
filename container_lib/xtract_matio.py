@@ -29,12 +29,12 @@ def serialize_fx_inputs(*args, **kwargs):
 
 class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, globus_eid,
-                 mdata_store_path, logging_level='info', suppl_store=False):
+                 mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
         self.globus_eid = globus_eid
 
         # TODO: The endpoints need not be hardcoded.
-        self.func_id = "5cdd4602-ffd8-4ddd-acc7-c6e3583807fb"
+        self.func_id = "f683f441-83e7-4c82-8263-77954382330c"
         self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
         self.dest_endpoint = '5113667a-10b4-11ea-8a67-0e35e66293c2'
 
@@ -42,6 +42,7 @@ class MatioExtractor:
         self.finished_ids = []
         self.headers = headers
         self.batch_size = 1
+        self.max_active_batches = 2
         self.crawl_id = crawl_id
 
         self.mdata_store_path = mdata_store_path
@@ -54,17 +55,19 @@ class MatioExtractor:
 
         self.logging_level = logging_level
 
-        if self.logging_level == 'debug':
-            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler.log', level=logging.DEBUG)
-        elif self.logging_level == 'info':
-            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler.log', level=logging.INFO)
-        else:
-            raise KeyError("Only logging levels '-d / debug' and '-i / info' are supported.")
+        self.logger = logging.getLogger(__name__)
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.DEBUG)
 
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init.
 
     def send_files(self, debug=False):
+        # Just keep looping in case something comes up in crawl.
         while True:
             data = {'inputs': []}
 
@@ -73,14 +76,20 @@ class MatioExtractor:
                     f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
                 cur = self.conn.cursor()
                 cur.execute(query)
-                logging.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
+                self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
             # TODO: Catch connection errors.
             except:
-                print("OOPS. ")
+                # TODO: Don't exit lol.
+                exit()
 
-            if not debug:
-                for gid in cur.fetchall():
-                    logging.debug(f"Processing GID: {gid[0]}")
+            if True is not False:  # TODO: This is always true.
+                # Get a
+                gids = cur.fetchall()
+
+                self.logger.info(f"Received {len(gids)} tasks from DB!")
+
+                for gid in gids:
+                    self.logger.debug(f"Processing GID: {gid[0]}")
 
                     # Update DB to flag group_id as 'EXTRACTING'.
                     # TODO: Catch these connection errors.
@@ -90,11 +99,12 @@ class MatioExtractor:
                     self.conn.commit()
 
                     # Get the metadata for each group_id
-                    get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}';"
+                    get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}' LIMIT 1;"
                     cur.execute(get_mdata)
                     old_mdata = cur.fetchone()[0]
 
                     # TODO: Partial groups can occur here.
+                    # Take all of the files and append them to our payload.
                     for f_obj in old_mdata["files"]:
                         payload = {
                             # TODO: Un-hardcode.
@@ -118,14 +128,17 @@ class MatioExtractor:
 
                     # TODO: Actually do something here.
                     if fx_res["status"] == "failed":
-                        logging.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
+                        self.logger.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
+                        exit()  # TODO: Don't exit lol.
                     task_uuid = fx_res['task_uuid']
+
+                    self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
                     self.live_ids.put(task_uuid)
+                    self.logger.info(f"Approximate current size of live task queue: {self.live_ids.qsize()}")
 
             while True:
-                # TODO: this needs to be a tunable parameter. like max_active_tasks.
-                if self.live_ids.qsize() <  25:
-                    print("FEWER THAN 25 LIVE TASKS! ")
+                if self.live_ids.qsize() < self.max_active_batches:
+                    self.logger.debug(f"FEWER THAN {self.max_active_batches} LIVE TASKS! ")
                     break
                 else:
                     pass
@@ -135,10 +148,10 @@ class MatioExtractor:
                 cur.execute(crawled_query)
                 count_val = cur.fetchall()[0][0]
 
-                logging.debug(f"Files left to extract: {count_val}")
+                self.logger.debug(f"Files left to extract: {count_val}")
 
                 if count_val == 0:
-                    print("There are no more unprocessed objects")
+                    self.logger.info("There are no more unprocessed objects")
                     break
 
                 time.sleep(1)
@@ -154,7 +167,7 @@ class MatioExtractor:
     def poll_responses(self):
         while True:
             if self.live_ids.empty():
-                logging.debug("No live IDs... sleeping...")
+                self.logger.debug("No live IDs... sleeping...")
                 time.sleep(1)
                 continue
 
@@ -164,11 +177,11 @@ class MatioExtractor:
                 status_thing = requests.get(self.get_url.format(ex_id), headers=self.fx_headers)
                 status_thing = json.loads(status_thing.content)
 
-                logging.debug(f"Status: {status_thing}")
+                self.logger.debug(f"Status: {status_thing}")
 
                 if "result" in status_thing:
                     res = fx_ser.deserialize(status_thing['result'])
-                    logging.debug(f"Received response: {res}")
+                    self.logger.debug(f"Received response: {res}")
 
                     for g_obj in res["metadata"]:
                         gid = g_obj["group_id"]
@@ -183,19 +196,19 @@ class MatioExtractor:
                         old_mdata = cur.fetchone()[0]
                         old_mdata["matio"] = g_obj["matio"]
 
-                        logging.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
+                        self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
                         update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
                         cur.execute(update_mdata)
 
                         # TODO: Make sure we're updating the parser-list in the db.
-                        logging.debug("Updating group status (Update: 2/2)")
+                        self.logger.debug("Updating group status (Update: 2/2)")
                         update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
                         cur.execute(update_q)
                         self.conn.commit()
                     break
                 elif 'exception' in status_thing:
                     exc = fx_ser.deserialize(status_thing['exception'])
-                    logging.error(f"Caught Exception: {exc}")
+                    self.logger.error(f"Caught Exception: {exc}")
                 else:
                     self.live_ids.put(ex_id)
 
@@ -257,12 +270,11 @@ def matio_test(event):
 
             tdata = globus_sdk.TransferData(tc, source_endpoint,
                                         dest_endpoint,
-                                        label='neat transfer')
+                                        label='neato transfer')
         except Exception as e:
             return e
 
         try:
-            # TODO: Switch to regular Globus Transfer w/ polling.
             tdata.add_item(f'{file_path}', dest_file_path, recursive=False)
 
         except Exception as e:
@@ -307,5 +319,3 @@ def save_mdata(event):
     with open(f"{main_dir}{crawl_id}/{group_id}", 'w') as f:
         json.dump(mdata, f)
     return None
-
-

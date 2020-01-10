@@ -6,20 +6,15 @@ from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
 from crawlers.globus_base import GlobusCrawler
 from uuid import uuid4
-import json
 
 import threading
-
+import json
 
 application = Flask(__name__)
 
 
 def crawl_launch(crawler, tc):
     crawler.crawl(tc)
-
-
-def results_poller_launch(mex):
-    mex.poll_responses()
 
 
 @application.route('/')

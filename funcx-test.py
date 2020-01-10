@@ -59,7 +59,7 @@ for f_obj in old_mdata["files"]:
 
 res = requests.post(url=post_url,
                     headers=headers,
-                    json={'endpoint': '450746de-f876-4581-b97e-8bbefd16bf3a',
+                    json={'endpoint': '8d2203cb-e3b2-42b3-86f5-dd4663ddfbdf',
                           'func': func_uuid,
                           'payload': serialize_fx_inputs(
                               event=data)
