@@ -18,7 +18,6 @@ fx_ser = FuncXSerializer()
 # TODO: Do a proper logger to a file.
 
 
-
 def serialize_fx_inputs(*args, **kwargs):
     from funcx.serialize import FuncXSerializer
     fx_serializer = FuncXSerializer()
@@ -33,7 +32,11 @@ class MatioExtractor:
                  mdata_store_path, logging_level='info', suppl_store=False):
         self.funcx_eid = funcx_eid
         self.globus_eid = globus_eid
-        self.func_id = "f329d678-937f-4c8b-aa24-a660a9383c06"
+
+        # TODO: The endpoints need not be hardcoded.
+        self.func_id = "5cdd4602-ffd8-4ddd-acc7-c6e3583807fb"
+        self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
+        self.dest_endpoint = '5113667a-10b4-11ea-8a67-0e35e66293c2'
 
         self.live_ids = Queue()
         self.finished_ids = []
@@ -98,10 +101,14 @@ class MatioExtractor:
                             'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
                             'headers': self.fx_headers, 'file_id': gid[0]}
                         data["inputs"].append(payload)
+                        data["transfer_token"] = self.headers['Transfer']
+                        data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
+                        data["dest_endpoint"] = '5113667a-10b4-11ea-8a67-0e35e66293c2'
 
                     res = requests.post(url=self.post_url,
                                         headers=self.fx_headers,
-                                        json={'endpoint': self.funcx_eid,
+                                        json={
+                                            'endpoint': self.funcx_eid,
                                               'func': self.func_id,
                                               'payload': serialize_fx_inputs(
                                                   event=data)}
@@ -208,43 +215,80 @@ def matio_test(event):
     """
     import os
     import time
-    import tempfile
     import shutil
     import sys
-    from home_run.base import _get_file
+    import globus_sdk
+    import random
+    from globus_sdk import TransferClient, AccessTokenAuthorizer
 
     sys.path.insert(1, '/')
     import xtract_matio_main
 
     # Make a temp dir and download the data
-    dir_name = tempfile.mkdtemp()
-    os.chdir(dir_name)
+    dir_name = f'/home/ubuntu/tmpfileholder-{random.randint(0,999999999)}'
+    if os.path.exists(dir_name):
+        shutil.rmtree(dir_name)
+    os.makedirs(dir_name, exist_ok=True)
+
+    try:
+        os.chdir(dir_name)
+    except Exception as e:
+        return str(e)
 
     # A list of file paths
     all_files = event['inputs']
+    transfer_token = event['transfer_token']
+    dest_endpoint = event['dest_endpoint']
+    source_endpoint = event['source_endpoint']
 
     t0 = time.time()
     mdata_list = []
+
     for item in all_files:
         ta = time.time()
-        dir_name = tempfile.mkdtemp()
         file_id = item['file_id']
 
         try:
+            authorizer = AccessTokenAuthorizer(transfer_token)
+            tc = TransferClient(authorizer=authorizer)
+
+            file_path = item["url"].split('globus.org')[1]
+            dest_file_path = dir_name + '/' +  file_path.split('/')[-1]
+
+            tdata = globus_sdk.TransferData(tc, source_endpoint,
+                                        dest_endpoint,
+                                        label='neat transfer')
+        except Exception as e:
+            return e
+
+        try:
             # TODO: Switch to regular Globus Transfer w/ polling.
-            input_data = _get_file(item, dir_name)  # Download the file
+            tdata.add_item(f'{file_path}', dest_file_path, recursive=False)
+
         except Exception as e:
             return e
         tb = time.time()
 
-        extract_path = '/'.join(input_data.split('/')[0:-1])
+        tc.endpoint_autoactivate(source_endpoint)
+        tc.endpoint_autoactivate(dest_endpoint)
 
-        new_mdata = xtract_matio_main.extract_matio(extract_path)
+        try:
+            submit_result = tc.submit_transfer(tdata)
+        except Exception as e:
+            return str(e).split('\n')
+
+        gl_task_id = submit_result['task_id']
+
+        tc.task_wait(gl_task_id)
+
+        # POLL GLOBUS TRANSFER PROGRESS.
+        new_mdata = xtract_matio_main.extract_matio(dir_name)
 
         new_mdata['group_id'] = file_id
         new_mdata['trans_time'] = tb-ta
         mdata_list.append(new_mdata)
 
+        # Don't be an animal -- clean up your mess!
         shutil.rmtree(dir_name)
     t1 = time.time()
     return {'metadata': mdata_list, 'tot_time': t1-t0}
