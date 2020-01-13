@@ -36,7 +36,7 @@ class GlobusCrawler(Crawler):
             self.grouper = matio_grouper.MatIOGrouper()
 
         # try:
-        self.token_owner = self.get_uid_from_token()
+        # self.token_owner = self.get_uid_from_token()
         # except:  # TODO: Real auth that's not just printing.
         # logging.info("Unable to authenticate user: Invalid Token. Aborting crawl.")
 
@@ -203,7 +203,7 @@ class GlobusCrawler(Crawler):
 
                         else:
                             query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
-                                f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
+                                f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', 'skluzacek@uchicago.edu')"
                             self.group_count += 1
                             cur.execute(query)
                             self.conn.commit()
