@@ -19,7 +19,9 @@ class MatIOGrouper:
 
         for parser in parsers:
 
-            if parser in ['noop', 'generic']:
+            # TODO: Uncomment this to add back the other groups.
+            if parser not in ['dft']:
+                # if parser in ['noop', 'generic']:
                 continue
 
             p = get_parser(parser)

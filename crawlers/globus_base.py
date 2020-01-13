@@ -6,10 +6,8 @@ import uuid
 import time
 import logging
 
-
 from datetime import datetime
 from utils.pg_utils import pg_conn, pg_list
-
 
 from queue import Queue
 from globus_sdk.exc import GlobusAPIError, TransferAPIError
@@ -52,7 +50,6 @@ class GlobusCrawler(Crawler):
             raise KeyError("Only logging levels '-d / debug' and '-i / info' are supported.")
 
     def add_group_to_db(self, group_id, num_files):
-
         # TODO try/catch the postgres things.
         cur = self.conn.cursor()
 
