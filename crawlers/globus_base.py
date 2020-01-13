@@ -146,15 +146,18 @@ class GlobusCrawler(Crawler):
             try:
                 while True:
 
-                    try:
-                        dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
-                        break
+                    # try:
+                    dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
+                    break
+                    # break
                     # TODO: Be less broad here.
-                    except Exception as e:
-                        logging.error(f"Caught error : {e}")
-                        logging.error(f"Offending directory: {cur_dir}")
-                        logging.error("Retrying!")
-                        time.sleep(0.25)
+                    # except ExternalError.DirListingFailed.SizeLimit:
+                    # except Exception as e:
+                    #     logging.error(f"Caught error : {e}")
+                    #     logging.error(f"Offending directory: {cur_dir}")
+                    #     logging.error("Retrying!")
+                    #     time.sleep(0.25)
+
 
                 f_names = []
                 for entry in dir_contents:
