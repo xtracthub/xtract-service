@@ -5,6 +5,8 @@ psycopg2-binary
 dfttopif
 Pillow
 pymatgen
+hyperspy
+tableschema
 flask
 flask_api
 flask_wtf

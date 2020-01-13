@@ -150,9 +150,11 @@ class GlobusCrawler(Crawler):
                         dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
                         break
                     # TODO: Be less broad here.
-                    except:
+                    except Exception as e:
+                        logging.error(f"Caught error : {e}")
+                        logging.error(f"Offending directory: {cur_dir}")
                         logging.error("Retrying!")
-                        time.sleep(0.5)
+                        time.sleep(0.25)
 
                 f_names = []
                 for entry in dir_contents:
