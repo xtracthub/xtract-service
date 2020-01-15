@@ -10,7 +10,7 @@ from datetime import datetime
 from utils.pg_utils import pg_conn, pg_list
 
 from queue import Queue
-from globus_sdk.exc import GlobusAPIError, TransferAPIError
+from globus_sdk.exc import GlobusAPIError, TransferAPIError, GlobusTimeoutError
 from globus_sdk import (TransferClient, AccessTokenAuthorizer, ConfidentialAppAuthClient)
 
 
@@ -142,22 +142,34 @@ class GlobusCrawler(Crawler):
         while not to_crawl.empty():
 
             cur_dir = to_crawl.get()
+            restart_loop = False
 
             try:
                 while True:
 
-                    # try:
-                    dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
-                    break
-                    # break
-                    # TODO: Be less broad here.
-                    # except ExternalError.DirListingFailed.SizeLimit:
-                    # except Exception as e:
-                    #     logging.error(f"Caught error : {e}")
-                    #     logging.error(f"Offending directory: {cur_dir}")
-                    #     logging.error("Retrying!")
-                    #     time.sleep(0.25)
+                    try:
+                        dir_contents = transfer.operation_ls(self.eid, path=cur_dir)
+                        break
 
+                    # TODO: Be less broad here.
+                    except GlobusTimeoutError as e:
+                        logging.error("Globus Timeout Error -- retrying")
+                        pass
+
+                    except Exception as e:
+
+                        print(str(e))
+                        if '502' in str(e)[0:4]:
+                            logging.error("Directory too large...")
+                            restart_loop = True
+                            break
+
+                        logging.error(f"Caught error : {e}")
+                        logging.error(f"Offending directory: {cur_dir}")
+                        time.sleep(0.25)
+
+                if restart_loop:
+                    continue
 
                 f_names = []
                 for entry in dir_contents:
@@ -221,6 +233,7 @@ class GlobusCrawler(Crawler):
                             logging.info(f"Total groups processed for crawl_id {self.crawl_id}: {self.group_count}")
                             t_last = t_new
 
+            # TODO: Is this unnecessary now?
             except TransferAPIError as e:
                 logging.error("Problem directory {}".format(cur_dir))
                 logging.error("Transfer client received the following error:")
