@@ -219,14 +219,17 @@ class GlobusCrawler(Crawler):
                             logging.error("Continuing!")
 
                         else:
-                            query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
-                                f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
-                            self.group_count += 1
-                            cur.execute(query)
-                            self.conn.commit()
+                            try:
+                                query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
+                                    f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
+                                self.group_count += 1
+                                cur.execute(query)
+                                self.conn.commit()
 
-                            self.add_group_to_db(str(group_info["group_id"]), len(group_info['files']))
-
+                                self.add_group_to_db(str(group_info["group_id"]), len(group_info['files']))
+                            except:
+                                logging.error("Failure pushing to postgres...")
+                                pass
                         t_new = time.time()
 
                         if t_new - t_last >= self.crawl_hb:
