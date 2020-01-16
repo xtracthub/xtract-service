@@ -21,7 +21,7 @@ from .base import Crawler
 
 class GlobusCrawler(Crawler):
 
-    def __init__(self, eid, path, crawl_id, trans_token, auth_token, grouper_name=None, logging_level='debug'):
+    def __init__(self, eid, path, crawl_id, trans_token, auth_token, grouper_name=None, logging_level='info'):
         Crawler.__init__(self)
         self.path = path
         self.eid = eid
@@ -59,8 +59,8 @@ class GlobusCrawler(Crawler):
 
         query2 = f"INSERT INTO group_status (group_id, status) VALUES ('{group_id}', 'crawled');"
 
-        logging.debug(f"Groups query {query1}")
-        logging.debug(f"Status query {query2}")
+        logging.info(f"Groups query {query1}")
+        logging.info(f"Status query {query2}")
 
         cur.execute(query1)
         cur.execute(query2)
@@ -206,7 +206,7 @@ class GlobusCrawler(Crawler):
                         for f in file_list:
                             group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
 
-                        logging.debug(group_info)
+                        logging.info(group_info)
 
                         from psycopg2.extras import Json
 
@@ -227,7 +227,7 @@ class GlobusCrawler(Crawler):
                                 query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
                                     f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
 
-                                logging.debug(f"Group Metadata query: {query}")
+                                logging.info(f"Group Metadata query: {query}")
                                 self.group_count += 1
                                 cur.execute(query)
                                 self.conn.commit()
