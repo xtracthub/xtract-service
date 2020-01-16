@@ -21,7 +21,7 @@ from .base import Crawler
 
 class GlobusCrawler(Crawler):
 
-    def __init__(self, eid, path, crawl_id, trans_token, auth_token, grouper_name=None, logging_level='info'):
+    def __init__(self, eid, path, crawl_id, trans_token, auth_token, grouper_name=None, logging_level='debug'):
         Crawler.__init__(self)
         self.path = path
         self.eid = eid
@@ -43,9 +43,9 @@ class GlobusCrawler(Crawler):
         self.logging_level = logging_level
 
         if self.logging_level == 'debug':
-            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler.log', level=logging.DEBUG)
+            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler_debug.log', level=logging.DEBUG)
         elif self.logging_level == 'info':
-            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler.log', level=logging.INFO)
+            logging.basicConfig(format='%(asctime)s - %(message)s', filename='crawler_info.log', level=logging.INFO)
         else:
             raise KeyError("Only logging levels '-d / debug' and '-i / info' are supported.")
 
@@ -58,6 +58,9 @@ class GlobusCrawler(Crawler):
             f"('{group_id}', '{self.grouper.name}', {num_files}, '{now_time}', '{self.crawl_id}');"
 
         query2 = f"INSERT INTO group_status (group_id, status) VALUES ('{group_id}', 'crawled');"
+
+        logging.debug(f"Groups query {query1}")
+        logging.debug(f"Status query {query2}")
 
         cur.execute(query1)
         cur.execute(query2)
@@ -219,9 +222,12 @@ class GlobusCrawler(Crawler):
                             logging.error("Continuing!")
 
                         else:
+                            # TODO: This try/except exists only because of occasinoal pg char issue -- should fix.
                             try:
                                 query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
                                     f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
+
+                                logging.debug(f"Group Metadata query: {query}")
                                 self.group_count += 1
                                 cur.execute(query)
                                 self.conn.commit()
