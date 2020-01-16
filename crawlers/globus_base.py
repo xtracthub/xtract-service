@@ -5,9 +5,11 @@ import json
 import uuid
 import time
 import logging
+import threading
 
 from datetime import datetime
 from utils.pg_utils import pg_conn, pg_list
+import pickle as pkl
 
 from queue import Queue
 from globus_sdk.exc import GlobusAPIError, TransferAPIError, GlobusTimeoutError
@@ -31,6 +33,11 @@ class GlobusCrawler(Crawler):
         self.conn = pg_conn()
         self.crawl_id = crawl_id
         self.crawl_hb = 10
+
+        self.images = []
+        self.matio = []
+        self.keyword = []
+        self.jsonxml = []
 
         if grouper_name == 'matio':
             self.grouper = matio_grouper.MatIOGrouper()
@@ -123,28 +130,18 @@ class GlobusCrawler(Crawler):
                 raise ex
         return transfer
 
-    def crawl(self, transfer):
-        dir_name = "./xtract_metadata"
-        os.makedirs(dir_name, exist_ok=True)
-
-        mdata_blob = {}
-        failed_dirs = {"failed": []}
-        failed_groups = {"illegal_char": []}
-
-        to_crawl = Queue()
-        to_crawl.put(self.path)
-
-        cur = self.conn.cursor()
-        now_time = datetime.now()
-        crawl_update = f"INSERT INTO crawls (crawl_id, started_on) VALUES " \
-            f"('{self.crawl_id}', '{now_time}');"
-        cur.execute(crawl_update)
-        self.conn.commit()
-
+    def launch_crawl_worker(self, transfer, worker_id):
+        logging.basicConfig(format=f"%(asctime)s - %(message)s', filename='crawler_{worker_id}.log", level=logging.INFO)
         t_last = time.time()
-        while not to_crawl.empty():
+        mdata_blob = {}
+        self.file_counter=0
 
-            cur_dir = to_crawl.get()
+        while True:
+
+            if self.to_crawl.empty():
+                continue
+
+            cur_dir = self.to_crawl.get()
             restart_loop = False
 
             try:
@@ -183,10 +180,11 @@ class GlobusCrawler(Crawler):
                         extension = self.get_extension(entry["name"])
                         mdata_blob[full_path] = {"physical": {'size': entry['size'],
                                                               "extension": extension, "path_type": "globus"}}
+                        # TODO: Save files to file DB.
 
                     elif entry['type'] == 'dir':
                         full_path = cur_dir + "/" + entry['name']
-                        to_crawl.put(full_path)
+                        self.to_crawl.put(full_path)
 
                 gr_dict = self.grouper.group(f_names)
 
@@ -202,9 +200,15 @@ class GlobusCrawler(Crawler):
                         file_list = list(gr)
 
                         group_info["files"] = file_list
+                        # print(group_info)
 
                         for f in file_list:
-                            group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
+                            self.file_counter += 1
+                            try:
+                                group_info["mdata"].append({"file": f, "blob": mdata_blob[f]})
+                            except:
+                                print("Ope. ")
+                                pass
 
                         logging.info(group_info)
 
@@ -218,37 +222,70 @@ class GlobusCrawler(Crawler):
 
                         except ValueError as e:
                             logging.error(f"Caught ValueError {e}")
-                            failed_groups["illegal_char"].append((group_info["files"], ['crawler']))
+                            self.failed_groups["illegal_char"].append((group_info["files"], ['crawler']))
                             logging.error("Continuing!")
 
                         else:
                             # TODO: This try/except exists only because of occasinoal pg char issue -- should fix.
-                            try:
-                                query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
-                                    f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
+                            # try:
+                            query = f"INSERT INTO group_metadata (group_id, metadata, files, parsers, owner) " \
+                                f"VALUES ('{gr_id}', {Json(group_info)}, '{files}', '{parsers}', '{self.token_owner}')"
 
-                                logging.info(f"Group Metadata query: {query}")
-                                self.group_count += 1
-                                cur.execute(query)
-                                self.conn.commit()
+                            logging.info(f"Group Metadata query: {query}")
+                            self.group_count += 1
+                            cur.execute(query)
+                            self.conn.commit()
 
-                                self.add_group_to_db(str(group_info["group_id"]), len(group_info['files']))
-                            except:
-                                logging.error("Failure pushing to postgres...")
-                                pass
+                            self.add_group_to_db(str(group_info["group_id"]), len(group_info['files']))
+                            # except:
+                            #     logging.error("Failure pushing to postgres...")
+                            #     pass
                         t_new = time.time()
 
                         if t_new - t_last >= self.crawl_hb:
                             logging.info(f"Total groups processed for crawl_id {self.crawl_id}: {self.group_count}")
                             t_last = t_new
+                            print(f"Worker ID {worker_id} still alive!")
+                            print(f"Image count: {len(self.images)}")
+                            print(f"Matio count: {len(self.matio)}")
+                            print(f"JSONXml count: {len(self.jsonxml)}")
+                            print(f"Keyword Count {len(self.keyword)}")
+
+                        mdata_blob = {}
 
             # TODO: Is this unnecessary now?
             except TransferAPIError as e:
                 logging.error("Problem directory {}".format(cur_dir))
                 logging.error("Transfer client received the following error:")
                 logging.error(e)
-                failed_dirs["failed"].append(cur_dir)
+                self.failed_dirs["failed"].append(cur_dir)
                 continue
+
+    def crawl(self, transfer):
+        dir_name = "./xtract_metadata"
+        os.makedirs(dir_name, exist_ok=True)
+
+        self.failed_dirs = {"failed": []}
+        self.failed_groups = {"illegal_char": []}
+
+        self.to_crawl = Queue()
+        self.to_crawl.put(self.path)
+
+        cur = self.conn.cursor()
+        now_time = datetime.now()
+        crawl_update = f"INSERT INTO crawls (crawl_id, started_on) VALUES " \
+            f"('{self.crawl_id}', '{now_time}');"
+        cur.execute(crawl_update)
+        self.conn.commit()
+
+        list_threads = []
+        for i in range(4):
+            t = threading.Thread(target=self.launch_crawl_worker, args=(transfer, i))
+            list_threads.append(t)
+            t.start()
+
+        for t in list_threads:
+            t.join()
 
         logging.info(f"\n***FINAL groups processed for crawl_id {self.crawl_id}: {self.group_count}***")
         logging.info(f"\n*** CRAWL COMPLETE  (ID: {self.crawl_id})***")
@@ -256,9 +293,8 @@ class GlobusCrawler(Crawler):
         self.db_crawl_end()
 
         with open('failed_dirs.json', 'w') as fp:
-            json.dump(failed_dirs, fp)
+            json.dump(self.failed_dirs, fp)
 
         with open('failed_groups.json', 'w') as gp:
-            json.dump(failed_groups, gp)
+            json.dump(self.failed_groups, gp)
 
-        return mdata_blob
