@@ -9,6 +9,7 @@ from funcx.serialize import FuncXSerializer
 from psycopg2.extras import Json
 from queue import Queue
 
+
 from utils.pg_utils import pg_conn
 
 
@@ -34,7 +35,7 @@ class MatioExtractor:
         self.globus_eid = globus_eid
 
         # TODO: The endpoints need not be hardcoded.
-        self.func_id = "f683f441-83e7-4c82-8263-77954382330c"
+        self.func_id = "3346cd9c-1fb9-44cd-810e-4303e58c81e4"
         self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
         self.dest_endpoint = '5113667a-10b4-11ea-8a67-0e35e66293c2'
 
@@ -66,75 +67,90 @@ class MatioExtractor:
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init.
 
-    def send_files(self, debug=False):
+    def get_next_groups(self):
+        try:
+            query = f"SELECT group_id FROM groups WHERE status='crawled' " \
+                f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
+            cur = self.conn.cursor()
+            cur.execute(query)
+            self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
+            gids = cur.fetchall()
+            return gids
+
+        # TODO: Catch connection errors.
+        except:
+            # TODO: Don't exit lol.
+            print("FUCK. ")
+            exit()
+
+    def get_test_files(self):
+
+        try:
+            query = f"SELECT group_id FROM groups " \
+                f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
+            cur = self.conn.cursor()
+            cur.execute(query)
+            self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
+            gids = cur.fetchall()
+            return gids
+        except:
+            print("Testing is failing...")
+
+    def send_files(self, test_mode=False):
         # Just keep looping in case something comes up in crawl.
         while True:
             data = {'inputs': []}
 
-            try:
-                query = f"SELECT group_id FROM groups WHERE status='crawled' " \
-                    f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
+            gids = self.get_next_groups()
+            self.logger.info(f"Received {len(gids)} tasks from DB!")
+
+            for gid in gids:
+                self.logger.debug(f"Processing GID: {gid[0]}")
+
+                # Update DB to flag group_id as 'EXTRACTING'.
+                # TODO: Catch these connection errors.
                 cur = self.conn.cursor()
-                cur.execute(query)
-                self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
-            # TODO: Catch connection errors.
-            except:
-                # TODO: Don't exit lol.
-                exit()
+                update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
+                cur.execute(update_q)
+                self.conn.commit()
 
-            if True is not False:  # TODO: This is always true.
-                # Get a
-                gids = cur.fetchall()
+                # Get the metadata for each group_id
+                get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}' LIMIT 1;"
+                cur.execute(get_mdata)
+                old_mdata = cur.fetchone()[0]
 
-                self.logger.info(f"Received {len(gids)} tasks from DB!")
+                # TODO: Partial groups can occur here.
+                # Take all of the files and append them to our payload.
+                for f_obj in old_mdata["files"]:
+                    payload = {
+                        # TODO: Un-hardcode.
+                        'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
+                        'headers': self.fx_headers, 'file_id': gid[0]}
+                    data["inputs"].append(payload)
+                    data["transfer_token"] = self.headers['Transfer']
+                    data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
+                    data["dest_endpoint"] = '5113667a-10b4-11ea-8a67-0e35e66293c2'
 
-                for gid in gids:
-                    self.logger.debug(f"Processing GID: {gid[0]}")
+                res = requests.post(url=self.post_url,
+                                    headers=self.fx_headers,
+                                    json={
+                                        'endpoint': self.funcx_eid,
+                                          'func': self.func_id,
+                                          'payload': serialize_fx_inputs(
+                                              event=data)}
+                                    )
 
-                    # Update DB to flag group_id as 'EXTRACTING'.
-                    # TODO: Catch these connection errors.
-                    cur = self.conn.cursor()
-                    update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
-                    cur.execute(update_q)
-                    self.conn.commit()
+                fx_res = json.loads(res.content)
 
-                    # Get the metadata for each group_id
-                    get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}' LIMIT 1;"
-                    cur.execute(get_mdata)
-                    old_mdata = cur.fetchone()[0]
+                # TODO: Actually do something here.
+                if fx_res["status"] == "failed":
+                    self.logger.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
+                    exit()  # TODO: Don't exit lol.
+                task_uuid = fx_res['task_uuid']
 
-                    # TODO: Partial groups can occur here.
-                    # Take all of the files and append them to our payload.
-                    for f_obj in old_mdata["files"]:
-                        payload = {
-                            # TODO: Un-hardcode.
-                            'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
-                            'headers': self.fx_headers, 'file_id': gid[0]}
-                        data["inputs"].append(payload)
-                        data["transfer_token"] = self.headers['Transfer']
-                        data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-                        data["dest_endpoint"] = '5113667a-10b4-11ea-8a67-0e35e66293c2'
-
-                    res = requests.post(url=self.post_url,
-                                        headers=self.fx_headers,
-                                        json={
-                                            'endpoint': self.funcx_eid,
-                                              'func': self.func_id,
-                                              'payload': serialize_fx_inputs(
-                                                  event=data)}
-                                        )
-
-                    fx_res = json.loads(res.content)
-
-                    # TODO: Actually do something here.
-                    if fx_res["status"] == "failed":
-                        self.logger.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
-                        exit()  # TODO: Don't exit lol.
-                    task_uuid = fx_res['task_uuid']
-
-                    self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
-                    self.live_ids.put(task_uuid)
-                    self.logger.info(f"Approximate current size of live task queue: {self.live_ids.qsize()}")
+                self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
+                self.live_ids.put(task_uuid)
+                self.logger.info(f"Approximate current size of live task queue: {self.live_ids.qsize()}")
 
             while True:
                 if self.live_ids.qsize() < self.max_active_batches:
@@ -165,6 +181,7 @@ class MatioExtractor:
         po_thr.start()
 
     def poll_responses(self):
+        success_returns = 0
         while True:
             if self.live_ids.empty():
                 self.logger.debug("No live IDs... sleeping...")
@@ -181,30 +198,34 @@ class MatioExtractor:
 
                 if "result" in status_thing:
                     res = fx_ser.deserialize(status_thing['result'])
-                    self.logger.debug(f"Received response: {res}")
-
-                    for g_obj in res["metadata"]:
-                        gid = g_obj["group_id"]
-
-                        cur = self.conn.cursor()
-                        # TODO: [Optimization] Do something smarter than pulling this down a second time
-                        #  (cache somewhere???)
-                        get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid}';"
-                        cur.execute(get_mdata)
-                        cur.execute(get_mdata)
-
-                        old_mdata = cur.fetchone()[0]
-                        old_mdata["matio"] = g_obj["matio"]
-
-                        self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
-                        update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
-                        cur.execute(update_mdata)
-
-                        # TODO: Make sure we're updating the parser-list in the db.
-                        self.logger.debug("Updating group status (Update: 2/2)")
-                        update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
-                        cur.execute(update_q)
-                        self.conn.commit()
+                    if res == True:
+                        success_returns += 1
+                        print(success_returns)
+                    # res = fx_ser.deserialize(status_thing['result'])
+                    # self.logger.debug(f"Received response: {res}")
+                    #
+                    # for g_obj in res["metadata"]:
+                    #     gid = g_obj["group_id"]
+                    #
+                    #     cur = self.conn.cursor()
+                    #     # TODO: [Optimization] Do something smarter than pulling this down a second time
+                    #     #  (cache somewhere???)
+                    #     get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid}';"
+                    #     cur.execute(get_mdata)
+                    #     cur.execute(get_mdata)
+                    #
+                    #     old_mdata = cur.fetchone()[0]
+                    #     old_mdata["matio"] = g_obj["matio"]
+                    #
+                    #     self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
+                    #     update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
+                    #     cur.execute(update_mdata)
+                    #
+                    #     # TODO: Make sure we're updating the parser-list in the db.
+                    #     self.logger.debug("Updating group status (Update: 2/2)")
+                    #     update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
+                    #     cur.execute(update_q)
+                    #     self.conn.commit()
                     break
                 elif 'exception' in status_thing:
                     exc = fx_ser.deserialize(status_thing['exception'])
@@ -232,13 +253,19 @@ def matio_test(event):
     import sys
     import globus_sdk
     import random
+    import threading
+    from queue import Queue
     from globus_sdk import TransferClient, AccessTokenAuthorizer
+    from datetime import datetime
 
-    sys.path.insert(1, '/')
+    post_globus_q = Queue()
+    post_extract_q = Queue()
+
+    sys.path.insert(1, '/home/tskluzac/xtract-matio')
     import xtract_matio_main
 
     # Make a temp dir and download the data
-    dir_name = f'/home/ubuntu/tmpfileholder-{random.randint(0,999999999)}'
+    dir_name = f'/home/tskluzac/tmpfileholder-{random.randint(0,999999999)}'
     if os.path.exists(dir_name):
         shutil.rmtree(dir_name)
     os.makedirs(dir_name, exist_ok=True)
@@ -253,33 +280,32 @@ def matio_test(event):
     transfer_token = event['transfer_token']
     dest_endpoint = event['dest_endpoint']
     source_endpoint = event['source_endpoint']
+    # file_id = event['file_id']
+
+    # return file_id
 
     t0 = time.time()
     mdata_list = []
 
+    i = 0
     for item in all_files:
-        ta = time.time()
         file_id = item['file_id']
+        i += 1
 
         try:
             authorizer = AccessTokenAuthorizer(transfer_token)
             tc = TransferClient(authorizer=authorizer)
 
             file_path = item["url"].split('globus.org')[1]
-            dest_file_path = dir_name + '/' +  file_path.split('/')[-1]
+            dest_file_path = dir_name + '/' + file_path.split('/')[-1]
 
             tdata = globus_sdk.TransferData(tc, source_endpoint,
                                         dest_endpoint,
-                                        label='neato transfer')
+                                        label=str(i))
         except Exception as e:
             return e
 
-        try:
-            tdata.add_item(f'{file_path}', dest_file_path, recursive=False)
-
-        except Exception as e:
-            return e
-        tb = time.time()
+        tdata.add_item(f'{file_path}', dest_file_path, recursive=False)
 
         tc.endpoint_autoactivate(source_endpoint)
         tc.endpoint_autoactivate(dest_endpoint)
@@ -289,15 +315,60 @@ def matio_test(event):
         except Exception as e:
             return str(e).split('\n')
 
+        # TODO: WE MAKE IT HERE, SO TRANSFER IS AT LEAST SUBMITTED.
         gl_task_id = submit_result['task_id']
+        # return gl_task_id
 
-        tc.task_wait(gl_task_id)
+        # TODO: task_wait obviously isn't working...
+        finished = tc.task_wait(gl_task_id, timeout=60)
 
-        # POLL GLOBUS TRANSFER PROGRESS.
-        new_mdata = xtract_matio_main.extract_matio(dir_name)
+        def task_loop():
+            while True:
+                r = tc.get_task(submit_result['task_id'])
+                if r['status'] == "SUCCEEDED":
+                    break
+                else:
+                    time.sleep(0.5)
+            post_globus_q.put("SUCCESS1")
+
+        try:
+            t1 = threading.Thread(target=task_loop, args=())
+            t1.start()
+        except Exception as e:
+            return str(e)
+
+        # TODO: If not finished in 20 seconds, then return "Waited 20 seconds and returned nothing.
+        t_init = time.time()
+        while True:
+            if not post_globus_q.empty():
+                break
+            if time.time() - t_init >= 20:
+                return "Transfer OPERATION TIMED OUT AFTER 20 seconds"
+            time.sleep(1)
+
+        # TODO: MADE IT THROUGH HERE
+        try:
+            new_mdata = xtract_matio_main.extract_matio(dir_name, str(datetime.now()))
+            post_extract_q.put(new_mdata)
+        except Exception as e:
+            return str(e)
+
+        t_ext_st = time.time()
+        while True:
+            if not post_extract_q.empty():
+                break
+            if time.time() - t_ext_st >= 120:
+                return "Extract TIMED OUT AFTER 20 seconds"
+
+        # return "MADE IT THROUGH MDATA EXTRACT THREAD"
+
+        #return post_extract_q.get()
+
+        new_mdata = post_extract_q.get()
 
         new_mdata['group_id'] = file_id
-        new_mdata['trans_time'] = tb-ta
+        # TODO: Bring this back.
+        # new_mdata['trans_time'] = tb-ta
         mdata_list.append(new_mdata)
 
         # Don't be an animal -- clean up your mess!
@@ -305,6 +376,8 @@ def matio_test(event):
     t1 = time.time()
     return {'metadata': mdata_list, 'tot_time': t1-t0}
 
+def fatio_test(event):
+    return True
 
 # TODO: Batch metadata saving requests (And store in different file).
 def save_mdata(event):
