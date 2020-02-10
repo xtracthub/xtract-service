@@ -1,0 +1,61 @@
+CREATE TABLE files (
+file_id serial PRIMARY KEY,
+path VARCHAR(250) UNIQUE NOT NULL,
+size INT NOT NULL,
+cur_phase VARCHAR(15) NOT NULL,
+cur_task_id VARCHAR(30),
+extension VARCHAR(100) NOT NULL,
+sample_type VARCHAR(25) NOT NULL,
+metadata JSONB NOT NULL,
+created_on TIMESTAMP NOT NULL,
+last_extracted TIMESTAMP NOT NULL,
+owner VARCHAR(50) NOT NULL,
+crawl_type VARCHAR(50) NOT NULL
+);
+
+
+CREATE TABLE groups (
+    id serial PRIMARY KEY,
+    group_id VARCHAR(40) NOT NULL,
+    grouper VARCHAR(20) NOT NULL,
+    num_files INT NOT NULL,
+    created_on TIMESTAMP NOT NULL,
+    top_path VARCHAR(500)
+    );
+
+
+# TODO: I NEVER GOT THE FOREIGN KEYS WORKING HERE.
+CREATE TABLE group_status (
+    group_id VARCHAR(40) references groups(group_id),
+    group_status VARCHAR(20) NOT NULL DEFAULT 'crawling',
+    PRIMARY KEY (group_id)
+    );
+
+CREATE TABLE group_status (
+    group_id VARCHAR(40) PRIMARY KEY,
+    status VARCHAR(20) NOT NULL DEFAULT 'crawling'
+    );
+
+
+CREATE TABLE crawl (
+   crawl_id VARCHAR(40) PRIMARY KEY,
+   started_on TIMESTAMP NOT NULL
+   );
+
+
+CREATE TABLE extracts (
+   extract_id VARCHAR(40) PRIMARY KEY,
+   started_on TIMESTAMP NOT NULL,
+   status VARCHAR(20) NOT NULL DEFAULT 'EXTRACTING',
+   groups_finished INT NOT NULL DEFAULT 0
+   );
+
+
+CREATE TABLE group_metadata (
+  group_id VARCHAR(40) PRIMARY KEY,
+  metadata JSON NOT NULL,
+  files text[],
+  parsers text[],
+  owner varchar(50)
+  );
+
