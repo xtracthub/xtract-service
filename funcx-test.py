@@ -1,12 +1,13 @@
 
-
 import funcx
 import time
 import json
 import requests
-from container_lib.xtract_matio import matio_test, serialize_fx_inputs
+from container_lib.xtract_matio import serialize_fx_inputs, matio_test
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
+from queue import Queue
+
 
 fxc = funcx.FuncXClient()
 fx_ser = FuncXSerializer()
@@ -15,14 +16,14 @@ fx_ser = FuncXSerializer()
 post_url = 'https://dev.funcx.org/api/v1/submit'
 get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
-#@ headers = {'Authorization': 'Bearer AgPvrzO1kglgjp9dkrgvYK6n5YwDxqm5Dqyp5oQ3P6mbb94zGrFmCV51GWdMko81y5pNNlWXqYzy7OSq1d8Xnt1gv0', 'FuncX': 'AgPvrzO1kglgjp9dkrgvYK6n5YwDxqm5Dqyp5oQ3P6mbb94zGrFmCV51GWdMko81y5pNNlWXqYzy7OSq1d8Xnt1gv0'}
+globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
+fx_ep = "4db7eecd-7af7-4148-a139-5c92dc2ed971"
+n_tasks = 1000
 
+fn_id = fxc.register_function(matio_test,
+                              description="A sum function")
 
-func_uuid = fxc.register_function(matio_test,
-                                  description="A sum function")
-
-
-print(f"Function UUID: {func_uuid}")
+print(f"Function UUID: {fn_id}")
 
 # Get the Headers....
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
@@ -41,13 +42,14 @@ funcx_token = tokens['funcx_service']['access_token']
 headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token}
 print(f"Headers: {headers}")
 
-
 old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]}
+# old_mdata = {"files": ["/~/Desktop/watergrid_PBE0_record-1237.xyz"]}
 
 data = {"inputs": []}
 data["transfer_token"] = transfer_token
 data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-data["dest_endpoint"] = '5113667a-10b4-11ea-8a67-0e35e66293c2'
+# data["source_endpoint"] = '1c115272-a3f2-11e9-b594-0e56e8fd6d5a'
+data["dest_endpoint"] = globus_ep
 
 for f_obj in old_mdata["files"]:
     payload = {
@@ -57,26 +59,58 @@ for f_obj in old_mdata["files"]:
     data["inputs"].append(payload)
 
 
-res = requests.post(url=post_url,
-                    headers=headers,
-                    json={'endpoint': '8d2203cb-e3b2-42b3-86f5-dd4663ddfbdf',
-                          'func': func_uuid,
-                          'payload': serialize_fx_inputs(
-                              event=data)
-                          }
-                    )
+task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+t_launch_times = {}
 
-task_uuid = json.loads(res.content)['task_uuid']
+for i in range(n_tasks):
+    res = requests.post(url=post_url,
+                        headers=headers,
+                        json={'endpoint': fx_ep,
+                              'func': fn_id,
+                              'payload': serialize_fx_inputs(
+                                  event=data)
+                              }
+                        )
+    # time.sleep(1.001)
 
+    if res.status_code == 200:
+        task_uuid = json.loads(res.content)['task_uuid']
+        task_dict["active"].put(task_uuid)
+        t_launch_times[task_uuid] = time.time()
+    print(i)
+
+# TODO: Add ghetto-retry for pending tasks to catch lost ones.
+# TODO x10000: move this logic
+timeout = 120
+failed_counter = 0
 while True:
-    status_thing = requests.get(get_url.format(task_uuid), headers=headers).json()
 
-    print(status_thing)
+    if task_dict["active"].empty():
+        print("Active task queue empty... sleeping... ")
+        # print("Failures... ")
+        # print(task_dict["failed"].qsize())
+        time.sleep(2)
+        continue
+
+    cur_tid = task_dict["active"].get()
+    status_thing = requests.get(get_url.format(cur_tid), headers=headers).json()
+
+    # TODO: Move this ghetto-retry to the funcX side of things.
+    # if time.time() - t_launch_times[cur_tid] >= timeout:
+    #     print("CLIENT: Task never returned -- failed!!! ")
+    #     task_dict["failed"].put(cur_tid)
+    #     failed_counter += 1
+    #     print(f"Num Failed: {failed_counter}")
+    #     continue
+
     if 'result' in status_thing:
-        print(f"Result: {fx_ser.deserialize(status_thing['result'])}")
-        break
+        result = fx_ser.deserialize(status_thing['result'])
+        print(f"Result: {result}")
+        task_dict["results"].append(result)
+        print(len(task_dict["results"]))
+
     elif 'exception' in status_thing:
         print(f"Exception: {fx_ser.deserialize(status_thing['exception'])}")
-        break
-
-    time.sleep(2)
+        # break
+    else:
+        task_dict["active"].put(cur_tid)

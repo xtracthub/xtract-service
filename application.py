@@ -23,6 +23,8 @@ def hello():
     return f"Welcome to Xtract! \n Status: {str(st)}", st
 
 
+
+# TODO: Should instead have call-outs to the extraction service.
 @application.route('/crawl', methods=['POST'])
 def crawl_repo():
 
