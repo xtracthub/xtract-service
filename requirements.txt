@@ -4,7 +4,7 @@ psycopg2-binary
 dfttopif
 Pillow
 pymatgen
---upgrade hyperspy
+hyperspy
 tableschema
 flask
 flask_api
