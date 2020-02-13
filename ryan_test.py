@@ -208,9 +208,6 @@ for i in range(n_tasks):
 
 num_active = 0
 
-
-# cmd = "singularity exec /Users/tylerskluzacek/Desktop/matio.simg "
-
 def launch_job(thread):
     while True:
         data = work_q.get()

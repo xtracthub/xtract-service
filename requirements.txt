@@ -10,3 +10,4 @@ flask
 flask_api
 flask_wtf
 requests
+git+ssh://git@github.com/globusonline/action_provider_tools.git@v0.5
