@@ -11,8 +11,21 @@ from uuid import uuid4
 import requests
 
 import json
+import os
 
 application = Flask(__name__)
+
+
+# TODO: Move this cleanly into a class (and maybe cache for each user).
+def get_token_checker():
+    checker = TokenChecker(
+        client_id=os.environ["GL_CLIENT_ID"],
+        client_secret=os.environ["GL_CLIENT_SECRET"],
+        expected_scopes=['https://auth.globus.org/scopes/8df7645a-2ac7-4d4a-a7c5-e085d01bb5b7',
+                         'https://auth.globus.org/scopes/cd6f1c83-2802-48b6-94dd-b0c7d027d9df'],
+        expected_audience=os.environ["GL_CLIENT_NAME"],
+    )
+    return checker
 
 
 def crawl_launch(crawler, tc):
