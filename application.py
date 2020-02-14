@@ -2,7 +2,7 @@
 from flask import Flask, request
 from flask_api import status
 
-from action_provider_tools.authentication import TokenChecker
+from globus_action_provider_tools.authentication import TokenChecker
 
 
 from status_checks import get_crawl_status, get_extract_status

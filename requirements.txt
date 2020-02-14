@@ -10,5 +10,4 @@ flask
 flask_api
 flask_wtf
 requests
-globus-automate-client
 globus-action-provider-tools
