@@ -48,13 +48,12 @@ def hello():
     resp = {
         "types": ["Action"],
         "api_version": "1.0",
-        "globus_auth_scope": "potato", # config.our_scope,
-        "title": "What Time Is It Right Now?",
+        "globus_auth_scope": "TODO", # config.our_scope,
+        "title": "Xtract Metadata from any Globus Repository",
         "subtitle": (
-            "From the makers of Philbert: "
-            "Another exciting promotional tie-in for whattimeisitrightnow.com"
+            "By Tyler J. Skluzacek (UChicago) "
         ),
-        "admin_contact": "support@whattimeisrightnow.example",
+        "admin_contact": "skluzacek@uchicago.edu",
         "visible_to": ["all_authenticated_users"],
         "runnable_by": ["all_authenticated_users"],
         "log_supported": False,
