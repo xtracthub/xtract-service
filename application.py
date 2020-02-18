@@ -1,6 +1,9 @@
 
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_api import status
+from enum import Enum
+
+from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
 
@@ -9,11 +12,19 @@ from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
 from uuid import uuid4
 import requests
+import time
 
 import json
 import os
 
 application = Flask(__name__)
+
+
+class Status(Enum):
+    ACTIVE = "ACTIVE"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    INACTIVE = "INACTIVE"
 
 
 # TODO: Move this cleanly into a class (and maybe cache for each user).
@@ -34,8 +45,24 @@ def crawl_launch(crawler, tc):
 
 @application.route('/')
 def hello():
-    st = status.HTTP_200_OK
-    return f"Welcome to Xtract! \n Status: {str(st)}", st
+    resp = {
+        "types": ["Action"],
+        "api_version": "1.0",
+        "globus_auth_scope": "potato", # config.our_scope,
+        "title": "What Time Is It Right Now?",
+        "subtitle": (
+            "From the makers of Philbert: "
+            "Another exciting promotional tie-in for whattimeisitrightnow.com"
+        ),
+        "admin_contact": "support@whattimeisrightnow.example",
+        "visible_to": ["all_authenticated_users"],
+        "runnable_by": ["all_authenticated_users"],
+        "log_supported": False,
+        "synchronous": False,
+    }
+    # st = status.HTTP_200_OK
+    # return f"Welcome to Xtract! \n Status: {str(st)}", st
+    return jsonify(resp)
 
 
 @application.route('/crawl', methods=['POST'])
@@ -111,6 +138,66 @@ def get_mdata():
     r = request
     return r
 
+
+@application.route('/run', methods=['POST'])
+def automate_run():
+    req = request.get_json(force=True)
+
+    start_time = datetime.now(tz=timezone.utc)
+    request_id = req['request_id']
+
+    body = req['body']
+    # manage_by = req['manage_by']
+    # monitor_by = req['monitor_by']
+
+    action_id = uuid4()
+    default_release_after = timedelta(days=30)
+
+    # Now to create the thing we return.
+    ret_data = {
+        "action_id": action_id,
+        "status": Status.ACTIVE.value,
+        "display_status": Status.ACTIVE,
+        "details": "the weasel runs at midnight",
+        "monitor_by": req.auth.identities,
+        "manage_by": req.auth.identities,
+        "start_time": start_time,
+        "completion_time": datetime.now(tz=timezone.utc),
+        "release_after": default_release_after
+    }
+
+    resp = jsonify(ret_data)
+    resp.status_code = 202
+
+    return resp
+
+
+def get_status(job):
+    job = job.copy()
+    now = datetime.now(tz=timezone.utc)
+    priv = job.pop("_private")
+    if priv["complete"] > now:
+        job["status"] = Status.ACTIVE.value
+    else:
+        job["details"] = priv["details"]
+        job["completion_time"] = priv["complete"]
+        if priv["success"] is False:
+            job["status"] = Status.FAILED.value
+        elif priv["success"] is True:
+            job["status"] = Status.SUCCEEDED.value
+    return job
+
+@application.route('/<action_id>/status')
+def automate_status(action_id):
+    print("HI")
+
+@application.route('/<action_id>/cancel')
+def automate_cancel(action_id):
+    print("HI")
+
+@application.route('/<action_id>/release')
+def automate_release(action_id):
+    print("HI")
 
 if __name__ == '__main__':
     application.run(debug=True, threaded=True)
