@@ -6,10 +6,7 @@ from enum import Enum
 from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
-from globus_action_provider_tools.validation import (
-    request_validator,
-    response_validator,
-)
+from globus_action_provider_tools.validation import request_validator, response_validator
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
