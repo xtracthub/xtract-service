@@ -6,7 +6,7 @@ from enum import Enum
 from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
-from globus_action_provider_tools.validation import request_validator, response_validator
+#from globus_action_provider_tools.validation import request_validator, response_validator
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
@@ -50,9 +50,9 @@ def crawl_launch(crawler, tc):
 def before_request():
     print("IN REQUEST")
     wrapped_req = FlaskOpenAPIRequest(request)
-    validation_result = request_validator.validate(wrapped_req)
-    if validation_result.errors:
-        raise err.InvalidRequest(*validation_result.errors)
+    # validation_result = request_validator.validate(wrapped_req)
+    # if validation_result.errors:
+    #     raise err.InvalidRequest(*validation_result.errors)
 
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     print(f"TOKEN: {token}")
