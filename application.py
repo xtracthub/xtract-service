@@ -16,7 +16,7 @@ from openapi_core.wrappers.flask import FlaskOpenAPIResponse, FlaskOpenAPIReques
 from uuid import uuid4
 import requests
 import time
-from . import error as err
+import error as err
 
 import json
 import os
