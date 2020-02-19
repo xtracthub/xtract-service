@@ -6,13 +6,20 @@ from enum import Enum
 from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
-
+from globus.action_provider_tools.validation import (
+    request_validator,
+    response_validator,
+)
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
+
+from openapi_core.wrappers.flask import FlaskOpenAPIResponse, FlaskOpenAPIRequest
+
 from uuid import uuid4
 import requests
 import time
+from . import error as err
 
 import json
 import os
@@ -28,19 +35,38 @@ class Status(Enum):
 
 
 # TODO: Move this cleanly into a class (and maybe cache for each user).
-def get_token_checker():
-    checker = TokenChecker(
+token_checker= TokenChecker(
         client_id=os.environ["GL_CLIENT_ID"],
         client_secret=os.environ["GL_CLIENT_SECRET"],
         expected_scopes=['https://auth.globus.org/scopes/8df7645a-2ac7-4d4a-a7c5-e085d01bb5b7',
                          'https://auth.globus.org/scopes/cd6f1c83-2802-48b6-94dd-b0c7d027d9df'],
         expected_audience=os.environ["GL_CLIENT_NAME"],
     )
-    return checker
+
 
 
 def crawl_launch(crawler, tc):
     crawler.crawl(tc)
+
+
+@application.before_request
+def before_request():
+    print("IN REQUEST")
+    wrapped_req = FlaskOpenAPIRequest(request)
+    validation_result = request_validator.validate(wrapped_req)
+    if validation_result.errors:
+        raise err.InvalidRequest(*validation_result.errors)
+
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    print(f"TOKEN: {token}")
+    auth_state = token_checker.check_token(token)
+    if not auth_state.identities:
+        # Returning these authentication errors to the caller will make debugging
+        # easier for this example. Consider whether this is appropriate
+        # for your production use case or not.
+        raise err.NoAuthentication(*auth_state.errors)
+    request.auth = auth_state
+    print("EXITING PRE-REQUEST")
 
 
 @application.route('/')
