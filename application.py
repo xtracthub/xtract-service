@@ -69,13 +69,13 @@ def crawl_launch(crawler, tc):
 @application.route('/', methods=['GET', 'POST'])
 def hello():
 
-    req = request
+    # print(f"Headers: {request.headers.get('Authorization')}")
 
-    headers = req.headers
-    json_object = req.json
+    # headers = req.headers
+    # json_object = req.json
 
-    print(f"Headers: {headers}")
-    print(f"Content: {json_object}")
+    # print(f"Headers: {headers}")
+    # print(f"Content: {json_object}")
 
     resp = {
         "types": ["Action"],
@@ -178,6 +178,7 @@ def automate_run():
     #     json_object = req.json
     #
     print(f"Headers: {request.headers.get('Authorization')}")
+    print(request.headers)
     #     print(f"Content: {json_object}")
 
 
