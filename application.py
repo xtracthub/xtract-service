@@ -178,7 +178,7 @@ def automate_run():
     #     json_object = req.json
     #
     print(f"Headers: {request.headers.get('Authorization')}")
-    print(request.headers)
+    print(f"Headers: {request.headers}")
     #     print(f"Content: {json_object}")
 
 
