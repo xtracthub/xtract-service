@@ -6,7 +6,7 @@ from enum import Enum
 from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
-from globus.action_provider_tools.validation import (
+from globus_action_provider_tools.validation import (
     request_validator,
     response_validator,
 )
