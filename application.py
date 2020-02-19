@@ -173,14 +173,15 @@ def get_mdata():
 @application.route('/run', methods=['POST'])
 def automate_run():
 
-    req = request
-    headers = req.headers
-    json_object = req.json
-
-    print(f"Headers: {headers}")
-    print(f"Content: {json_object}")
+    #     req = request
+    # request    headers = req.headers
+    #     json_object = req.json
+    #
+    #     print(f"Headers: {headers}")
+    #     print(f"Content: {json_object}")
 
     req = request.get_json(force=True)
+    print(f"Run Request: {req}")
 
     start_time = datetime.now(tz=timezone.utc)
     request_id = req['request_id']
