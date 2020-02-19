@@ -46,28 +46,37 @@ def crawl_launch(crawler, tc):
     crawler.crawl(tc)
 
 
-@application.before_request
-def before_request():
-    print("IN REQUEST")
-    wrapped_req = FlaskOpenAPIRequest(request)
-    # validation_result = request_validator.validate(wrapped_req)
-    # if validation_result.errors:
-    #     raise err.InvalidRequest(*validation_result.errors)
+# @application.before_request
+# def before_request():
+#     print("IN REQUEST")
+#     wrapped_req = FlaskOpenAPIRequest(request)
+#     # validation_result = request_validator.validate(wrapped_req)
+#     # if validation_result.errors:
+#     #     raise err.InvalidRequest(*validation_result.errors)
+#
+#     token = request.headers.get("Authorization", "").replace("Bearer ", "")
+#     print(f"TOKEN: {str(token)}")
+#     auth_state = token_checker.check_token(token)
+#     if not auth_state.identities:
+#         # Returning these authentication errors to the caller will make debugging
+#         # easier for this example. Consider whether this is appropriate
+#         # for your production use case or not.
+#         raise err.NoAuthentication(*auth_state.errors)
+#     request.auth = auth_state
+#     print("EXITING PRE-REQUEST")
 
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    print(f"TOKEN: {str(token)}")
-    auth_state = token_checker.check_token(token)
-    if not auth_state.identities:
-        # Returning these authentication errors to the caller will make debugging
-        # easier for this example. Consider whether this is appropriate
-        # for your production use case or not.
-        raise err.NoAuthentication(*auth_state.errors)
-    request.auth = auth_state
-    print("EXITING PRE-REQUEST")
 
-
-@application.route('/')
+@application.route('/', methods=['GET', 'POST'])
 def hello():
+
+    req = request
+
+    headers = req.headers
+    json_object = req.json
+
+    print(f"Headers: {headers}")
+    print(f"Content: {json_object}")
+
     resp = {
         "types": ["Action"],
         "api_version": "1.0",
