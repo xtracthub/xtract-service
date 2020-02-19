@@ -55,7 +55,7 @@ def before_request():
     #     raise err.InvalidRequest(*validation_result.errors)
 
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    print(f"TOKEN: {token}")
+    print(f"TOKEN: {str(token)}")
     auth_state = token_checker.check_token(token)
     if not auth_state.identities:
         # Returning these authentication errors to the caller will make debugging
