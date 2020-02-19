@@ -177,8 +177,10 @@ def automate_run():
     # request    headers = req.headers
     #     json_object = req.json
     #
-    #     print(f"Headers: {headers}")
+    print(f"Headers: {request.headers}")
     #     print(f"Content: {json_object}")
+
+
 
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
