@@ -173,15 +173,13 @@ def get_mdata():
 @application.route('/run', methods=['POST'])
 def automate_run():
 
-    #     req = request
-    # request    headers = req.headers
-    #     json_object = req.json
-    #
-    print(f"Headers: {request.headers.get('Authorization')}")
-    print(f"Headers: {request.headers}")
-    #     print(f"Content: {json_object}")
+    auth_header = request.headers.get('Authorization')
 
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    auth_state = token_checker.check_token(token)
 
+    print(f"Headers: {auth_header}")
+    print(f"Auth State: {auth_state}")
 
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
