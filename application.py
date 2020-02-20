@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
 #from globus_action_provider_tools.validation import request_validator, response_validator
+from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
@@ -39,7 +40,6 @@ token_checker= TokenChecker(
                          'https://auth.globus.org/scopes/cd6f1c83-2802-48b6-94dd-b0c7d027d9df'],
         expected_audience=os.environ["GL_CLIENT_NAME"],
     )
-
 
 
 def crawl_launch(crawler, tc):
@@ -178,11 +178,17 @@ def automate_run():
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     auth_state = token_checker.check_token(token)
 
+    dep_grant = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"]).oauth2_get_dependent_tokens(token)
+
+    for grant in dep_grant:
+        print(grant)
+
+
+
     print(f"Headers: {auth_header}")
     print(f"Auth State: {auth_state}")
 
-    for key in auth_state:
-        print(key)
+    print(auth_state.identities)
 
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
