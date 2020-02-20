@@ -181,10 +181,13 @@ def automate_run():
     dep_grant = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"]).oauth2_get_dependent_tokens(token)
     print(f"Length of Dependent Grant: {len(dep_grant.data)}")
 
+    print("Getting dependent tokens...")
     for grant in dep_grant.data:
         if grant["resource_server"] == "transfer.api.globus.org":
             user_transfer_token = grant["access_token"]
             print(f"User transfer token: {user_transfer_token}")
+
+    print("if there's nothing above this... you didn't get shit.")
     # user_transfer_authorizer = globus_sdk.AccessTokenAuthorizer(user_transfer_token)
 
     print(f"Headers: {auth_header}")
