@@ -181,6 +181,9 @@ def automate_run():
     print(f"Headers: {auth_header}")
     print(f"Auth State: {auth_state}")
 
+    for key in auth_state:
+        print(key)
+
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
 
