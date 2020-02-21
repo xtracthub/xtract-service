@@ -230,7 +230,7 @@ def automate_run():
     resp = jsonify(ret_data)
     resp.status_code = 202
 
-    return resp
+    return jsonify(resp)
 
 
 def get_status(job):
