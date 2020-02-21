@@ -215,7 +215,7 @@ def automate_run():
     # manage_by = req['manage_by']
     # monitor_by = req['monitor_by']
 
-    action_id = uuid4()
+    action_id = str(uuid4())
     default_release_after = timedelta(days=30)
 
     thawed_idents = []
@@ -226,7 +226,7 @@ def automate_run():
 
     # Now to create the thing we return.
     ret_data = {
-        "action_id": str(action_id),
+        "action_id": action_id,
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
