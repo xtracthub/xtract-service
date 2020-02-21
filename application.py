@@ -231,8 +231,8 @@ def automate_run():
         "monitor_by": thawed_idents,
         "manage_by": thawed_idents,
         "start_time": start_time,
-        "completion_time": datetime.now(tz=timezone.utc),
-        "release_after": parse_duration(default_release_after)
+        "completion_time": "tomato", # datetime.now(tz=timezone.utc),
+        "release_after": "potato"# datetime.now(default_release_after)
     }
 
     resp = jsonify(ret_data)
