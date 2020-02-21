@@ -218,7 +218,7 @@ def automate_run():
     ret_data = {
         "action_id": action_id,
         "status": Status.ACTIVE.value,
-        "display_status": Status.ACTIVE,
+        "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
         "monitor_by": identities,
         "manage_by": identities,
@@ -228,7 +228,7 @@ def automate_run():
     }
 
     resp = jsonify(ret_data)
-    # resp.status_code = 202
+    resp.status_code = 202
 
     return resp
 
