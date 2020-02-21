@@ -227,10 +227,10 @@ def automate_run():
         "release_after": default_release_after
     }
 
-    # resp = jsonify(ret_data)
+    resp = jsonify(ret_data)
     # resp.status_code = 202
 
-    return make_response(jsonify(ret_data), 202)
+    return resp
 
 
 def get_status(job):
