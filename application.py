@@ -178,6 +178,8 @@ def automate_run():
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     auth_state = token_checker.check_token(token)
 
+    print(auth_state)
+
     dep_grant = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"]).oauth2_get_dependent_tokens(token)
     print(f"Length of Dependent Grant: {len(dep_grant.data)}")
 
