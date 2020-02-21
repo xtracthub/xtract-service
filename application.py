@@ -214,14 +214,20 @@ def automate_run():
     action_id = uuid4()
     default_release_after = timedelta(days=30)
 
+    thawed_idents = []
+    for identity in identities:
+        print(identity)
+        thawed_idents.append(identity)
+
+
     # Now to create the thing we return.
     ret_data = {
         "action_id": action_id,
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
-        "monitor_by": identities,
-        "manage_by": identities,
+        "monitor_by": thawed_idents,
+        "manage_by": thawed_idents,
         "start_time": start_time,
         "completion_time": datetime.now(tz=timezone.utc),
         "release_after": default_release_after
