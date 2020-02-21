@@ -184,8 +184,8 @@ def automate_run():
     intro_obj = conf_app.oauth2_token_introspect(token)
     print(intro_obj)
 
-    # dep_grant = .oauth2_get_dependent_tokens(token)
-    # print(dep_grant.data)
+    dep_grant = conf_app.oauth2_get_dependent_tokens(token)
+    print(dep_grant.data)
 
 
     print(f"Length of Dependent Grant: {len(dep_grant.data)}")
