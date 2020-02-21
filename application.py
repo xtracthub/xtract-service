@@ -43,6 +43,8 @@ token_checker= TokenChecker(
         expected_audience=os.environ["GL_CLIENT_NAME"],
     )
 
+# TODO: Add the action IDs to database for better state.
+active_ids = {}
 
 def crawl_launch(crawler, tc):
     crawler.crawl(tc)
@@ -235,6 +237,8 @@ def automate_run():
         "release_after": "potato"# datetime.now(default_release_after)
     }
 
+    active_ids[action_id] = ret_data
+
     resp = jsonify(ret_data)
     resp.status_code = 202
 
@@ -258,7 +262,13 @@ def get_status(job):
 
 @application.route('/<action_id>/status')
 def automate_status(action_id):
-    print("HI")
+    print("IN GET STATUS")
+    job_info = active_ids[action_id]
+    print("I should actually do some work here!")
+    job_info["status"] = Status.SUCCEEDED.value
+    return jsonify(job_info)
+
+
 
 @application.route('/<action_id>/cancel')
 def automate_cancel(action_id):
