@@ -173,36 +173,32 @@ def get_mdata():
 @application.route('/run', methods=['POST'])
 def automate_run():
 
-    auth_header = request.headers.get('Authorization')
-
+    # auth_header = request.headers.get('Authorization')
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    # auth_state = token_checker.check_token(token)
+    auth_state = token_checker.check_token(token)
+    identities = auth_state.identities
+
+    # TODO 1: get identities
+    print(f"Identities: {identities}")
 
     conf_app = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"])
-
-    # print(auth_state)
     intro_obj = conf_app.oauth2_token_introspect(token)
-    print(intro_obj)
+    print(f"Auth Token Introspection: {intro_obj}")
 
     dep_grant = conf_app.oauth2_get_dependent_tokens(token)
-    print(dep_grant.data)
+    # print(dep_grant.data)
 
-
-    print(f"Length of Dependent Grant: {len(dep_grant.data)}")
-
-    print("Getting dependent tokens...")
+    print("Fetching dependent tokens...")
     for grant in dep_grant.data:
         if grant["resource_server"] == "transfer.api.globus.org":
             user_transfer_token = grant["access_token"]
             print(f"User transfer token: {user_transfer_token}")
-
-    print("if there's nothing above this... you didn't get shit.")
-    # user_transfer_authorizer = globus_sdk.AccessTokenAuthorizer(user_transfer_token)
-
-    print(f"Headers: {auth_header}")
-    print(f"Auth State: {auth_state}")
-
-    print(auth_state.identities)
+        elif grant["resource_server"] == "petrel_https_server":
+            user_petrel_token = grant["user_petrel_token"]
+            print(f"User Petrel token: {user_petrel_token}")
+        elif grant["resource_server"] == "funcx_server":
+            user_funcx_token = grant["user_funcx_token"]
+            print(f"User funcX token: {user_funcx_token}")
 
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
@@ -211,6 +207,7 @@ def automate_run():
     request_id = req['request_id']
 
     body = req['body']
+    print(f"Request Body: {body}")
     # manage_by = req['manage_by']
     # monitor_by = req['monitor_by']
 
@@ -223,8 +220,8 @@ def automate_run():
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE,
         "details": "the weasel runs at midnight",
-        "monitor_by": req.auth.identities,
-        "manage_by": req.auth.identities,
+        "monitor_by": identities,
+        "manage_by": identities,
         "start_time": start_time,
         "completion_time": datetime.now(tz=timezone.utc),
         "release_after": default_release_after
