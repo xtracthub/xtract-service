@@ -194,10 +194,10 @@ def automate_run():
             user_transfer_token = grant["access_token"]
             print(f"User transfer token: {user_transfer_token}")
         elif grant["resource_server"] == "petrel_https_server":
-            user_petrel_token = grant["user_petrel_token"]
+            user_petrel_token = grant["access_token"]
             print(f"User Petrel token: {user_petrel_token}")
         elif grant["resource_server"] == "funcx_server":
-            user_funcx_token = grant["user_funcx_token"]
+            user_funcx_token = grant["access_token"]
             print(f"User funcX token: {user_funcx_token}")
 
     req = request.get_json(force=True)
