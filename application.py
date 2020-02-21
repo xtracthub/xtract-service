@@ -1,5 +1,5 @@
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_api import status
 from enum import Enum
 
@@ -227,10 +227,10 @@ def automate_run():
         "release_after": default_release_after
     }
 
-    resp = jsonify(ret_data)
-    resp.status_code = 202
+    # resp = jsonify(ret_data)
+    # resp.status_code = 202
 
-    return jsonify(resp)
+    return make_response(jsonify(ret_data), 202)
 
 
 def get_status(job):
