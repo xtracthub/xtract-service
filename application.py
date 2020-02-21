@@ -264,7 +264,7 @@ def get_status(job):
 def automate_status(action_id):
 
     print(f"Active IDs: {active_ids}")
-    
+
     print("IN GET STATUS")
     job_info = active_ids[action_id]
     print("I should actually do some work here!")
