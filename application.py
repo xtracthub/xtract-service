@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
 #from globus_action_provider_tools.validation import request_validator, response_validator
+from isodate import duration_isoformat, parse_duration, parse_datetime
+
 from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
@@ -230,7 +232,7 @@ def automate_run():
         "manage_by": thawed_idents,
         "start_time": start_time,
         "completion_time": datetime.now(tz=timezone.utc),
-        "release_after": default_release_after
+        "release_after": parse_duration(default_release_after)
     }
 
     resp = jsonify(ret_data)
