@@ -226,7 +226,7 @@ def automate_run():
 
     # Now to create the thing we return.
     ret_data = {
-        "action_id": action_id,
+        "action_id": str(action_id),
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
@@ -262,6 +262,9 @@ def get_status(job):
 
 @application.route('/<action_id>/status')
 def automate_status(action_id):
+
+    print(f"Active IDs: {active_ids}")
+    
     print("IN GET STATUS")
     job_info = active_ids[action_id]
     print("I should actually do some work here!")
