@@ -184,8 +184,10 @@ def automate_run():
 
     crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
     x = requests.post(crawl_url, json=request.json)
-    crawl_id = x.content["crawl_id"]
     print(x.content)
+
+    crawl_id = json.loads(x.content)["crawl_id"]
+    # print(x.content)
     print(crawl_id)
 
     thawed_idents = []
