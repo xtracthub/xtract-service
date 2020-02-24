@@ -144,6 +144,8 @@ def get_mdata():
 @application.route('/run', methods=['POST'])
 def automate_run():
 
+    # TODO: Need to read in 'eid', 'dir_path', 'grouper', 'Transfer', 'Authorization'
+
     # auth_header = request.headers.get('Authorization')
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     auth_state = token_checker.check_token(token)
@@ -174,8 +176,11 @@ def automate_run():
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
 
+    print(f"Endpoint ID: {req['eid']}")
+    print(f"Starting Dir: {req['dir_path']}")
+    print(f"Grouper: {req['grouper']}")
+
     start_time = datetime.now(tz=timezone.utc)
-    # request_id = req['request_id']
 
     body = req['body']
     print(f"Request Body: {body}")
