@@ -176,9 +176,9 @@ def automate_run():
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
 
-    print(f"Endpoint ID: {req['eid']}")
-    print(f"Starting Dir: {req['dir_path']}")
-    print(f"Grouper: {req['grouper']}")
+    print(f"Endpoint ID: {req['body']['eid']}")
+    print(f"Starting Dir: {req['body']['dir_path']}")
+    print(f"Grouper: {req['body']['grouper']}")
 
     start_time = datetime.now(tz=timezone.utc)
 
@@ -187,8 +187,14 @@ def automate_run():
     # manage_by = req['manage_by']
     # monitor_by = req['monitor_by']
 
+    crawl_req = {'eid': req['body']['eid'],
+                 'dir_path': req['body']['dir_path'],
+                 'grouper': req['body']['grouper'],
+                 'Transfer': user_transfer_token,
+                 'Authorization': user_funcx_token}
+
     crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
-    x = requests.post(crawl_url, json=request.json)
+    x = requests.post(crawl_url, json=json.dumps(crawl_req))
     print(x.content)
 
     crawl_id = json.loads(x.content)["crawl_id"]
