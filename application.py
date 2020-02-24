@@ -73,13 +73,6 @@ def crawl_launch(crawler, tc):
 @application.route('/', methods=['GET', 'POST'])
 def hello():
 
-    # print(f"Headers: {request.headers.get('Authorization')}")
-
-    # headers = req.headers
-    # json_object = req.json
-
-    # print(f"Headers: {headers}")
-    # print(f"Content: {json_object}")
 
     resp = {
         "types": ["Action"],
@@ -208,7 +201,7 @@ def automate_run():
     print(f"Run Request: {req}")
 
     start_time = datetime.now(tz=timezone.utc)
-    request_id = req['request_id']
+    # request_id = req['request_id']
 
     body = req['body']
     print(f"Request Body: {body}")
@@ -216,14 +209,14 @@ def automate_run():
     # monitor_by = req['monitor_by']
 
     action_id = str(uuid4())
-    default_release_after = timedelta(days=30)
+    # default_release_after = timedelta(days=30)
 
     thawed_idents = []
     for identity in identities:
         print(identity)
         thawed_idents.append(identity)
 
-
+    # TODO: Make action_id the regular task_id (I think we'd want it to technically be the crawl_id.
     # Now to create the thing we return.
     ret_data = {
         "action_id": action_id,
@@ -233,8 +226,8 @@ def automate_run():
         "monitor_by": thawed_idents,
         "manage_by": thawed_idents,
         "start_time": start_time,
-        "completion_time": "tomato", # datetime.now(tz=timezone.utc),
-        "release_after": "potato"# datetime.now(default_release_after)
+        "completion_time": "tomato",  # datetime.now(tz=timezone.utc),
+        "release_after": "P30D"
     }
 
     active_ids[action_id] = ret_data
@@ -260,6 +253,7 @@ def get_status(job):
             job["status"] = Status.SUCCEEDED.value
     return job
 
+
 @application.route('/<action_id>/status')
 def automate_status(action_id):
 
@@ -272,14 +266,15 @@ def automate_status(action_id):
     return jsonify(job_info)
 
 
-
 @application.route('/<action_id>/cancel')
 def automate_cancel(action_id):
-    print("HI")
+    print(f"Action ID for cancel: {action_id}")
+
 
 @application.route('/<action_id>/release')
 def automate_release(action_id):
-    print("HI")
+    print(f"Action ID for release: {action_id}")
+
 
 if __name__ == '__main__':
     application.run(debug=True, threaded=True)
