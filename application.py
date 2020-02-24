@@ -221,7 +221,6 @@ def automate_run():
     }
 
     # NOTE: Actually launching the crawl right here.
-
     active_ids[crawl_id] = ret_data
 
     resp = jsonify(ret_data)
