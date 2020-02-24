@@ -169,7 +169,7 @@ def automate_run():
         elif grant["resource_server"] == "petrel_https_server":
             user_petrel_token = grant["access_token"]
             print(f"User Petrel token: {user_petrel_token}")
-        elif grant["resource_server"] == "funcx_server":
+        elif grant["resource_server"] == "funcx_service":
             user_funcx_token = grant["access_token"]
             print(f"User funcX token: {user_funcx_token}")
 
