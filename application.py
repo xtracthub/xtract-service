@@ -173,6 +173,8 @@ def automate_run():
             user_funcx_token = grant["access_token"]
             print(f"User funcX token: {user_funcx_token}")
 
+    # TODO: Add some sort of token-checking here. "So we avoid 'referenced before assignment' errors"
+
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
 
@@ -193,8 +195,10 @@ def automate_run():
                  'Transfer': user_transfer_token,
                  'Authorization': user_funcx_token}
 
+    print(f"Crawl Req: {crawl_req}")
+
     crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
-    x = requests.post(crawl_url, json=json.dumps(crawl_req))
+    x = requests.post(crawl_url, json=crawl_req)
     print(x.content)
 
     crawl_id = json.loads(x.content)["crawl_id"]
