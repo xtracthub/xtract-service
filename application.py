@@ -1,25 +1,20 @@
 
-from flask import Flask, request, jsonify, make_response
-from flask_api import status
+from flask import Flask, request, jsonify
 from enum import Enum
 
 from datetime import datetime, timedelta, timezone
 
 from globus_action_provider_tools.authentication import TokenChecker
-#from globus_action_provider_tools.validation import request_validator, response_validator
-from isodate import duration_isoformat, parse_duration, parse_datetime
+from globus_action_provider_tools.validation import request_validator, response_validator
 
 from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
 
-from openapi_core.wrappers.flask import FlaskOpenAPIResponse, FlaskOpenAPIRequest
 
 from uuid import uuid4
 import requests
-import time
-import error as err
 
 import json
 import os
@@ -35,7 +30,7 @@ class Status(Enum):
 
 
 # TODO: Move this cleanly into a class (and maybe cache for each user).
-token_checker= TokenChecker(
+token_checker = TokenChecker(
         client_id=os.environ["GL_CLIENT_ID"],
         client_secret=os.environ["GL_CLIENT_SECRET"],
         expected_scopes=['https://auth.globus.org/scopes/8df7645a-2ac7-4d4a-a7c5-e085d01bb5b7',
@@ -46,38 +41,18 @@ token_checker= TokenChecker(
 # TODO: Add the action IDs to database for better state.
 active_ids = {}
 
+
 def crawl_launch(crawler, tc):
     crawler.crawl(tc)
-
-
-# @application.before_request
-# def before_request():
-#     print("IN REQUEST")
-#     wrapped_req = FlaskOpenAPIRequest(request)
-#     # validation_result = request_validator.validate(wrapped_req)
-#     # if validation_result.errors:
-#     #     raise err.InvalidRequest(*validation_result.errors)
-#
-#     token = request.headers.get("Authorization", "").replace("Bearer ", "")
-#     print(f"TOKEN: {str(token)}")
-#     auth_state = token_checker.check_token(token)
-#     if not auth_state.identities:
-#         # Returning these authentication errors to the caller will make debugging
-#         # easier for this example. Consider whether this is appropriate
-#         # for your production use case or not.
-#         raise err.NoAuthentication(*auth_state.errors)
-#     request.auth = auth_state
-#     print("EXITING PRE-REQUEST")
 
 
 @application.route('/', methods=['GET', 'POST'])
 def hello():
 
-
     resp = {
         "types": ["Action"],
         "api_version": "1.0",
-        "globus_auth_scope": "TODO", # config.our_scope,
+        "globus_auth_scope": "TODO",  # config.our_scope,
         "title": "Xtract Metadata from any Globus Repository",
         "subtitle": (
             "By Tyler J. Skluzacek (UChicago) "
@@ -88,8 +63,7 @@ def hello():
         "log_supported": False,
         "synchronous": False,
     }
-    # st = status.HTTP_200_OK
-    # return f"Welcome to Xtract! \n Status: {str(st)}", st
+
     return jsonify(resp)
 
 
@@ -208,8 +182,11 @@ def automate_run():
     # manage_by = req['manage_by']
     # monitor_by = req['monitor_by']
 
-    action_id = str(uuid4())
-    # default_release_after = timedelta(days=30)
+    crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
+    x = requests.post(crawl_url, json=request.json)
+    crawl_id = x.content["crawl_id"]
+    print(x.content)
+    print(crawl_id)
 
     thawed_idents = []
     for identity in identities:
@@ -219,7 +196,7 @@ def automate_run():
     # TODO: Make action_id the regular task_id (I think we'd want it to technically be the crawl_id.
     # Now to create the thing we return.
     ret_data = {
-        "action_id": action_id,
+        "action_id": crawl_id,
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
@@ -229,6 +206,8 @@ def automate_run():
         "completion_time": "tomato",  # datetime.now(tz=timezone.utc),
         "release_after": "P30D"
     }
+
+    # NOTE: Actually launching the crawl right here.
 
     active_ids[action_id] = ret_data
 
