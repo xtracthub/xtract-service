@@ -144,14 +144,11 @@ def get_mdata():
 @application.route('/run', methods=['POST'])
 def automate_run():
 
-    # TODO: Need to read in 'eid', 'dir_path', 'grouper', 'Transfer', 'Authorization'
-
     # auth_header = request.headers.get('Authorization')
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     auth_state = token_checker.check_token(token)
     identities = auth_state.identities
 
-    # TODO 1: get identities
     print(f"Identities: {identities}")
 
     conf_app = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"])
@@ -174,7 +171,6 @@ def automate_run():
             print(f"User funcX token: {user_funcx_token}")
 
     # TODO: Add some sort of token-checking here. "So we avoid 'referenced before assignment' errors"
-
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
 
@@ -202,8 +198,11 @@ def automate_run():
     print(x.content)
 
     crawl_id = json.loads(x.content)["crawl_id"]
-    # print(x.content)
     print(f"Crawl ID: {crawl_id}")
+
+    import time
+    time.sleep(3)
+    # TODO: LAUNCH THE XTRACTION HERE.
 
     thawed_idents = []
     for identity in identities:
