@@ -123,13 +123,13 @@ class MatioExtractor:
                 # Take all of the files and append them to our payload.
                 for f_obj in old_mdata["files"]:
                     payload = {
-                        # TODO: Un-hardcode.
+                        # TODO: Un-hardcode. LOUDER FOR THE PEOPLE IN THE BACK.
                         'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
                         'headers': self.fx_headers, 'file_id': gid[0]}
                     data["inputs"].append(payload)
                     data["transfer_token"] = self.headers['Transfer']
                     data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-                    data["dest_endpoint"] = '5113667a-10b4-11ea-8a67-0e35e66293c2'
+                    data["dest_endpoint"] = '4db7eecd-7af7-4148-a139-5c92dc2ed971'
 
                 res = requests.post(url=self.post_url,
                                     headers=self.fx_headers,
