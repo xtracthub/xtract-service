@@ -35,9 +35,9 @@ class MatioExtractor:
         self.globus_eid = globus_eid
 
         # TODO: The endpoints need not be hardcoded.
-        self.func_id = "3346cd9c-1fb9-44cd-810e-4303e58c81e4"
+        self.func_id = "89ee3cef-ed07-4b52-9bd6-bc6e080d6bed"
         self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-        self.dest_endpoint = '5113667a-10b4-11ea-8a67-0e35e66293c2'
+        self.dest_endpoint = '1adf6602-3e50-11ea-b965-0e16720bb42f'
 
         self.live_ids = Queue()
         self.finished_ids = []
@@ -145,7 +145,7 @@ class MatioExtractor:
                 # TODO: Actually do something here.
                 if fx_res["status"] == "failed":
                     self.logger.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
-                    exit()  # TODO: Don't exit lol.
+
                 task_uuid = fx_res['task_uuid']
 
                 self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
@@ -272,6 +272,7 @@ def matio_test(event):
 
     try:
         os.chdir(dir_name)
+        os.chmod(dir_name, 0o777)
     except Exception as e:
         return str(e)
 
@@ -359,10 +360,6 @@ def matio_test(event):
                 break
             if time.time() - t_ext_st >= 120:
                 return "Extract TIMED OUT AFTER 20 seconds"
-
-        # return "MADE IT THROUGH MDATA EXTRACT THREAD"
-
-        #return post_extract_q.get()
 
         new_mdata = post_extract_q.get()
 

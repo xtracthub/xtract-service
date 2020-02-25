@@ -15,10 +15,10 @@ fx_ser = FuncXSerializer()
 
 post_url = 'https://dev.funcx.org/api/v1/submit'
 get_url = 'https://dev.funcx.org/api/v1/{}/status'
-
 globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
+
 fx_ep = "4db7eecd-7af7-4148-a139-5c92dc2ed971"
-n_tasks = 1000
+n_tasks = 100
 
 fn_id = fxc.register_function(matio_test,
                               description="A sum function")
