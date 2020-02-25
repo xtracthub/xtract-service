@@ -203,7 +203,7 @@ def automate_run():
 
     crawl_id = json.loads(x.content)["crawl_id"]
     # print(x.content)
-    print(crawl_id)
+    print(f"Crawl ID: {crawl_id}")
 
     thawed_idents = []
     for identity in identities:
