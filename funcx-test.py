@@ -17,8 +17,8 @@ post_url = 'https://dev.funcx.org/api/v1/submit'
 get_url = 'https://dev.funcx.org/api/v1/{}/status'
 globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 
-fx_ep = "4db7eecd-7af7-4148-a139-5c92dc2ed971"
-n_tasks = 100
+fx_ep = "6045fcfb-c3ef-48db-9b32-5b50fda15144"
+n_tasks = 2500
 
 fn_id = fxc.register_function(matio_test,
                               description="A sum function")
@@ -94,14 +94,6 @@ while True:
 
     cur_tid = task_dict["active"].get()
     status_thing = requests.get(get_url.format(cur_tid), headers=headers).json()
-
-    # TODO: Move this ghetto-retry to the funcX side of things.
-    # if time.time() - t_launch_times[cur_tid] >= timeout:
-    #     print("CLIENT: Task never returned -- failed!!! ")
-    #     task_dict["failed"].put(cur_tid)
-    #     failed_counter += 1
-    #     print(f"Num Failed: {failed_counter}")
-    #     continue
 
     if 'result' in status_thing:
         result = fx_ser.deserialize(status_thing['result'])
