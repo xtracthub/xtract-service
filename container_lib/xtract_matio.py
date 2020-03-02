@@ -29,15 +29,16 @@ def serialize_fx_inputs(*args, **kwargs):
 
 
 class MatioExtractor:
+    # TODO: Cleanup unnnecessary args.
     def __init__(self, crawl_id, headers, funcx_eid, globus_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
         self.globus_eid = globus_eid
 
         # TODO: The endpoints need not be hardcoded.
-        self.func_id = "89ee3cef-ed07-4b52-9bd6-bc6e080d6bed"
+        self.func_id = "91677f55-ff78-4d09-9d87-a111aaf26c69"
         self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-        self.dest_endpoint = '1adf6602-3e50-11ea-b965-0e16720bb42f'
+        self.dest_endpoint = globus_eid
 
         # self.finished_ids = []
         self.task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
@@ -137,9 +138,8 @@ class MatioExtractor:
                     data["inputs"].append(payload)
                     data["transfer_token"] = self.headers['Transfer']
 
-                    # TODO: OOF.
-                    data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-                    data["dest_endpoint"] = '4db7eecd-7af7-4148-a139-5c92dc2ed971'
+                    data["source_endpoint"] = self.source_endpoint
+                    data["dest_endpoint"] = self.dest_endpoint
 
                 res = requests.post(url=self.post_url,
                                     headers=self.fx_headers,
