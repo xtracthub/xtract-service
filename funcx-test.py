@@ -18,7 +18,7 @@ get_url = 'https://dev.funcx.org/api/v1/{}/status'
 globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 
 fx_ep = "6045fcfb-c3ef-48db-9b32-5b50fda15144"
-n_tasks = 2500
+n_tasks = 10
 
 fn_id = fxc.register_function(matio_test,
                               description="A sum function")

@@ -30,15 +30,15 @@ def serialize_fx_inputs(*args, **kwargs):
 
 class MatioExtractor:
     # TODO: Cleanup unnnecessary args.
-    def __init__(self, crawl_id, headers, funcx_eid, globus_eid,
+    def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
-        self.globus_eid = globus_eid
+        self.globus_eid = source_eid  # ???
 
         # TODO: The endpoints need not be hardcoded.
         self.func_id = "91677f55-ff78-4d09-9d87-a111aaf26c69"
         self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-        self.dest_endpoint = globus_eid
+        self.dest_endpoint = dest_eid
 
         # self.finished_ids = []
         self.task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}

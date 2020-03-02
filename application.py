@@ -95,13 +95,15 @@ def extract_mdata():
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
     funcx_eid = r["funcx_eid"]
-    globus_eid = r["globus_eid"]
+    source_eid = r["source_eid"]
+    dest_eid = r["dest_eid"]
     mdata_store_path = r["mdata_store_path"]
 
     mex = MatioExtractor(crawl_id=crawl_id,
                          headers=headers,
                          funcx_eid=funcx_eid,
-                         globus_eid=globus_eid,
+                         source_eid=source_eid,
+                         dest_eid =dest_eid,
                          mdata_store_path=mdata_store_path)
 
     print("SENDING FILES...")
