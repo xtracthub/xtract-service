@@ -2,8 +2,11 @@
 import threading
 import requests
 import logging
+import psycopg2
+import pickle
 import time
 import json
+
 
 from funcx.serialize import FuncXSerializer
 from psycopg2.extras import Json
@@ -33,14 +36,10 @@ class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
-        self.globus_eid = source_eid  # ???
-
-        # TODO: The endpoints need not be hardcoded.
         self.func_id = "91677f55-ff78-4d09-9d87-a111aaf26c69"
-        self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
+        self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
 
-        # self.finished_ids = []
         self.task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 
         self.headers = headers
@@ -121,9 +120,9 @@ class MatioExtractor:
 
                 # Get the metadata for each group_id
                 try:
-                    get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}' LIMIT 1;"
+                    get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid[0]}' LIMIT 1;"
                     cur.execute(get_mdata)
-                    old_mdata = cur.fetchone()[0]
+                    old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
                 except Exception as e:
                     print("[Xtract] Unable to retrieve metadata")
                     print(e)
@@ -219,14 +218,14 @@ class MatioExtractor:
 
                         cur = self.conn.cursor()
                         # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
-                        get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid}';"
+                        get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid}';"
                         cur.execute(get_mdata)
                         #     cur.execute(get_mdata)  # TODO: Is this second one necessary?
-                        old_mdata = cur.fetchone()[0]
+                        old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
                         old_mdata["matio"] = g_obj["matio"]
 
                         self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
-                        update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
+                        update_mdata = f"UPDATE group_metadata_2 SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
                         cur.execute(update_mdata)
 
                         # TODO: Make sure we're updating the parser-list in the db.
