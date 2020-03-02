@@ -29,7 +29,7 @@ class Status(Enum):
     INACTIVE = "INACTIVE"
 
 
-# TODO: Move this cleanly into a class (and maybe cache for each user).
+# # TODO: Move this cleanly into a class (and maybe cache for each user).
 token_checker = TokenChecker(
         client_id=os.environ["GL_CLIENT_ID"],
         client_secret=os.environ["GL_CLIENT_SECRET"],

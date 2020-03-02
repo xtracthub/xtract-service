@@ -39,8 +39,9 @@ class MatioExtractor:
         self.source_endpoint = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
         self.dest_endpoint = '1adf6602-3e50-11ea-b965-0e16720bb42f'
 
-        self.live_ids = Queue()
-        self.finished_ids = []
+        # self.finished_ids = []
+        self.task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+
         self.headers = headers
         self.batch_size = 1
         self.max_active_batches = 2
@@ -94,9 +95,9 @@ class MatioExtractor:
             gids = cur.fetchall()
             return gids
         except:
-            print("Testing is failing...")
+            print("[Xtract] Unable to fetch new group_ids from DB")
 
-    def send_files(self, test_mode=False):
+    def send_files(self):
         # Just keep looping in case something comes up in crawl.
         while True:
             data = {'inputs': []}
@@ -108,26 +109,35 @@ class MatioExtractor:
                 self.logger.debug(f"Processing GID: {gid[0]}")
 
                 # Update DB to flag group_id as 'EXTRACTING'.
-                # TODO: Catch these connection errors.
                 cur = self.conn.cursor()
-                update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
-                cur.execute(update_q)
-                self.conn.commit()
+                try:
+                    update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
+                    cur.execute(update_q)
+                    self.conn.commit()
+                except Exception as e:
+                    print("[Xtract] Unable to update status to 'EXTRACTING'.")
+                    print(e)
 
                 # Get the metadata for each group_id
-                get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}' LIMIT 1;"
-                cur.execute(get_mdata)
-                old_mdata = cur.fetchone()[0]
+                try:
+                    get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid[0]}' LIMIT 1;"
+                    cur.execute(get_mdata)
+                    old_mdata = cur.fetchone()[0]
+                except Exception as e:
+                    print("[Xtract] Unable to retrieve metadata")
+                    print(e)
 
                 # TODO: Partial groups can occur here.
                 # Take all of the files and append them to our payload.
                 for f_obj in old_mdata["files"]:
                     payload = {
-                        # TODO: Un-hardcode. LOUDER FOR THE PEOPLE IN THE BACK.
+                        # TODO: Un-hardcode. This is hardcoded to Petrel data addresses.
                         'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
                         'headers': self.fx_headers, 'file_id': gid[0]}
                     data["inputs"].append(payload)
                     data["transfer_token"] = self.headers['Transfer']
+
+                    # TODO: OOF.
                     data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
                     data["dest_endpoint"] = '4db7eecd-7af7-4148-a139-5c92dc2ed971'
 
@@ -149,11 +159,11 @@ class MatioExtractor:
                 task_uuid = fx_res['task_uuid']
 
                 self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
-                self.live_ids.put(task_uuid)
-                self.logger.info(f"Approximate current size of live task queue: {self.live_ids.qsize()}")
+                self.task_dict["active"].put(task_uuid)
+                self.logger.info(f"Approximate current size of live task queue: {self.task_dict['active'].qsize()}")
 
             while True:
-                if self.live_ids.qsize() < self.max_active_batches:
+                if self.task_dict["active"].qsize() < self.max_active_batches:
                     self.logger.debug(f"FEWER THAN {self.max_active_batches} LIVE TASKS! ")
                     break
                 else:
@@ -183,14 +193,14 @@ class MatioExtractor:
     def poll_responses(self):
         success_returns = 0
         while True:
-            if self.live_ids.empty():
+            if self.task_dict["active"].empty():
                 self.logger.debug("No live IDs... sleeping...")
                 time.sleep(1)
                 continue
 
-            num_elem = self.live_ids.qsize()
+            num_elem = self.task_dict["active"].qsize()
             for _ in range(0, num_elem):
-                ex_id = self.live_ids.get()
+                ex_id = self.task_dict["active"].get()
                 status_thing = requests.get(self.get_url.format(ex_id), headers=self.fx_headers)
                 status_thing = json.loads(status_thing.content)
 
@@ -201,43 +211,41 @@ class MatioExtractor:
                     if res == True:
                         success_returns += 1
                         print(success_returns)
-                    # res = fx_ser.deserialize(status_thing['result'])
-                    # self.logger.debug(f"Received response: {res}")
-                    #
-                    # for g_obj in res["metadata"]:
-                    #     gid = g_obj["group_id"]
-                    #
-                    #     cur = self.conn.cursor()
-                    #     # TODO: [Optimization] Do something smarter than pulling this down a second time
-                    #     #  (cache somewhere???)
-                    #     get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid}';"
-                    #     cur.execute(get_mdata)
-                    #     cur.execute(get_mdata)
-                    #
-                    #     old_mdata = cur.fetchone()[0]
-                    #     old_mdata["matio"] = g_obj["matio"]
-                    #
-                    #     self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
-                    #     update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
-                    #     cur.execute(update_mdata)
-                    #
-                    #     # TODO: Make sure we're updating the parser-list in the db.
-                    #     self.logger.debug("Updating group status (Update: 2/2)")
-                    #     update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
-                    #     cur.execute(update_q)
-                    #     self.conn.commit()
+                    res = fx_ser.deserialize(status_thing['result'])
+                    self.logger.debug(f"Received response: {res}")
+
+                    for g_obj in res["metadata"]:
+                        gid = g_obj["group_id"]
+
+                        cur = self.conn.cursor()
+                        # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
+                        get_mdata = f"SELECT metadata FROM group_metadata where group_id='{gid}';"
+                        cur.execute(get_mdata)
+                        #     cur.execute(get_mdata)  # TODO: Is this second one necessary?
+                        old_mdata = cur.fetchone()[0]
+                        old_mdata["matio"] = g_obj["matio"]
+
+                        self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
+                        update_mdata = f"UPDATE group_metadata SET metadata={Json(old_mdata)} where group_id='{gid}';"
+                        cur.execute(update_mdata)
+
+                        # TODO: Make sure we're updating the parser-list in the db.
+                        self.logger.debug("Updating group status (Update: 2/2)")
+                        update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
+                        cur.execute(update_q)
+                        self.conn.commit()
                     break
                 elif 'exception' in status_thing:
                     exc = fx_ser.deserialize(status_thing['exception'])
                     self.logger.error(f"Caught Exception: {exc}")
                 else:
-                    self.live_ids.put(ex_id)
+                    self.task_dict["active"].put(ex_id)
 
             # TODO: Get rid of sleep soon.
             time.sleep(2)
 
 
-# TODO: .put() data for HTTPS.
+# TODO: .put() data for HTTPS on Petrel.
 
 # TODO: Smarter separation of groups in file system (but not important at smaller scale).
 # TODO: Move these functions to outside this file (like a dir of functions.
@@ -373,8 +381,6 @@ def matio_test(event):
     t1 = time.time()
     return {'metadata': mdata_list, 'tot_time': t1-t0}
 
-def fatio_test(event):
-    return True
 
 # TODO: Batch metadata saving requests (And store in different file).
 def save_mdata(event):
