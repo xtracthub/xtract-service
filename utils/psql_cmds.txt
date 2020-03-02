@@ -51,9 +51,9 @@ CREATE TABLE extracts (
    );
 
 
-CREATE TABLE group_metadata (
+CREATE TABLE group_metadata_2 (
   group_id VARCHAR(40) PRIMARY KEY,
-  metadata JSON NOT NULL,
+  metadata bytea,
   files text[],
   parsers text[],
   owner varchar(50)
