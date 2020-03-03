@@ -9,7 +9,6 @@ import json
 
 
 from funcx.serialize import FuncXSerializer
-from psycopg2.extras import Json
 from queue import Queue
 
 
@@ -36,15 +35,15 @@ class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
-        self.func_id = "91677f55-ff78-4d09-9d87-a111aaf26c69"
+        self.func_id = "148c9dcc-d9c6-430b-b3a7-ddd02193f418"
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
 
-        self.task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+        self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         self.headers = headers
         self.batch_size = 1
-        self.max_active_batches = 2
+        self.max_active_batches = 10
         self.crawl_id = crawl_id
 
         self.mdata_store_path = mdata_store_path
@@ -173,6 +172,7 @@ class MatioExtractor:
                 cur.execute(crawled_query)
                 count_val = cur.fetchall()[0][0]
 
+                self.logger.debug(f"Num active Task IDs: {self.task_dict['active'].qsize()}")
                 self.logger.debug(f"Files left to extract: {count_val}")
 
                 if count_val == 0:
@@ -328,7 +328,7 @@ def matio_test(event):
         # return gl_task_id
 
         # TODO: task_wait obviously isn't working...
-        finished = tc.task_wait(gl_task_id, timeout=60)
+        finished = tc.task_wait(gl_task_id, timeout=600)
 
         def task_loop():
             while True:
@@ -350,8 +350,8 @@ def matio_test(event):
         while True:
             if not post_globus_q.empty():
                 break
-            if time.time() - t_init >= 20:
-                return "Transfer OPERATION TIMED OUT AFTER 20 seconds"
+            if time.time() - t_init >= 120:
+                return "Transfer OPERATION TIMED OUT AFTER 120 seconds"
             time.sleep(1)
 
         # TODO: MADE IT THROUGH HERE
@@ -365,8 +365,10 @@ def matio_test(event):
         while True:
             if not post_extract_q.empty():
                 break
-            if time.time() - t_ext_st >= 120:
-                return "Extract TIMED OUT AFTER 20 seconds"
+
+            # TODO: Removing fake timeout.
+            # if time.time() - t_ext_st >= 120:
+            #     return "Extract TIMED OUT AFTER 20 seconds"
 
         new_mdata = post_extract_q.get()
 

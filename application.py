@@ -4,7 +4,7 @@ from enum import Enum
 
 from datetime import datetime, timedelta, timezone
 
-from globus_action_provider_tools.authentication import TokenChecker
+# from globus_action_provider_tools.authentication import TokenChecker
 # from globus_action_provider_tools.validation import request_validator, response_validator
 
 from globus_sdk import ConfidentialAppAuthClient
@@ -30,13 +30,16 @@ class Status(Enum):
 
 
 # # TODO: Move this cleanly into a class (and maybe cache for each user).
-token_checker = TokenChecker(
-        client_id=os.environ["GL_CLIENT_ID"],
-        client_secret=os.environ["GL_CLIENT_SECRET"],
-        expected_scopes=['https://auth.globus.org/scopes/8df7645a-2ac7-4d4a-a7c5-e085d01bb5b7',
-                         'https://auth.globus.org/scopes/cd6f1c83-2802-48b6-94dd-b0c7d027d9df'],
-        expected_audience=os.environ["GL_CLIENT_NAME"],
-    )
+try:
+    token_checker = TokenChecker(
+            client_id=os.environ["GL_CLIENT_ID"],
+            client_secret=os.environ["GL_CLIENT_SECRET"],
+            expected_scopes=['https://auth.globus.org/scopes/8df7645a-2ac7-4d4a-a7c5-e085d01bb5b7',
+                             'https://auth.globus.org/scopes/cd6f1c83-2802-48b6-94dd-b0c7d027d9df'],
+            expected_audience=os.environ["GL_CLIENT_NAME"],
+        )
+except:
+    print("REMOVE THIS TRY/EXCEPT")
 
 # TODO: Add the action IDs to database for better state.
 active_ids = {}

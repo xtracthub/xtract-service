@@ -24,6 +24,7 @@ fn_id = fxc.register_function(matio_test,
                               description="A sum function")
 
 print(f"Function UUID: {fn_id}")
+exit()
 
 # Get the Headers....
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
