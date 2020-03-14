@@ -81,7 +81,7 @@ class MatioExtractor:
         except:
             # TODO: Don't exit lol.
             print("FUCK. ")
-            exit()
+            # exit()
 
     def get_test_files(self):
 
@@ -248,6 +248,57 @@ class MatioExtractor:
 
 # TODO: Smarter separation of groups in file system (but not important at smaller scale).
 # TODO: Move these functions to outside this file (like a dir of functions.
+
+
+def globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, files_dict):
+    from globus_sdk import TransferClient, AccessTokenAuthorizer
+    import globus_sdk
+    import threading
+
+    i = 0
+    try:
+        authorizer = AccessTokenAuthorizer(transfer_token)
+        tc = TransferClient(authorizer=authorizer)
+        tdata = globus_sdk.TransferData(tc, source_endpoint,
+                                        dest_endpoint,
+                                        label=str(i))
+        i += 1
+    except Exception as e:
+        return e
+
+    for file_id in files_dict:
+        tdata.add_item(f'{files_dict[file_id]["file_path"]}', files_dict[file_id]["dest_file_path"], recursive=False)
+
+    tc.endpoint_autoactivate(source_endpoint)
+    tc.endpoint_autoactivate(dest_endpoint)
+
+    try:
+        submit_result = tc.submit_transfer(tdata)
+    except Exception as e:
+        return str(e).split('\n')
+
+    gl_task_id = submit_result['task_id']
+
+    finished = tc.task_wait(gl_task_id, timeout=600)
+
+    def task_loop():
+        while True:
+            r = tc.get_task(submit_result['task_id'])
+            if r['status'] == "SUCCEEDED":
+                break
+            else:
+                time.sleep(0.5)
+        # post_globus_q.put("SUCCESS1")
+        return "SUCCESS1"
+
+    try:
+        t1 = threading.Thread(target=task_loop, args=())
+        t1.start()
+    except Exception as e:
+        return str(e)
+
+
+
 def matio_test(event):
     """
     Function
@@ -258,11 +309,8 @@ def matio_test(event):
     import time
     import shutil
     import sys
-    import globus_sdk
     import random
-    import threading
     from queue import Queue
-    from globus_sdk import TransferClient, AccessTokenAuthorizer
     from datetime import datetime
 
     post_globus_q = Queue()
@@ -288,64 +336,32 @@ def matio_test(event):
     transfer_token = event['transfer_token']
     dest_endpoint = event['dest_endpoint']
     source_endpoint = event['source_endpoint']
-    # file_id = event['file_id']
-
-    # return file_id
+    https_bool = False  # event['https_bool']
 
     t0 = time.time()
     mdata_list = []
 
-    i = 0
+    file_dict = {}
     for item in all_files:
         file_id = item['file_id']
-        i += 1
 
-        try:
-            authorizer = AccessTokenAuthorizer(transfer_token)
-            tc = TransferClient(authorizer=authorizer)
+        file_path = item["url"].split('globus.org')[1]
+        dest_file_path = dir_name + '/' + file_path.split('/')[-1]
 
-            file_path = item["url"].split('globus.org')[1]
-            dest_file_path = dir_name + '/' + file_path.split('/')[-1]
+        file_dict[file_id] = {}
+        file_dict[file_id]["file_path"] = file_path
+        file_dict[file_id]["dest_file_path"] = dest_file_path
 
-            tdata = globus_sdk.TransferData(tc, source_endpoint,
-                                        dest_endpoint,
-                                        label=str(i))
-        except Exception as e:
-            return e
+        if https_bool:
+            print("hi")
 
-        tdata.add_item(f'{file_path}', dest_file_path, recursive=False)
+        # Otherwise, we should use the proper Globus service.
+        else:
+            trans_status = globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, file_dict)
 
-        tc.endpoint_autoactivate(source_endpoint)
-        tc.endpoint_autoactivate(dest_endpoint)
+            if "SUCCESS" in trans_status:
+                post_globus_q.put(trans_status)
 
-        try:
-            submit_result = tc.submit_transfer(tdata)
-        except Exception as e:
-            return str(e).split('\n')
-
-        # TODO: WE MAKE IT HERE, SO TRANSFER IS AT LEAST SUBMITTED.
-        gl_task_id = submit_result['task_id']
-        # return gl_task_id
-
-        # TODO: task_wait obviously isn't working...
-        finished = tc.task_wait(gl_task_id, timeout=600)
-
-        def task_loop():
-            while True:
-                r = tc.get_task(submit_result['task_id'])
-                if r['status'] == "SUCCEEDED":
-                    break
-                else:
-                    time.sleep(0.5)
-            post_globus_q.put("SUCCESS1")
-
-        try:
-            t1 = threading.Thread(target=task_loop, args=())
-            t1.start()
-        except Exception as e:
-            return str(e)
-
-        # TODO: If not finished in 20 seconds, then return "Waited 20 seconds and returned nothing.
         t_init = time.time()
         while True:
             if not post_globus_q.empty():
@@ -354,7 +370,6 @@ def matio_test(event):
                 return "Transfer OPERATION TIMED OUT AFTER 120 seconds"
             time.sleep(1)
 
-        # TODO: MADE IT THROUGH HERE
         try:
             new_mdata = xtract_matio_main.extract_matio(dir_name, str(datetime.now()))
             post_extract_q.put(new_mdata)

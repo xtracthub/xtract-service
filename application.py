@@ -107,7 +107,8 @@ def extract_mdata():
                          funcx_eid=funcx_eid,
                          source_eid=source_eid,
                          dest_eid =dest_eid,
-                         mdata_store_path=mdata_store_path)
+                         mdata_store_path=mdata_store_path
+                         )
 
     print("SENDING FILES...")
     mex.launch_extract()
