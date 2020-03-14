@@ -122,7 +122,7 @@ class MatioExtractor:
                     get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid[0]}' LIMIT 1;"
                     cur.execute(get_mdata)
                     old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
-                except Exception as e:
+                except Exception as e:  # TODO: this MUST be less broad.
                     print("[Xtract] Unable to retrieve metadata")
                     print(e)
 
@@ -298,7 +298,6 @@ def globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, file
         return str(e)
 
 
-
 def matio_test(event):
     """
     Function
@@ -336,7 +335,7 @@ def matio_test(event):
     transfer_token = event['transfer_token']
     dest_endpoint = event['dest_endpoint']
     source_endpoint = event['source_endpoint']
-    https_bool = False  # event['https_bool']
+    https_bool = False  # TODO event['https_bool']
 
     t0 = time.time()
     mdata_list = []
