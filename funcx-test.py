@@ -18,13 +18,19 @@ get_url = 'https://dev.funcx.org/api/v1/{}/status'
 globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 
 fx_ep = "6045fcfb-c3ef-48db-9b32-5b50fda15144"
-n_tasks = 10
+n_tasks = 5
 
+
+container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest',
+                                      container_type='docker',
+                                      name='kube-matio',
+                                      description='I don\'t think so!')
 fn_id = fxc.register_function(matio_test,
+                              container_uuid=container_id,
                               description="A sum function")
 
 print(f"Function UUID: {fn_id}")
-exit()
+# exit()
 
 # Get the Headers....
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')

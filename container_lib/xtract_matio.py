@@ -249,55 +249,6 @@ class MatioExtractor:
 # TODO: Smarter separation of groups in file system (but not important at smaller scale).
 # TODO: Move these functions to outside this file (like a dir of functions.
 
-
-def globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, files_dict):
-    from globus_sdk import TransferClient, AccessTokenAuthorizer
-    import globus_sdk
-    import threading
-
-    i = 0
-    try:
-        authorizer = AccessTokenAuthorizer(transfer_token)
-        tc = TransferClient(authorizer=authorizer)
-        tdata = globus_sdk.TransferData(tc, source_endpoint,
-                                        dest_endpoint,
-                                        label=str(i))
-        i += 1
-    except Exception as e:
-        return e
-
-    for file_id in files_dict:
-        tdata.add_item(f'{files_dict[file_id]["file_path"]}', files_dict[file_id]["dest_file_path"], recursive=False)
-
-    tc.endpoint_autoactivate(source_endpoint)
-    tc.endpoint_autoactivate(dest_endpoint)
-
-    try:
-        submit_result = tc.submit_transfer(tdata)
-    except Exception as e:
-        return str(e).split('\n')
-
-    gl_task_id = submit_result['task_id']
-
-    finished = tc.task_wait(gl_task_id, timeout=600)
-
-    def task_loop():
-        while True:
-            r = tc.get_task(submit_result['task_id'])
-            if r['status'] == "SUCCEEDED":
-                break
-            else:
-                time.sleep(0.5)
-        # post_globus_q.put("SUCCESS1")
-        return "SUCCESS1"
-
-    try:
-        t1 = threading.Thread(target=task_loop, args=())
-        t1.start()
-    except Exception as e:
-        return str(e)
-
-
 def matio_test(event):
     """
     Function
@@ -309,8 +260,10 @@ def matio_test(event):
     import shutil
     import sys
     import random
+    import tempfile
     from queue import Queue
     from datetime import datetime
+    from homerun.base import _get_file
 
     post_globus_q = Queue()
     post_extract_q = Queue()
@@ -318,24 +271,91 @@ def matio_test(event):
     sys.path.insert(1, '/home/tskluzac/xtract-matio')
     import xtract_matio_main
 
-    # Make a temp dir and download the data
-    dir_name = f'/home/tskluzac/tmpfileholder-{random.randint(0,999999999)}'
-    if os.path.exists(dir_name):
-        shutil.rmtree(dir_name)
-    os.makedirs(dir_name, exist_ok=True)
-
-    try:
-        os.chdir(dir_name)
-        os.chmod(dir_name, 0o777)
-    except Exception as e:
-        return str(e)
 
     # A list of file paths
     all_files = event['inputs']
     transfer_token = event['transfer_token']
     dest_endpoint = event['dest_endpoint']
     source_endpoint = event['source_endpoint']
-    https_bool = False  # TODO event['https_bool']
+    https_bool = True  # TODO event['https_bool']
+
+    dir_name = None
+    if https_bool:
+        dir_name = tempfile.mkdtemp()
+        os.chdir(dir_name)
+
+    # else: # OTHERWISE, if using Globus Transfer service.
+    #     # Make a temp dir and download the data
+    #     dir_name = f'/home/tskluzac/tmpfileholder-{random.randint(0,999999999)}'
+    #     if os.path.exists(dir_name):
+    #         shutil.rmtree(dir_name)
+    #     os.makedirs(dir_name, exist_ok=True)
+    #
+    #     try:
+    #         os.chdir(dir_name)
+    #         os.chmod(dir_name, 0o777)
+    #     except Exception as e:
+    #         return str(e)
+
+    # """ ADDING DEPENDENT GLOBUS SERVICE FUNCTION """
+    # def globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, files_dict):
+    #     from globus_sdk import TransferClient, AccessTokenAuthorizer
+    #     import globus_sdk
+    #     import threading
+    #
+    #     i = 0
+    #     try:
+    #         authorizer = AccessTokenAuthorizer(transfer_token)
+    #         tc = TransferClient(authorizer=authorizer)
+    #         tdata = globus_sdk.TransferData(tc, source_endpoint,
+    #                                         dest_endpoint,
+    #                                         label=str(i))
+    #         i += 1
+    #     except Exception as e:
+    #         return e
+    #
+    #     for file_id in files_dict:
+    #         tdata.add_item(f'{files_dict[file_id]["file_path"]}', files_dict[file_id]["dest_file_path"],
+    #                        recursive=False)
+    #
+    #     tc.endpoint_autoactivate(source_endpoint)
+    #     tc.endpoint_autoactivate(dest_endpoint)
+    #
+    #     try:
+    #         submit_result = tc.submit_transfer(tdata)
+    #     except Exception as e:
+    #         return str(e).split('\n')
+    #
+    #     gl_task_id = submit_result['task_id']
+    #
+    #     finished = tc.task_wait(gl_task_id, timeout=600)
+    #
+    #     def task_loop():
+    #         while True:
+    #             r = tc.get_task(submit_result['task_id'])
+    #             if r['status'] == "SUCCEEDED":
+    #                 break
+    #             else:
+    #                 time.sleep(0.5)
+    #         return "SUCCESS1"
+    #
+    #     try:
+    #         t1 = threading.Thread(target=task_loop, args=())
+    #         t1.start()
+    #     except Exception as e:
+    #         return str(e)
+    # """ /END OF GLOBUS SERVICE FUNCTION """
+
+    # def globus_https(transfer_token, source_endpoint, dest_endpoint, files_dict):
+    #
+    #     import threading
+    #
+    #     max_threads = 4
+    #
+    #     # TODO: threading.
+    #     # threadpool = {}
+    #     # for i in range(max_threads):
+    #     #     threadpool[i] = threading.Thread()
 
     t0 = time.time()
     mdata_list = []
@@ -344,57 +364,65 @@ def matio_test(event):
     for item in all_files:
         file_id = item['file_id']
 
-        file_path = item["url"].split('globus.org')[1]
-        dest_file_path = dir_name + '/' + file_path.split('/')[-1]
+        file_path = item["url"]
+
+        # if not https_bool:
+        #     file_path = item["url"].split('globus.org')[1]
+        #     dest_file_path = dir_name + '/' + file_path.split('/')[-1]
 
         file_dict[file_id] = {}
         file_dict[file_id]["file_path"] = file_path
-        file_dict[file_id]["dest_file_path"] = dest_file_path
 
-        if https_bool:
-            print("hi")
-
-        # Otherwise, we should use the proper Globus service.
+        if dir_name is not None:
+            dest_file_path = _get_file(item, dir_name)
+            file_dict[file_id]["dest_file_path"] = '/'.join(dest_file_path.split('/')[0:-1])
+            return dest_file_path
         else:
-            trans_status = globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, file_dict)
+            return "The dirname is None :( "
 
-            if "SUCCESS" in trans_status:
-                post_globus_q.put(trans_status)
+     # return dest_file_path
 
-        t_init = time.time()
-        while True:
-            if not post_globus_q.empty():
-                break
-            if time.time() - t_init >= 120:
-                return "Transfer OPERATION TIMED OUT AFTER 120 seconds"
-            time.sleep(1)
-
-        try:
-            new_mdata = xtract_matio_main.extract_matio(dir_name, str(datetime.now()))
-            post_extract_q.put(new_mdata)
-        except Exception as e:
-            return str(e)
-
-        t_ext_st = time.time()
-        while True:
-            if not post_extract_q.empty():
-                break
-
-            # TODO: Removing fake timeout.
-            # if time.time() - t_ext_st >= 120:
-            #     return "Extract TIMED OUT AFTER 20 seconds"
-
-        new_mdata = post_extract_q.get()
-
-        new_mdata['group_id'] = file_id
-        # TODO: Bring this back.
-        # new_mdata['trans_time'] = tb-ta
-        mdata_list.append(new_mdata)
-
-        # Don't be an animal -- clean up your mess!
-        shutil.rmtree(dir_name)
-    t1 = time.time()
-    return {'metadata': mdata_list, 'tot_time': t1-t0}
+    #     # Otherwise, we should use the proper Globus service.
+    #     else:
+    #         trans_status = globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, file_dict)
+    #
+    #         if "SUCCESS" in trans_status:
+    #             post_globus_q.put(trans_status)
+    #
+    #     t_init = time.time()
+    #     while True:
+    #         if not post_globus_q.empty():
+    #             break
+    #         if time.time() - t_init >= 120:
+    #             return "Transfer OPERATION TIMED OUT AFTER 120 seconds"
+    #         time.sleep(1)
+    #
+    #     try:
+    #         new_mdata = xtract_matio_main.extract_matio(dir_name, str(datetime.now()))
+    #         post_extract_q.put(new_mdata)
+    #     except Exception as e:
+    #         return str(e)
+    #
+    #     t_ext_st = time.time()
+    #     while True:
+    #         if not post_extract_q.empty():
+    #             break
+    #
+    #         # TODO: Removing fake timeout.
+    #         # if time.time() - t_ext_st >= 120:
+    #         #     return "Extract TIMED OUT AFTER 20 seconds"
+    #
+    #     new_mdata = post_extract_q.get()
+    #
+    #     new_mdata['group_id'] = file_id
+    #     # TODO: Bring this back.
+    #     # new_mdata['trans_time'] = tb-ta
+    #     mdata_list.append(new_mdata)
+    #
+    #     # Don't be an animal -- clean up your mess!
+    #     shutil.rmtree(dir_name)
+    # t1 = time.time()
+    # return {'metadata': mdata_list, 'tot_time': t1-t0}
 
 
 # TODO: Batch metadata saving requests (And store in different file).
