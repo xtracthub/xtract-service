@@ -263,7 +263,10 @@ def matio_test(event):
     import tempfile
     from queue import Queue
     from datetime import datetime
-    from homerun.base import _get_file
+
+    from home_run.base import _get_file
+
+    return "Hello"
 
     post_globus_q = Queue()
     post_extract_q = Queue()
