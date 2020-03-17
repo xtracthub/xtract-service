@@ -1,3 +1,4 @@
+home-run
 funcx
 globus_sdk
 psycopg2-binary
@@ -10,4 +11,4 @@ flask_api
 flask_wtf
 requests
 globus-action-provider-tools
-home-run
+psycopg2
