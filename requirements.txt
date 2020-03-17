@@ -11,6 +11,3 @@ flask_wtf
 requests
 globus-action-provider-tools
 home-run
-pymatgen
-
-
