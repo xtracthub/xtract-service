@@ -1,10 +1,9 @@
 funcx
-cython
 globus_sdk
 psycopg2-binary
 dfttopif
 Pillow
-pymatgen
+--user pymatgen
 hyperspy
 tableschema
 flask
