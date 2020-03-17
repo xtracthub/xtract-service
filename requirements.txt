@@ -3,7 +3,6 @@ globus_sdk
 psycopg2-binary
 dfttopif
 Pillow
-pymatgen --upgrade --user
 hyperspy
 tableschema
 flask
@@ -12,4 +11,6 @@ flask_wtf
 requests
 globus-action-provider-tools
 home-run
+pymatgen
+
 
