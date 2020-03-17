@@ -1,4 +1,3 @@
-home-run
 funcx
 globus_sdk
 psycopg2-binary
