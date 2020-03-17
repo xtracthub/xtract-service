@@ -1,4 +1,5 @@
 funcx
+cython
 globus_sdk
 psycopg2-binary
 dfttopif
