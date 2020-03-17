@@ -11,4 +11,3 @@ flask_api
 flask_wtf
 requests
 globus-action-provider-tools
-psycopg2
