@@ -250,17 +250,18 @@ class MatioExtractor:
 # TODO: Move these functions to outside this file (like a dir of functions.
 
 def fatio_test(event):
+    # from __future__ import with_statement
+    import gc
+    import sys
+    f = open('/dev/null', 'w')
+    sys.stdout = f
+    sys.stderr = f
 
-    # import sys
-    # f = open('/dev/null', 'w')
-    # sys.stdout = f
-    # sys.stderr = f
-
-    # return "Hello, young world"
+    # return "HERE
 
     def extract_metadata(path):
 
-        # return "In function -- returning before we do anything. "
+        return "In function -- returning before we do anything. "
 
         import sys
         f = open('/dev/null', 'w')
@@ -343,11 +344,21 @@ def fatio_test(event):
     import os
     import time
     import shutil
+    import sys
+    import random
     import tempfile
     from queue import Queue
+    from datetime import datetime
+    import subprocess
     import requests
 
     # subprocess.call(['python3', '-m', 'pip', 'install', 'home-run'])
+
+    try:
+        from home_run.base import _get_file
+    except Exception as e:
+        return e
+
     post_globus_q = Queue()
     post_extract_q = Queue()
 
@@ -468,37 +479,88 @@ def fatio_test(event):
         if download_thr.is_alive():
             return "The HTTPS download timed out!"
 
+
+        # time.sleep(0.1)
+        # req_file = requests.get(file_path, headers=item['headers'])
+
+        # try:
+        #     f = open(f"{dir_name}/{file_id}", 'rb')
+        #     return f.read()
+        # except Exception as e:
+        #     return e
+
+        #     file_path = item["url"].split('globus.org')[1]
+        #     dest_file_path = dir_name + '/' + file_path.split('/')[-1]
+
+        # time.sleep(0.1)
         file_dict[file_id] = {}
         file_dict[file_id]["file_path"] = file_path
 
+        # if dir_name is not None:
+        #     try:
+        #         print("DERP")
+        #         # return item
+        #     except Exception as e:
+        #         return e
+        #     file_dict[file_id]["dest_file_path"] = '/'.join(dest_file_path.split('/')[0:-1])
+        #     return dest_file_path
+        # else:
+        #     return "The dirname is None :( "
+
+    # return 1
+
+    # return os.listdir(dir_name)
+
+
+     # return dest_file_path
+
+    #     # Otherwise, we should use the proper Globus service.
+    #     else:
+    #         trans_status = globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, file_dict)
+    #
+    #         if "SUCCESS" in trans_status:
+    #             post_globus_q.put(trans_status)
+    #
+    #     t_init = time.time()
+    #     while True:
+    #         if not post_globus_q.empty():
+    #             break
+    #         if time.time() - t_init >= 120:
+    #             return "Transfer OPERATION TIMED OUT AFTER 120 seconds"
+    #         time.sleep(1)
+    #
+
+    # return "COMPLETED"
+
     # TODO: UNCOMMENT THIS BLOCK TO EXTRACT METADATA.
-    try:
-        # new_mdata = xtract_matio_main.extract_matio(dir_name)
-        new_mdata = extract_metadata(f"{dir_name}/{file_id}")
-        post_extract_q.put(new_mdata)
-    except Exception as e:
-        return str(e)
-
-    # return new_mdata
-    t_ext_st = time.time()
-    while True:
-        if not post_extract_q.empty():
-            break
-
-        # TODO: Removing fake timeout.
-        # if time.time() - t_ext_st >= 120:
-        #     return "Extract TIMED OUT AFTER 20 seconds"
-
-    new_mdata = post_extract_q.get()
-
-    new_mdata['group_id'] = file_id
-    # TODO: Bring this back.
-    # new_mdata['trans_time'] = tb-ta
-    mdata_list.append(new_mdata)
+    # try:
+    #     # new_mdata = xtract_matio_main.extract_matio(dir_name)
+    #     new_mdata = extract_metadata(f"{dir_name}/{file_id}")
+    #     post_extract_q.put(new_mdata)
+    # except Exception as e:
+    #     return str(e)
+    #
+    # # return new_mdata
+    # t_ext_st = time.time()
+    # while True:
+    #     if not post_extract_q.empty():
+    #         break
+    #
+    #     # TODO: Removing fake timeout.
+    #     # if time.time() - t_ext_st >= 120:
+    #     #     return "Extract TIMED OUT AFTER 20 seconds"
+    #
+    # new_mdata = post_extract_q.get()
+    #
+    # new_mdata['group_id'] = file_id
+    # # TODO: Bring this back.
+    # # new_mdata['trans_time'] = tb-ta
+    # mdata_list.append(new_mdata)
 
     # Don't be an animal -- clean up your mess!
     shutil.rmtree(dir_name)
     t1 = time.time()
+    gc.collect()
     return {'metadata': mdata_list, 'tot_time': t1-t0}
 
 
@@ -517,6 +579,4 @@ def save_mdata(event):
     return None
 
 def matio_test(event):
-    import time
-    time.sleep(5)
     return "Hello World!"

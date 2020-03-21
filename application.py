@@ -52,18 +52,18 @@ def crawl_launch(crawler, tc):
 @application.route('/', methods=['GET', 'POST'])
 def hello():
 
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    auth_state = token_checker.check_token(token)
-    identities = auth_state.identities
-
-    print(f"Identities: {identities}")
-
-    conf_app = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"])
-    print(os.environ["GL_CLIENT_ID"])
-    print(os.environ["GL_CLIENT_SECRET"])
-
-    intro_obj = conf_app.oauth2_token_introspect(token)
-    print(f"Auth Token Introspection: {intro_obj}")
+    # token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    # auth_state = token_checker.check_token(token)
+    # identities = auth_state.identities
+    #
+    # print(f"Identities: {identities}")
+    #
+    # conf_app = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"])
+    # print(os.environ["GL_CLIENT_ID"])
+    # print(os.environ["GL_CLIENT_SECRET"])
+    #
+    # intro_obj = conf_app.oauth2_token_introspect(token)
+    # print(f"Auth Token Introspection: {intro_obj}")
 
     resp = {
         "types": ["Action"],
