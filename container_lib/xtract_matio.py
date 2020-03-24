@@ -251,89 +251,6 @@ class MatioExtractor:
 
 def fatio_test(event):
 
-    # import sys
-    # f = open('/dev/null', 'w')
-    # sys.stdout = f
-    # sys.stderr = f
-
-    # return "Hello, young world"
-
-    def extract_metadata(path):
-
-        # return "In function -- returning before we do anything. "
-
-        import sys
-        f = open('/dev/null', 'w')
-        sys.stdout = f
-        sys.stderr = f
-
-        from pymatgen.io.ase import AseAtomsAdaptor
-        from pymatgen.core import Structure
-
-        # TODO: CHECK 3 -- Made it here: 2483/2500 tasks loading JUST the pymatgen libs (w/o devnull)
-        # return "Loaded the pymatgen libraries only (Check 2)"
-
-        from mdf_toolbox import dict_merge
-        from ase.io import read
-
-
-
-        # TODO: CHECK 2 -- Made it here: 2497/2500 tasks completed successfully loading all 4 libs! (w/o devnull)
-        # return "Loaded the libraries!"
-
-        # from materials_io.base import BaseSingleFileParser
-
-        class CrystalStructureParser():
-            """Parse information about a crystal structure"""
-
-            def _parse_file(self, path, context=None):
-                record = {}
-                material = {}
-                crystal_structure = {}
-                # Attempt to read the file
-                try:
-                    # Read with ASE
-                    ase_res = read(path)
-                    # Check data read, validate crystal structure
-                    if not ase_res or not all(ase_res.get_pbc()):
-                        raise ValueError("No valid data")
-                    else:
-                        # Convert ASE Atoms to Pymatgen Structure
-                        pmg_s = AseAtomsAdaptor.get_structure(ase_res)
-                # ASE failed to read file
-                except Exception:
-                    try:
-                        # Read with Pymatgen
-                        pmg_s = Structure.from_file(path)
-                    except Exception:
-                        # Can't read file
-                        raise ValueError('File not readable by pymatgen or ase: {}'.format(path))
-
-                # Parse material block
-                material["composition"] = pmg_s.formula.replace(" ", "")
-
-                # Parse crystal_structure block
-                crystal_structure["space_group_number"] = pmg_s.get_space_group_info()[1]
-                crystal_structure["number_of_atoms"] = float(pmg_s.composition.num_atoms)
-                crystal_structure["volume"] = float(pmg_s.volume)
-                crystal_structure["stoichiometry"] = pmg_s.composition.anonymized_formula
-
-                # Add to record
-                record = dict_merge(record, {"material": material,
-                                             "crystal_structure": crystal_structure})
-                return record
-
-            def implementors(self):
-                return ['Jonathon Gaff']
-
-            def version(self):
-                return '0.0.1'
-
-        parser = CrystalStructureParser()
-        mdata = parser._parse_file(path=path)
-        return mdata
-
-
     """
     Function
     :param event (dict) -- contains auth header and list of HTTP links to extractable files:
@@ -346,96 +263,28 @@ def fatio_test(event):
     import tempfile
     from queue import Queue
     import requests
+    import sys
 
-    # subprocess.call(['python3', '-m', 'pip', 'install', 'home-run'])
     post_globus_q = Queue()
     post_extract_q = Queue()
 
-    # sys.path.insert(1, '/home/tskluzac/xtract-matio')
-    # import xtract_matio_main
-
+    try:
+        sys.path.insert(1, '/')
+        import xtract_matio_main
+    except Exception as e:
+        return e
 
     # A list of file paths
     all_files = event['inputs']
-    transfer_token = event['transfer_token']
-    dest_endpoint = event['dest_endpoint']
-    source_endpoint = event['source_endpoint']
-    https_bool = True  # TODO event['https_bool']
-
+    https_bool = True
 
     dir_name = None
     if https_bool:
         dir_name = tempfile.mkdtemp()
         os.chdir(dir_name)
 
-    # else: # OTHERWISE, if using Globus Transfer service.
-    #     # Make a temp dir and download the data
-    #     dir_name = f'/home/tskluzac/tmpfileholder-{random.randint(0,999999999)}'
-    #     if os.path.exists(dir_name):
-    #         shutil.rmtree(dir_name)
-    #     os.makedirs(dir_name, exist_ok=True)
-    #
-    #     try:
-    #         os.chdir(dir_name)
-    #         os.chmod(dir_name, 0o777)
-    #     except Exception as e:
-    #         return str(e)
-
-    # """ ADDING DEPENDENT GLOBUS SERVICE FUNCTION """
-    # def globus_service_transfer(transfer_token, source_endpoint, dest_endpoint, files_dict):
-    #     from globus_sdk import TransferClient, AccessTokenAuthorizer
-    #     import globus_sdk
-    #     import threading
-    #
-    #     i = 0
-    #     try:
-    #         authorizer = AccessTokenAuthorizer(transfer_token)
-    #         tc = TransferClient(authorizer=authorizer)
-    #         tdata = globus_sdk.TransferData(tc, source_endpoint,
-    #                                         dest_endpoint,
-    #                                         label=str(i))
-    #         i += 1
-    #     except Exception as e:
-    #         return e
-    #
-    #     for file_id in files_dict:
-    #         tdata.add_item(f'{files_dict[file_id]["file_path"]}', files_dict[file_id]["dest_file_path"],
-    #                        recursive=False)
-    #
-    #     tc.endpoint_autoactivate(source_endpoint)
-    #     tc.endpoint_autoactivate(dest_endpoint)
-    #
-    #     try:
-    #         submit_result = tc.submit_transfer(tdata)
-    #     except Exception as e:
-    #         return str(e).split('\n')
-    #
-    #     gl_task_id = submit_result['task_id']
-    #
-    #     finished = tc.task_wait(gl_task_id, timeout=600)
-    #
-    #     def task_loop():
-    #         while True:
-    #             r = tc.get_task(submit_result['task_id'])
-    #             if r['status'] == "SUCCEEDED":
-    #                 break
-    #             else:
-    #                 time.sleep(0.5)
-    #         return "SUCCESS1"
-    #
-    #     try:
-    #         t1 = threading.Thread(target=task_loop, args=())
-    #         t1.start()
-    #     except Exception as e:
-    #         return str(e)
-    # """ /END OF GLOBUS SERVICE FUNCTION """
-
     t0 = time.time()
     mdata_list = []
-
-    # return 0
-
-    time.sleep(0.1)
 
     def get_file(file_path, headers, dir_name, file_id):
         try:
@@ -457,43 +306,36 @@ def fatio_test(event):
         file_id = item['file_id']
         file_path = item["url"]
 
-        time.sleep(0.1)
+        timeout = 20
 
-        timeout = 10
-        # start_time = time.time()
-
+        ta = time.time()
         download_thr = threading.Thread(target=get_file, args=(file_path, item['headers'], dir_name, file_id))
         download_thr.start()
         download_thr.join(timeout=timeout)
         if download_thr.is_alive():
             return "The HTTPS download timed out!"
 
+        tb = time.time()
+
         file_dict[file_id] = {}
         file_dict[file_id]["file_path"] = file_path
 
-    # TODO: UNCOMMENT THIS BLOCK TO EXTRACT METADATA.
     try:
-        # new_mdata = xtract_matio_main.extract_matio(dir_name)
-        new_mdata = extract_metadata(f"{dir_name}/{file_id}")
+        new_mdata = xtract_matio_main.extract_matio(dir_name)
         post_extract_q.put(new_mdata)
     except Exception as e:
         return str(e)
 
-    # return new_mdata
     t_ext_st = time.time()
     while True:
         if not post_extract_q.empty():
             break
 
-        # TODO: Removing fake timeout.
-        # if time.time() - t_ext_st >= 120:
-        #     return "Extract TIMED OUT AFTER 20 seconds"
-
     new_mdata = post_extract_q.get()
 
     new_mdata['group_id'] = file_id
     # TODO: Bring this back.
-    # new_mdata['trans_time'] = tb-ta
+    new_mdata['trans_time'] = tb-ta
     mdata_list.append(new_mdata)
 
     # Don't be an animal -- clean up your mess!

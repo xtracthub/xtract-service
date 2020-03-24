@@ -19,7 +19,7 @@ globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
 n_tasks = 5000
 
-burst_size = 500
+burst_size = 25
 
 container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest',
                                       container_type='docker',
@@ -31,7 +31,6 @@ fn_id = fxc.register_function(fatio_test,
 
 
 print(f"Function UUID: {fn_id}")
-# exit()
 
 # Get the Headers....
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
