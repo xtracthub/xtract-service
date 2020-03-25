@@ -21,6 +21,8 @@ n_tasks = 5000
 
 burst_size = 25
 
+batch_size = 5
+
 container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest',
                                       container_type='docker',
                                       name='kube-matio5',
@@ -49,25 +51,34 @@ funcx_token = tokens['funcx_service']['access_token']
 headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token, 'Petrel': auth_token}
 print(f"Headers: {headers}")
 
-old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]}
+old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]*batch_size}
 
 data = {"inputs": []}
 data["transfer_token"] = transfer_token
 data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-# data["source_endpoint"] = '1c115272-a3f2-11e9-b594-0e56e8fd6d5a'
 data["dest_endpoint"] = globus_ep
 
 id_count = 0
-for f_obj in old_mdata["files"]:
-    payload = {
-        # TODO: Un-hardcode.
-        'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
-        'headers': headers, 'file_id': id_count}
-    id_count += 1
-    data["inputs"].append(payload)
+group_count = 0
+max_groups = 4
+
+for i in range(max_groups):
+    group = {'group_id': group_count, 'files': [], 'parsers': ['crystal']}
+    group_count += 1
+    for f_obj in old_mdata["files"]:
+        payload = {
+            # TODO: Un-hardcode.
+            'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
+            'headers': headers, 'file_id': id_count}
+        id_count += 1
+        group['files'].append(payload)
+    data["inputs"].append(group)
+
 
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 t_launch_times = {}
+
+# print(data)
 
 assert(n_tasks%burst_size == 0)
 
@@ -85,7 +96,6 @@ for n in range(int(n_tasks/burst_size)):
                                   }
                             )
 
-        # print(res.status_code)
         print(res.content)
         if res.status_code == 200:
             task_uuid = json.loads(res.content)['task_uuid']
