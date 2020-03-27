@@ -19,7 +19,7 @@ globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
 n_tasks = 5000
 
-burst_size = 25
+burst_size = 500
 
 batch_size = 5
 
@@ -53,17 +53,15 @@ print(f"Headers: {headers}")
 
 old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]*batch_size}
 
-data = {"inputs": []}
-data["transfer_token"] = transfer_token
-data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-data["dest_endpoint"] = globus_ep
+data = {"inputs": [], "transfer_token": transfer_token, "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec',
+        "dest_endpoint": globus_ep}
 
 id_count = 0
 group_count = 0
 max_groups = 4
 
 for i in range(max_groups):
-    group = {'group_id': group_count, 'files': [], 'parsers': ['crystal']}
+    group = {'group_id': group_count, 'files': [], 'parsers': ['ase']}
     group_count += 1
     for f_obj in old_mdata["files"]:
         payload = {

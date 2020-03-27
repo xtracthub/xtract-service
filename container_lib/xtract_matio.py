@@ -121,14 +121,16 @@ class MatioExtractor:
                     get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid[0]}' LIMIT 1;"
                     cur.execute(get_mdata)
                     old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
+                    parser = old_mdata['parser']
                     print(f"[DEBUG] :: OLD METADATA: {old_mdata}")
                 except psycopg2.OperationalError as e:
                     print("[Xtract] Unable to retrieve metadata from Postgres. Error: {e}")
                     print(e)
+                    continue  # TODO: If we hit this point, should likely update file to 'FAILED' or something...
 
-                group = {'group_id': gid[0], 'files': [], 'parsers': []}
+                # TODO: Extend this to be more than just 1 parser.
+                group = {'group_id': gid[0], 'files': [], 'parsers': [parser]}
 
-                # TODO: Partial groups can occur here.
                 # Take all of the files and append them to our payload.
                 for f_obj in old_mdata["files"]:
                     payload = {
