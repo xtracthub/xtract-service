@@ -35,7 +35,7 @@ class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
-        self.func_id = "148c9dcc-d9c6-430b-b3a7-ddd02193f418"
+        self.func_id = "b6ecc25d-de94-45b2-8284-03bc3e68f922"
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
 
@@ -77,11 +77,10 @@ class MatioExtractor:
             gids = cur.fetchall()
             return gids
 
-        # TODO: Catch connection errors.
+        # TODO: Properly catch this error.
         except:
             # TODO: Don't exit lol.
             print("FUCK. ")
-            # exit()
 
     def get_test_files(self):
 
@@ -122,22 +121,27 @@ class MatioExtractor:
                     get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid[0]}' LIMIT 1;"
                     cur.execute(get_mdata)
                     old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
-                except Exception as e:  # TODO: this MUST be less broad.
-                    print("[Xtract] Unable to retrieve metadata")
+                    print(f"[DEBUG] :: OLD METADATA: {old_mdata}")
+                except psycopg2.OperationalError as e:
+                    print("[Xtract] Unable to retrieve metadata from Postgres. Error: {e}")
                     print(e)
+
+                group = {'group_id': gid[0], 'files': [], 'parsers': []}
 
                 # TODO: Partial groups can occur here.
                 # Take all of the files and append them to our payload.
                 for f_obj in old_mdata["files"]:
                     payload = {
                         # TODO: Un-hardcode. This is hardcoded to Petrel data addresses.
-                        'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
+                        # 'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
+                        'url': f'https://{self.source_endpoint}.e.globus.org{f_obj}',
                         'headers': self.fx_headers, 'file_id': gid[0]}
-                    data["inputs"].append(payload)
+                    group["files"].append(payload)
                     data["transfer_token"] = self.headers['Transfer']
 
                     data["source_endpoint"] = self.source_endpoint
                     data["dest_endpoint"] = self.dest_endpoint
+                data["inputs"].append(group)
 
                 res = requests.post(url=self.post_url,
                                     headers=self.fx_headers,
@@ -256,17 +260,14 @@ def fatio_test(event):
     :param event (dict) -- contains auth header and list of HTTP links to extractable files:
     :return metadata (dict) -- metadata as gotten from the materials_io library:
     """
-    import threading
+
     import os
+    import sys
     import time
     import shutil
-    import tempfile
-    from queue import Queue
     import requests
-    import sys
-
-    post_globus_q = Queue()
-    post_extract_q = Queue()
+    import tempfile
+    import threading
 
     try:
         sys.path.insert(1, '/')
@@ -275,10 +276,10 @@ def fatio_test(event):
         return e
 
     # A list of file paths
-    all_files = event['inputs']
+    all_groups = event['inputs']
     https_bool = True
-
     dir_name = None
+
     if https_bool:
         dir_name = tempfile.mkdtemp()
         os.chdir(dir_name)
@@ -286,62 +287,82 @@ def fatio_test(event):
     t0 = time.time()
     mdata_list = []
 
-    def get_file(file_path, headers, dir_name, file_id):
+    def get_file(file_path, headers, dir_name, file_id, group_id):
         try:
             req = requests.get(file_path, headers)
         except Exception as e:
             return e
 
-        local_file_path = f"{dir_name}/{file_id}"
+        os.makedirs(f"{dir_name}/{group_id}")
+
+        local_file_path = f"{dir_name}/{group_id}/{file_id}"
         # TODO: if response is 200...
         # TODO: Should really be dirname/groupid/fileid
         with open(local_file_path, 'wb') as f:
             f.write(req.content)
 
     file_dict = {}
-    for item in all_files:
+    thread_pool = []
+    timeout = 20
 
-        item['headers']['Authorization'] = f"Bearer {item['headers']['Petrel']}"
+    if len(all_groups) == 0:
+        return "Received empty file list to funcX-MatIO function. Returning!"
 
-        file_id = item['file_id']
-        file_path = item["url"]
+    group_parser_map = {}
+    for group in all_groups:
+        parsers_to_execute = group['parsers']
+        group_id = group['group_id']
+        all_files = group['files']
 
-        timeout = 20
+        # return all_files
 
-        ta = time.time()
-        download_thr = threading.Thread(target=get_file, args=(file_path, item['headers'], dir_name, file_id))
-        download_thr.start()
-        download_thr.join(timeout=timeout)
-        if download_thr.is_alive():
+        group_parser_map[group_id] = parsers_to_execute
+
+        for item in all_files:
+            item['headers']['Authorization'] = f"Bearer {item['headers']['Petrel']}"
+
+            file_id = item['file_id']
+            file_path = item["url"]
+
+            # TODO: The following should sort files into their correct 'group' folders.
+            ta = time.time()
+            download_thr = threading.Thread(target=get_file,
+                                            args=(file_path,
+                                                  item['headers'],
+                                                  dir_name,
+                                                  file_id,
+                                                  group_id))
+            download_thr.start()
+            thread_pool.append(download_thr)
+
+    # Walk through the thread-pool until they've all completed.
+    for thr in thread_pool:
+        thr.join(timeout=timeout)
+
+        if thr.is_alive():
             return "The HTTPS download timed out!"
-
         tb = time.time()
 
-        file_dict[file_id] = {}
-        file_dict[file_id]["file_path"] = file_path
+    # TODO: In the future, we can parallelize parser execution?
+    mat_mdata = {}
+    for group in group_parser_map:
+        mat_mdata[group] = {}
+        for parser in group_parser_map[group]:
+            try:
+                # return dir_name
+                # return os.listdir(dir_name)
+                new_mdata = xtract_matio_main.extract_matio(dir_name + "/" + str(group), parser)
+                # return new_mdata
+                mat_mdata[group][parser] = new_mdata
+            except Exception as e:
+                return e
 
-    try:
-        new_mdata = xtract_matio_main.extract_matio(dir_name)
-        post_extract_q.put(new_mdata)
-    except Exception as e:
-        return str(e)
-
-    t_ext_st = time.time()
-    while True:
-        if not post_extract_q.empty():
-            break
-
-    new_mdata = post_extract_q.get()
-
-    new_mdata['group_id'] = file_id
-    # TODO: Bring this back.
-    new_mdata['trans_time'] = tb-ta
-    mdata_list.append(new_mdata)
+    mat_mdata['trans_time'] = tb-ta
 
     # Don't be an animal -- clean up your mess!
     shutil.rmtree(dir_name)
     t1 = time.time()
-    return {'metadata': mdata_list, 'tot_time': t1-t0}
+    return {'metadata': mat_mdata, 'tot_time': t1-t0}
 
 
 # TODO: Batch metadata saving requests (And store in different file).
@@ -358,7 +379,9 @@ def save_mdata(event):
         json.dump(mdata, f)
     return None
 
+
 def matio_test(event):
     import time
+    import os
     time.sleep(5)
-    return "Hello World!"
+    return f"Container Version: {os.environ['container_version']}"
