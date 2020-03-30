@@ -19,7 +19,7 @@ globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
 n_tasks = 5000
 
-burst_size = 500
+burst_size = 25
 
 batch_size = 5
 

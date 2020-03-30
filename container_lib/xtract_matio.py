@@ -35,7 +35,7 @@ class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
-        self.func_id = "b6ecc25d-de94-45b2-8284-03bc3e68f922"
+        self.func_id = "83374fae-75d1-4e90-8455-103c274f42f5"
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
 
@@ -51,6 +51,10 @@ class MatioExtractor:
 
         self.conn = pg_conn()
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
+
+        if 'Petrel' in self.headers:
+            self.fx_headers['Petrel'] = self.headers['Petrel']
+
         self.post_url = 'https://dev.funcx.org/api/v1/submit'
         self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
@@ -73,7 +77,7 @@ class MatioExtractor:
                 f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
             cur = self.conn.cursor()
             cur.execute(query)
-            self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
+            # self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
             gids = cur.fetchall()
             return gids
 
@@ -101,7 +105,7 @@ class MatioExtractor:
             data = {'inputs': []}
 
             gids = self.get_next_groups()
-            self.logger.info(f"Received {len(gids)} tasks from DB!")
+            # self.logger.info(f"Received {len(gids)} tasks from DB!")
 
             for gid in gids:
                 self.logger.debug(f"Processing GID: {gid[0]}")
@@ -133,6 +137,7 @@ class MatioExtractor:
 
                 # Take all of the files and append them to our payload.
                 for f_obj in old_mdata["files"]:
+                    print(self.fx_headers)
                     payload = {
                         # TODO: Un-hardcode. This is hardcoded to Petrel data addresses.
                         # 'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
@@ -168,7 +173,7 @@ class MatioExtractor:
 
             while True:
                 if self.task_dict["active"].qsize() < self.max_active_batches:
-                    self.logger.debug(f"FEWER THAN {self.max_active_batches} LIVE TASKS! ")
+                    # self.logger.debug(f"FEWER THAN {self.max_active_batches} LIVE TASKS! ")
                     break
                 else:
                     pass
@@ -199,7 +204,7 @@ class MatioExtractor:
         success_returns = 0
         while True:
             if self.task_dict["active"].empty():
-                self.logger.debug("No live IDs... sleeping...")
+                # self.logger.debug("No live IDs... sleeping...")
                 time.sleep(1)
                 continue
 
@@ -211,42 +216,46 @@ class MatioExtractor:
 
                 self.logger.debug(f"Status: {status_thing}")
 
+                print("result" in status_thing)
                 if "result" in status_thing:
                     res = fx_ser.deserialize(status_thing['result'])
-                    if res == True:
-                        success_returns += 1
-                        print(success_returns)
-                    res = fx_ser.deserialize(status_thing['result'])
-                    self.logger.debug(f"Received response: {res}")
-
-                    for g_obj in res["metadata"]:
-                        gid = g_obj["group_id"]
-
-                        cur = self.conn.cursor()
-                        # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
-                        get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid}';"
-                        cur.execute(get_mdata)
-                        #     cur.execute(get_mdata)  # TODO: Is this second one necessary?
-                        old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
-                        old_mdata["matio"] = g_obj["matio"]
-
-                        self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
-                        update_mdata = f"UPDATE group_metadata_2 SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
-                        cur.execute(update_mdata)
-
-                        # TODO: Make sure we're updating the parser-list in the db.
-                        self.logger.debug("Updating group status (Update: 2/2)")
-                        update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
-                        cur.execute(update_q)
-                        self.conn.commit()
-                    break
-                elif 'exception' in status_thing:
-                    exc = fx_ser.deserialize(status_thing['exception'])
-                    self.logger.error(f"Caught Exception: {exc}")
+                    print(f"Result: {res}")
+                    success_returns += 1
+                    print(success_returns)
                 else:
+                    print("Not ready yet. Putting back task_id...")
                     self.task_dict["active"].put(ex_id)
+                #     self.logger.debug(f"Received response: {res}")
+                #
+                #     for g_obj in res["metadata"]:
+                #         gid = g_obj["group_id"]
+                #
+                #         cur = self.conn.cursor()
+                #         # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
+                #         get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid}';"
+                #         cur.execute(get_mdata)
+                #         #     cur.execute(get_mdata)  # TODO: Is this second one necessary?
+                #         old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
+                #         old_mdata["matio"] = g_obj["matio"]
+                #
+                #         self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
+                #         update_mdata = f"UPDATE group_metadata_2 SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
+                #         cur.execute(update_mdata)
+                #
+                #         # TODO: Make sure we're updating the parser-list in the db.
+                #         self.logger.debug("Updating group status (Update: 2/2)")
+                #         update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
+                #         cur.execute(update_q)
+                #         self.conn.commit()
+                #     break
+                # elif 'exception' in status_thing:
+                #     exc = fx_ser.deserialize(status_thing['exception'])
+                #     self.logger.error(f"Caught Exception: {exc}")
+                # else:
+                #     self.task_dict["active"].put(ex_id)
 
             # TODO: Get rid of sleep soon.
+            print("sleeping...")
             time.sleep(2)
 
 
@@ -277,6 +286,8 @@ def fatio_test(event):
     except Exception as e:
         return e
 
+    # return "HERE!"
+
     # A list of file paths
     all_groups = event['inputs']
     https_bool = True
@@ -289,19 +300,24 @@ def fatio_test(event):
     t0 = time.time()
     mdata_list = []
 
+
+
     def get_file(file_path, headers, dir_name, file_id, group_id):
         try:
             req = requests.get(file_path, headers)
         except Exception as e:
             return e
 
-        os.makedirs(f"{dir_name}/{group_id}")
+        try:
+            os.makedirs(f"{dir_name}/{group_id}")
+            local_file_path = f"{dir_name}/{group_id}/{file_id}"
+            # TODO: if response is 200...
+            # TODO: Should really be dirname/groupid/fileid
+            with open(local_file_path, 'wb') as f:
+                f.write(req.content)
 
-        local_file_path = f"{dir_name}/{group_id}/{file_id}"
-        # TODO: if response is 200...
-        # TODO: Should really be dirname/groupid/fileid
-        with open(local_file_path, 'wb') as f:
-            f.write(req.content)
+        except Exception as e:
+            return f"Caught error writing file for MatIO processing: {e}"
 
     file_dict = {}
     thread_pool = []
@@ -316,18 +332,25 @@ def fatio_test(event):
         group_id = group['group_id']
         all_files = group['files']
 
-        # return all_files
-
         group_parser_map[group_id] = parsers_to_execute
 
+        # return "MADE IT HERE???????????????" #TODO: Success
         for item in all_files:
-            item['headers']['Authorization'] = f"Bearer {item['headers']['Petrel']}"
 
-            file_id = item['file_id']
-            file_path = item["url"]
+            try:
+                item['headers']['Authorization'] = f"Bearer {item['headers']['Petrel']}"
+
+                file_id = item['file_id']
+                file_path = item["url"]
+            except Exception as e:
+                return f"Petrel Error: {e}"
+
+            # return f"File Path: {file_path}"
 
             # TODO: The following should sort files into their correct 'group' folders.
             ta = time.time()
+            # val = get_file(file_path, item['headers'], dir_name, file_id, group_id)
+            # return val
             download_thr = threading.Thread(target=get_file,
                                             args=(file_path,
                                                   item['headers'],
@@ -337,13 +360,19 @@ def fatio_test(event):
             download_thr.start()
             thread_pool.append(download_thr)
 
+        # return "Successfully retrieved ALL files"
+    # return "Successfully retrieved ALL files"
+    # return "Launched File Getting threads"
     # Walk through the thread-pool until they've all completed.
     for thr in thread_pool:
         thr.join(timeout=timeout)
+        # return f"Return Value: {val}"
 
         if thr.is_alive():
             return "The HTTPS download timed out!"
         tb = time.time()
+
+    return "Made it to the extraction!"
 
     # TODO: In the future, we can parallelize parser execution?
     mat_mdata = {}
