@@ -19,7 +19,7 @@ globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
 n_tasks = 5000
 
-burst_size = 25
+burst_size = 500
 
 batch_size = 5
 
@@ -51,7 +51,14 @@ funcx_token = tokens['funcx_service']['access_token']
 headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token, 'Petrel': auth_token}
 print(f"Headers: {headers}")
 
-old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]*batch_size}
+# ASE/crystal
+# old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]*batch_size}
+
+# Images
+# old_mdata = {"files": ["/MDF/mdf_connect/prod/data/klh_1_v1/exposure1_jpg.jpg/01nov26b.001.002.001.001.jpg"]*batch_size}
+
+# DFT
+old_mdata ={"files": ["/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/INCAR", "/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/OUTCAR", "/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/POSCAR"]}
 
 data = {"inputs": [], "transfer_token": transfer_token, "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec',
         "dest_endpoint": globus_ep}
@@ -61,7 +68,7 @@ group_count = 0
 max_groups = 4
 
 for i in range(max_groups):
-    group = {'group_id': group_count, 'files': [], 'parsers': ['ase']}
+    group = {'group_id': group_count, 'files': [], 'parsers': ['dft']}
     group_count += 1
     for f_obj in old_mdata["files"]:
         payload = {
@@ -75,8 +82,6 @@ for i in range(max_groups):
 
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 t_launch_times = {}
-
-# print(data)
 
 assert(n_tasks%burst_size == 0)
 
