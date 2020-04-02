@@ -28,7 +28,7 @@ class ExtractorError(XtractError):
 
 class RemoteExceptionWrapper:
     def __init__(self, e_type, e_value, traceback):
-        self.e_type = dill.dumps
+        self.e_type = dill.dumps(e_type)
         self.e_value = dill.dumps(e_value)
         self.e_traceback = Traceback(traceback)
 
