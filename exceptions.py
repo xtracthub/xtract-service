@@ -26,6 +26,10 @@ class ExtractorError(XtractError):
     """ The extractor did not successfully complete due to extractor file """
 
 
+class PetrelRetrievalError(Exception):
+    """ We were unable to successfully connect or retrieve file from Petrel"""
+
+
 class RemoteExceptionWrapper:
     def __init__(self, e_type, e_value, traceback):
         self.e_type = dill.dumps(e_type)

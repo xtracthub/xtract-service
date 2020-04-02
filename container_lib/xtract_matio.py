@@ -3,7 +3,6 @@ import threading
 import requests
 import logging
 import psycopg2
-import random
 import pickle
 import time
 import json
@@ -11,6 +10,8 @@ import json
 
 from funcx.serialize import FuncXSerializer
 from queue import Queue
+
+from exceptions import XtractError
 
 
 from utils.pg_utils import pg_conn
@@ -44,7 +45,7 @@ class MatioExtractor:
 
         self.headers = headers
         self.batch_size = 1
-        self.max_active_batches = 10
+        self.max_active_batches = 25
         self.crawl_id = crawl_id
 
         self.mdata_store_path = mdata_store_path
@@ -78,12 +79,11 @@ class MatioExtractor:
                 f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
             cur = self.conn.cursor()
             cur.execute(query)
-            # self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
             gids = cur.fetchall()
             return gids
 
         except psycopg2.OperationalError:
-            self.logger.error("Unable to connect to Postgres database...")
+            self.logger.error("[SEND] Unable to connect to Postgres database...")
 
     def get_test_files(self):
 
@@ -96,15 +96,13 @@ class MatioExtractor:
             gids = cur.fetchall()
             return gids
         except:
-            print("[Xtract] Unable to fetch new group_ids from DB")
+            print("[SEND] Unable to fetch new group_ids from DB")
 
     def send_files(self):
         # Just keep looping in case something comes up in crawl.
         while True:
             data = {'inputs': []}
-
             gids = self.get_next_groups()
-            # self.logger.info(f"Received {len(gids)} tasks from DB!")
 
             for gid in gids:
                 self.logger.debug(f"Processing GID: {gid[0]}")
@@ -116,7 +114,7 @@ class MatioExtractor:
                     cur.execute(update_q)
                     self.conn.commit()
                 except Exception as e:
-                    print("[Xtract] Unable to update status to 'EXTRACTING'.")
+                    print("[SEND] Unable to update status to 'EXTRACTING'.")
                     print(e)
 
                 # Get the metadata for each group_id
@@ -140,8 +138,6 @@ class MatioExtractor:
                 for f_obj in old_mdata["files"]:
                     print(self.fx_headers)
                     payload = {
-                        # TODO: Un-hardcode. This is hardcoded to Petrel data addresses.
-                        # 'url': f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}',
                         'url': f'https://{self.source_endpoint}.e.globus.org{f_obj}',
                         'headers': self.fx_headers, 'file_id': gid[0]}
                     group["files"].append(payload)
@@ -174,7 +170,6 @@ class MatioExtractor:
 
             while True:
                 if self.task_dict["active"].qsize() < self.max_active_batches:
-                    # self.logger.debug(f"FEWER THAN {self.max_active_batches} LIVE TASKS! ")
                     break
                 else:
                     pass
@@ -226,6 +221,13 @@ class MatioExtractor:
                     self.logger.debug(f"Received response: {res}")
 
                     cur = None
+
+                    # TODO: 2020-03-31 23:05:01,093 container_lib.xtract_matio DEBUG    Status: {'completion_t': 1585713899.7583, 'result': '01\ngANYHQAAAFRoZSBIVFRQUyBkb3dubG9hZCB0aW1lZCBvdXQhcQAu\n', 'task_id': 'fe5da74c-0703-4e8f-8350-3e5856d85f6c'}
+                    # TODO: 2020-03-31 23:05:01,093 container_lib.xtract_matio DEBUG    Received response: The HTTPS download timed out!
+
+                    if "metadata" not in res:
+                        print(res)
+
                     for g_obj in res["metadata"]:
                         for parser in res["metadata"][g_obj]:
                             gid = g_obj
@@ -263,7 +265,7 @@ class MatioExtractor:
 # TODO: Smarter separation of groups in file system (but not important at smaller scale).
 # TODO: Move these functions to outside this file (like a dir of functions.
 
-def fatio_test(event):
+def matio_test(event):
 
     """
     Function
@@ -282,10 +284,10 @@ def fatio_test(event):
     try:
         sys.path.insert(1, '/')
         import xtract_matio_main
+        from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
+
     except Exception as e:
         return e
-
-    # return "HERE!"
 
     # A list of file paths
     all_groups = event['inputs']
@@ -304,29 +306,30 @@ def fatio_test(event):
             req = requests.get(file_path, headers)
         except Exception as e:
             return e
+        except:
+            try:
+                raise PetrelRetrievalError("Unable to download from Petrel and write to file.")
+            except PetrelRetrievalError:
+                return RemoteExceptionWrapper(*sys.exc_info())
 
-        try:
-            os.makedirs(f"{dir_name}/{group_id}", exist_ok=True)
-            if parser == 'dft':
-                local_file_path= f"{dir_name}/{group_id}/{file_path.split('/')[-1]}"
-            else:
-                local_file_path = f"{dir_name}/{group_id}/{file_id}"
-            # TODO: if response is 200...
-            # TODO: Should really be dirname/groupid/fileid
-            with open(local_file_path, 'wb') as f:
-                f.write(req.content)
+        os.makedirs(f"{dir_name}/{group_id}", exist_ok=True)
+        if parser == 'dft':
+            local_file_path= f"{dir_name}/{group_id}/{file_path.split('/')[-1]}"
+        else:
+            local_file_path = f"{dir_name}/{group_id}/{file_id}"
+        # TODO: if response is 200...
+        # TODO: IT IS POSSIBLE TO GET A CI LOGON HTML PAGE RETURNED HERE!!!
+        with open(local_file_path, 'wb') as f:
+            f.write(req.content)
 
-        except Exception as e:
-            return f"Caught error writing file for MatIO processing: {e}"
-
-    file_dict = {}
     thread_pool = []
-    timeout = 20
+    timeout = 30
 
     if len(all_groups) == 0:
         return "Received empty file list to funcX-MatIO function. Returning!"
 
     group_parser_map = {}
+    ta = time.time()
     for group in all_groups:
         parsers_to_execute = group['parsers']
         group_id = group['group_id']
@@ -334,25 +337,18 @@ def fatio_test(event):
 
         group_parser_map[group_id] = parsers_to_execute
 
-        group_parser = group['parsers'][0]
-
-        # return group_parser
-        # return os.listdir(dir_name)
-
         for item in all_files:
 
             try:
-                item['headers']['Authorization'] = f"Bearer {item['headers']['Petrel']}"
+                try:
+                    item['headers']['Authorization'] = f"Bearer {item['headers']['Petrel']}"
+                    file_id = item['file_id']
+                    file_path = item["url"]
+                except Exception:
+                    raise PetrelRetrievalError("Unable to establish connection with Petrel.")
+            except PetrelRetrievalError:
+                return RemoteExceptionWrapper(*sys.exc_info())
 
-                file_id = item['file_id']
-                file_path = item["url"]
-            except Exception as e:
-                return f"[Xtract] Petrel Error: {e}"
-
-
-            # TODO: The following should sort files into their correct 'group' folders.
-            ta = time.time()
-            # val = get_file(file_path, item['headers'], dir_name, file_id, group_id)
             download_thr = threading.Thread(target=get_file,
                                             args=(file_path,
                                                   item['headers'],
@@ -368,11 +364,10 @@ def fatio_test(event):
         thr.join(timeout=timeout)
 
         if thr.is_alive():
-            return "The HTTPS download timed out!"
-        tb = time.time()
+            return {"error": "The HTTPS download timed out!"}
+    tb = time.time()
 
     # TODO: In the future, we can parallelize parser execution?
-
     mat_mdata = {}
     for group in group_parser_map:
         mat_mdata[group] = {}
@@ -382,7 +377,10 @@ def fatio_test(event):
                 mat_mdata[group][parser] = new_mdata
 
             except Exception as e:
-                return f"[Xtract] Caught error extracting metadata: {e}"
+                try:
+                    raise XtractError(f"Caught the following error trying to extract metadata: {e}")
+                except XtractError:
+                    return RemoteExceptionWrapper(*sys.exc_info())
 
     mat_mdata['trans_time'] = tb-ta
 
@@ -407,7 +405,7 @@ def save_mdata(event):
     return None
 
 
-def matio_test(event):
+def hello_world(event):
     import time
     import os
     time.sleep(5)
