@@ -307,6 +307,7 @@ def matio_test(event):
         except Exception as e:
             return e
         except:
+            # TODO: loop this into flow.
             try:
                 raise PetrelRetrievalError("Unable to download from Petrel and write to file.")
             except PetrelRetrievalError:
@@ -347,7 +348,7 @@ def matio_test(event):
                 except Exception:
                     raise PetrelRetrievalError("Unable to establish connection with Petrel.")
             except PetrelRetrievalError:
-                return RemoteExceptionWrapper(*sys.exc_info())
+                return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
 
             download_thr = threading.Thread(target=get_file,
                                             args=(file_path,
@@ -364,7 +365,10 @@ def matio_test(event):
         thr.join(timeout=timeout)
 
         if thr.is_alive():
-            return {"error": "The HTTPS download timed out!"}
+            try:
+                raise HttpsDownloadTimeout(f"Download failed with timeout: {timeout}")
+            except HttpsDownloadTimeout:
+                return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
     tb = time.time()
 
     # TODO: In the future, we can parallelize parser execution?
@@ -380,7 +384,7 @@ def matio_test(event):
                 try:
                     raise XtractError(f"Caught the following error trying to extract metadata: {e}")
                 except XtractError:
-                    return RemoteExceptionWrapper(*sys.exc_info())
+                    return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
 
     mat_mdata['trans_time'] = tb-ta
 

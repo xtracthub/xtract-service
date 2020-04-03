@@ -3,7 +3,7 @@ import funcx
 import time
 import json
 import requests
-from container_lib.xtract_matio import serialize_fx_inputs, matio_test, fatio_test
+from container_lib.xtract_matio import serialize_fx_inputs, matio_test, hello_world
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
 from queue import Queue
@@ -19,7 +19,7 @@ globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
 n_tasks = 5000
 
-burst_size = 500
+burst_size = 25
 
 batch_size = 5
 
@@ -27,7 +27,7 @@ container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.a
                                       container_type='docker',
                                       name='kube-matio5',
                                       description='I don\'t think so!')
-fn_id = fxc.register_function(fatio_test,
+fn_id = fxc.register_function(matio_test,
                               container_uuid=container_id,
                               description="A sum function")
 
