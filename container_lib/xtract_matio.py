@@ -7,11 +7,10 @@ import pickle
 import time
 import json
 
-
 from funcx.serialize import FuncXSerializer
 from queue import Queue
 
-from exceptions import XtractError
+from exceptions import XtractError, HttpsDownloadTimeout, PetrelRetrievalError, ExtractorError
 
 
 from utils.pg_utils import pg_conn
@@ -37,7 +36,7 @@ class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
-        self.func_id = "41f9595c-0f1a-4abf-b986-2e79bef7baf5"
+        self.func_id = "4ceec45c-fbc8-4584-9687-4f5fd8162403"
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
 
@@ -155,8 +154,12 @@ class MatioExtractor:
                                           'payload': serialize_fx_inputs(
                                               event=data)}
                                     )
-
-                fx_res = json.loads(res.content)
+                try:
+                    fx_res = json.loads(res.content)
+                except json.decoder.JSONDecodeError as e:
+                    # TODO: MARK AS FAILED.
+                    print("MARK AS FAILED.")
+                    continue
 
                 # TODO: Actually do something here.
                 if fx_res["status"] == "failed":
@@ -198,6 +201,7 @@ class MatioExtractor:
 
     def poll_responses(self):
         success_returns = 0
+        failed_returns = 0
         while True:
             if self.task_dict["active"].empty():
                 # self.logger.debug("No live IDs... sleeping...")
@@ -217,17 +221,50 @@ class MatioExtractor:
                     res = fx_ser.deserialize(status_thing['result'])
                     # print(f"Result: {res}")
                     success_returns += 1
-                    print(success_returns)
+                    self.logger.debug(f"Success Counter: {success_returns}")
+                    self.logger.debug(f"Failure Counter: {failed_returns}")
                     self.logger.debug(f"Received response: {res}")
 
                     cur = None
-
-                    # TODO: 2020-03-31 23:05:01,093 container_lib.xtract_matio DEBUG    Status: {'completion_t': 1585713899.7583, 'result': '01\ngANYHQAAAFRoZSBIVFRQUyBkb3dubG9hZCB0aW1lZCBvdXQhcQAu\n', 'task_id': 'fe5da74c-0703-4e8f-8350-3e5856d85f6c'}
-                    # TODO: 2020-03-31 23:05:01,093 container_lib.xtract_matio DEBUG    Received response: The HTTPS download timed out!
-
+                    # TODO: Still need to return group_ids so we can mark accordingly...
                     if "metadata" not in res:
-                        print(res)
+                        if "exception" not in res:
+                            raise XtractError("[POLL] Received undefined empty from funcX. Trapping. Marking as failed")
+                        else:
+                            failed_returns += 1
+                            try:
+                                res['exception'].reraise()
+                            except HttpsDownloadTimeout as e1:
+                                self.logger.error(e1)
+                                self.logger.error("May need longer timeout or lower network load. "
+                                                  "Marking as FAILED for later retry.")
 
+                                cur = self.conn.cursor()
+                                for group in res['groups']:
+                                    gid = group["group_id"]
+                                    update_q = f"UPDATE groups SET status='FAILED' WHERE group_id='{gid}';"
+                                    cur.execute(update_q)
+                                self.conn.commit()
+
+                            except PetrelRetrievalError as e2:
+                                self.logger.error(e2)
+                                # TODO: Should have max_retries that are tracked here.
+                                self.logger.error("Petrel Retrieval Error. "
+                                                  "Re-queuing immediately...")
+                                self.task_dict["active"].put(ex_id)
+                            except ExtractorError as e3:
+                                self.logger.error(e3)
+                                self.logger.error("Not a retry class! "
+                                                  "Marking as failed and deleting from work queue!")
+                                cur = self.conn.cursor()
+                                for group in res['groups']:
+                                    gid = group["group_id"]
+                                    update_q = f"UPDATE groups SET status='FAILED' WHERE group_id='{gid}';"
+                                    cur.execute(update_q)
+                                self.conn.commit()
+                        continue
+
+                            # TODO: Should mark as failed in db.
                     for g_obj in res["metadata"]:
                         for parser in res["metadata"][g_obj]:
                             gid = g_obj
@@ -249,9 +286,9 @@ class MatioExtractor:
                         cur.execute(update_q)
                         self.conn.commit()
                         break
-                elif 'exception' in status_thing:
-                    exc = fx_ser.deserialize(status_thing['exception'])
-                    self.logger.error(f"Caught Exception: {exc}")
+                # elif 'exception' in status_thing:
+                #     exc = fx_ser.deserialize(status_thing['exception'])
+                #     self.logger.error(f"Caught Exception: {exc}")
                 else:
                     self.task_dict["active"].put(ex_id)
 
@@ -348,7 +385,7 @@ def matio_test(event):
                 except Exception:
                     raise PetrelRetrievalError("Unable to establish connection with Petrel.")
             except PetrelRetrievalError:
-                return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
+                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': all_groups}
 
             download_thr = threading.Thread(target=get_file,
                                             args=(file_path,
@@ -368,7 +405,8 @@ def matio_test(event):
             try:
                 raise HttpsDownloadTimeout(f"Download failed with timeout: {timeout}")
             except HttpsDownloadTimeout:
-                return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
+                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': all_groups}
+
     tb = time.time()
 
     # TODO: In the future, we can parallelize parser execution?
