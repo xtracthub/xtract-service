@@ -212,7 +212,14 @@ class MatioExtractor:
             for _ in range(0, num_elem):
                 ex_id = self.task_dict["active"].get()
                 status_thing = requests.get(self.get_url.format(ex_id), headers=self.fx_headers)
-                status_thing = json.loads(status_thing.content)
+
+                try:
+                    status_thing = json.loads(status_thing.content)
+                except json.decoder.JSONDecodeError as e:
+                    self.logger.error(e)
+                    self.logger.error("Status unloadable. Marking as failed.")
+                    continue
+                    # TODO. What exactly SHOULD I do?
 
                 self.logger.debug(f"Status: {status_thing}")
 
