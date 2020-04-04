@@ -68,7 +68,7 @@ group_count = 0
 max_groups = 4
 
 for i in range(max_groups):
-    group = {'group_id': group_count, 'files': [], 'parsers': ['dft']}
+    group = {'group_id': group_count, 'files': [], 'parsers': ['ase', 'crystal']}
     group_count += 1
     for f_obj in old_mdata["files"]:
         payload = {

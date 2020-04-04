@@ -204,7 +204,7 @@ class MatioExtractor:
         failed_returns = 0
         while True:
             if self.task_dict["active"].empty():
-                # self.logger.debug("No live IDs... sleeping...")
+                self.logger.debug("No live IDs... sleeping...")
                 time.sleep(1)
                 continue
 
