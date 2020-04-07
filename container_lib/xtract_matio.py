@@ -284,7 +284,8 @@ class MatioExtractor:
                             old_mdata["matio"] = res["metadata"][g_obj][parser]["matio"]
 
                         self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
-                        update_mdata = f"UPDATE group_metadata_2 SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
+                        update_mdata = f"UPDATE group_metadata_2 " \
+                            f"SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
                         cur.execute(update_mdata)
 
                         # TODO: Make sure we're updating the parser-list in the db.
@@ -352,7 +353,7 @@ def matio_test(event):
 
         os.makedirs(f"{dir_name}/{family_id}", exist_ok=True)
         local_file_path = f"{dir_name}/{family_id}/{file_path.split('/')[-1]}"
-        
+
         # TODO: if response is 200...
         # TODO: IT IS POSSIBLE TO GET A CI LOGON HTML PAGE RETURNED HERE!!!
         with open(local_file_path, 'wb') as f:
