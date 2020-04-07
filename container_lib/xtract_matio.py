@@ -293,9 +293,6 @@ class MatioExtractor:
                         cur.execute(update_q)
                         self.conn.commit()
                         break
-                # elif 'exception' in status_thing:
-                #     exc = fx_ser.deserialize(status_thing['exception'])
-                #     self.logger.error(f"Caught Exception: {exc}")
                 else:
                     self.task_dict["active"].put(ex_id)
 
@@ -354,12 +351,8 @@ def matio_test(event):
                 return RemoteExceptionWrapper(*sys.exc_info())
 
         os.makedirs(f"{dir_name}/{family_id}", exist_ok=True)
-
-        # if parser == 'dft':
         local_file_path = f"{dir_name}/{family_id}/{file_path.split('/')[-1]}"
-        # TODO: Check that this isn't broken -- we probably need to declare this split as file_id sooner.
-        # else:
-        #     local_file_path = f"{dir_name}/{family_id}/{file_id}"
+        
         # TODO: if response is 200...
         # TODO: IT IS POSSIBLE TO GET A CI LOGON HTML PAGE RETURNED HERE!!!
         with open(local_file_path, 'wb') as f:
