@@ -325,6 +325,8 @@ def matio_test(event):
     import tempfile
     import threading
 
+    t0 = time.time()
+
     try:
         sys.path.insert(1, '/')
         import xtract_matio_main
@@ -334,7 +336,7 @@ def matio_test(event):
         return e
 
     # A list of file paths
-    all_groups = event['inputs']
+    all_families = event['inputs']
     https_bool = True
     dir_name = None
 
@@ -342,26 +344,22 @@ def matio_test(event):
         dir_name = tempfile.mkdtemp()
         os.chdir(dir_name)
 
-    t0 = time.time()
-    mdata_list = []
-
-    def get_file(file_path, headers, dir_name, file_id, group_id, parser):
+    def get_file(file_path, headers, dir_name, file_id, family_id):
         try:
             req = requests.get(file_path, headers)
         except Exception as e:
-            return e
-        except:
-            # TODO: loop this into flow.
             try:
-                raise PetrelRetrievalError("Unable to download from Petrel and write to file.")
+                raise PetrelRetrievalError(f"Caught the following error when downloading from Petrel: {e}")
             except PetrelRetrievalError:
                 return RemoteExceptionWrapper(*sys.exc_info())
 
-        os.makedirs(f"{dir_name}/{group_id}", exist_ok=True)
-        if parser == 'dft':
-            local_file_path= f"{dir_name}/{group_id}/{file_path.split('/')[-1]}"
-        else:
-            local_file_path = f"{dir_name}/{group_id}/{file_id}"
+        os.makedirs(f"{dir_name}/{family_id}", exist_ok=True)
+
+        # if parser == 'dft':
+        local_file_path = f"{dir_name}/{family_id}/{file_path.split('/')[-1]}"
+        # TODO: Check that this isn't broken -- we probably need to declare this split as file_id sooner.
+        # else:
+        #     local_file_path = f"{dir_name}/{family_id}/{file_id}"
         # TODO: if response is 200...
         # TODO: IT IS POSSIBLE TO GET A CI LOGON HTML PAGE RETURNED HERE!!!
         with open(local_file_path, 'wb') as f:
@@ -370,37 +368,30 @@ def matio_test(event):
     thread_pool = []
     timeout = 30
 
-    if len(all_groups) == 0:
-        return "Received empty file list to funcX-MatIO function. Returning!"
+    if len(all_families) == 0:
+        return "Received no file-group families. Returning!"
 
-    group_parser_map = {}
-    ta = time.time()
-    for group in all_groups:
-        parsers_to_execute = group['parsers']
-        group_id = group['group_id']
-        all_files = group['files']
-
-        group_parser_map[group_id] = parsers_to_execute
-
-        for item in all_files:
+    t_download_start = time.time()
+    for family in all_families:
+        for file_url in family['files']:
+            file_payload = family['files'][file_url]
 
             try:
                 try:
-                    item['headers']['Authorization'] = f"Bearer {item['headers']['Petrel']}"
-                    file_id = item['file_id']
-                    file_path = item["url"]
+                    file_payload['headers']['Authorization'] = f"Bearer {file_payload['headers']['Petrel']}"
+                    file_id = file_payload['file_id']
+                    file_path = file_payload["url"]
                 except Exception:
                     raise PetrelRetrievalError("Unable to establish connection with Petrel.")
             except PetrelRetrievalError:
-                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': all_groups}
+                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': 'todo-- add this back'}
 
             download_thr = threading.Thread(target=get_file,
                                             args=(file_path,
-                                                  item['headers'],
+                                                  file_payload['headers'],
                                                   dir_name,
                                                   file_id,
-                                                  group_id,
-                                                  parsers_to_execute[0]))  # TODO: relax for families.
+                                                  family['family_id']))  # TODO: relax for families.
             download_thr.start()
             thread_pool.append(download_thr)
 
@@ -412,17 +403,37 @@ def matio_test(event):
             try:
                 raise HttpsDownloadTimeout(f"Download failed with timeout: {timeout}")
             except HttpsDownloadTimeout:
-                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': all_groups}
+                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': 'todo-- add this back'}
+    t_download_finish = time.time()
 
-    tb = time.time()
+    total_download_time = t_download_finish - t_download_start
 
-    # TODO: In the future, we can parallelize parser execution?
-    mat_mdata = {}
-    for group in group_parser_map:
-        mat_mdata[group] = {}
-        for parser in group_parser_map[group]:
+    mat_mdata = None
+    family_metadata = {}
+    for family in all_families:
+
+        all_groups = family['groups']
+
+        # TODO: In the future, we can parallelize parser execution?
+        mat_mdata = {}
+        for group in all_groups:
+            parser = all_groups[group]['parser']
+            native_file_collection = all_groups[group]['files']
+
+            local_file_collection = []
+            for file_item in native_file_collection:
+                local_file_collection.append(dir_name + '/' + family['family_id'] + '/' + file_item.split('/')[-1])
+
+            all_items = []
             try:
-                new_mdata = xtract_matio_main.extract_matio(dir_name + "/" + str(group), parser)
+                for item in local_file_collection:
+                    all_items.append(item)
+            except Exception as e:
+                return e
+
+            mat_mdata[group] = {}
+            try:
+                new_mdata = xtract_matio_main.extract_matio(all_items, parser)
                 mat_mdata[group][parser] = new_mdata
 
             except Exception as e:
@@ -430,13 +441,14 @@ def matio_test(event):
                     raise XtractError(f"Caught the following error trying to extract metadata: {e}")
                 except XtractError:
                     return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
+                    # TODO: I think we want more returned here (filenames?).
 
-    mat_mdata['trans_time'] = tb-ta
+        family_metadata[family["family_id"]] = {'trans_time': total_download_time, "metadata": mat_mdata}
 
     # Don't be an animal -- clean up your mess!
     shutil.rmtree(dir_name)
     t1 = time.time()
-    return {'metadata': mat_mdata, 'tot_time': t1-t0}
+    return {'metadata': family_metadata, 'tot_time': t1-t0}
 
 
 # TODO: Batch metadata saving requests (And store in different file).
