@@ -59,3 +59,7 @@ CREATE TABLE group_metadata_2 (
   owner varchar(50)
   );
 
+CREATE TABLE families (
+   family_id VARCHAR(40),
+   status VARCHAR(20) NOT NULL DEFAULT 'INIT'
+);
