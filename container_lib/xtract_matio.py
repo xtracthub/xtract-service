@@ -72,10 +72,16 @@ class MatioExtractor:
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init.
 
+
+    # TODO: Things about to get wild here.
+    # TODO: First find a family that is yet to be processed.
     def get_next_groups(self):
         try:
+            # TODO: Step 1. Get family where staus = 'INIT'.
+            fam_query = f"SELECT family FROM families WHERE "
+
             query = f"SELECT group_id FROM groups WHERE status='crawled' " \
-                f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
+                f"and crawl_id='{self.crawl_id}'" #" LIMIT {self.batch_size};"  # TODO: Still need something w/ batch size so we don't get everytthing.
             cur = self.conn.cursor()
             cur.execute(query)
             gids = cur.fetchall()
@@ -122,7 +128,6 @@ class MatioExtractor:
                     cur.execute(get_mdata)
                     old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
 
-                    # TODO: Change back to allow actual parser.
                     parser = old_mdata['parser']
                     print(f"[DEBUG] :: OLD METADATA: {old_mdata}")
                 except psycopg2.OperationalError as e:
@@ -303,8 +308,6 @@ class MatioExtractor:
 
 
 # TODO: .put() data for HTTPS on Petrel.
-
-# TODO: Smarter separation of groups in file system (but not important at smaller scale).
 # TODO: Move these functions to outside this file (like a dir of functions.
 
 def matio_test(event):
