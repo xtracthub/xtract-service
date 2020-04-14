@@ -1,5 +1,6 @@
 
 import time
+import logging
 from utils.pg_utils import pg_conn
 from datetime import datetime
 
@@ -39,8 +40,6 @@ def get_crawl_status(crawl_id):
 
 def get_extract_status(crawl_id):
 
-    # TODO [MEDIUM]: Separation of concerns between crawl_id and extraction_id.
-
     t0 = time.time()
     conn = pg_conn()
     cur1 = conn.cursor()
@@ -63,13 +62,10 @@ def get_extract_status(crawl_id):
     failed_val = cur4.fetchall()[0][0]
     t1 = time.time()
 
-    print(f"Data query time: {t1-t0}")
+    logging.info(f"Extract status query time: {t1-t0}")
 
-    return {"crawl_id": crawl_id, "FINISHED": finished_val, "PENDING": pending_val, "IDLE": idle_val, "FAILED": failed_val}
-
-
-def get_group_status(group_id):
-    print("Extract status")
-
-
-# print(get_extract_status('0a235f37-307b-42c1-aec6-b09ebdb51efc'))
+    return {"crawl_id": crawl_id,
+            "FINISHED": finished_val,
+            "PENDING": pending_val,
+            "IDLE": idle_val,
+            "FAILED": failed_val}
