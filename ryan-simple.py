@@ -34,10 +34,10 @@ print(f"Function UUID: {fn_id}")
 # Get the Headers....
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
 tokens = client.login(
-    requested_scopes=['https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all',
-                      'urn:globus:auth:scope:transfer.api.globus.org:all',
+    requested_scopes=["https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all",
+                      "urn:globus:auth:scope:transfer.api.globus.org:all",
                      "https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all",
-                     'email', 'openid'],
+                     "email", "openid"],
     no_local_server=True,
     no_browser=True)
 
@@ -88,8 +88,6 @@ data["inputs"].append(family)
 
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 t_launch_times = {}
-
-
 
 res = requests.post(url=post_url,
                     headers=headers,
