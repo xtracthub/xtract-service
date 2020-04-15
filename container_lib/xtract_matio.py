@@ -36,7 +36,7 @@ class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False):
         self.funcx_eid = funcx_eid
-        self.func_id = "4ceec45c-fbc8-4584-9687-4f5fd8162403"
+        self.func_id = "d3a94815-f92d-4998-9bf9-b3c21d4ab014"
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
 
@@ -45,6 +45,7 @@ class MatioExtractor:
         self.headers = headers
         self.batch_size = 1
         self.max_active_batches = 25
+        self.families_limit = 1  # TODO: right now this HAS to be 1 or it'll break.
         self.crawl_id = crawl_id
 
         self.mdata_store_path = mdata_store_path
@@ -72,20 +73,31 @@ class MatioExtractor:
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init.
 
+    # def pack_families(self, groups_to_pack):
 
-    # TODO: Things about to get wild here.
-    # TODO: First find a family that is yet to be processed.
-    def get_next_groups(self):
+    # TODO: Smarter batching that takes into account file size.
+    def get_next_family(self):
         try:
-            # TODO: Step 1. Get family where staus = 'INIT'.
-            fam_query = f"SELECT family FROM families WHERE "
+            # Step 1. Get n families where status = 'INIT'.
+            cur1 = self.conn.cursor()
+            fam_get_query = f"SELECT family_id FROM families WHERE status='INIT' and crawl_id='{self.crawl_id}' " \
+                f"LIMIT {self.families_limit};"
+            cur1.execute(fam_get_query)
+            fid = cur1.fetchall()[0][0]
 
-            query = f"SELECT group_id FROM groups WHERE status='crawled' " \
-                f"and crawl_id='{self.crawl_id}'" #" LIMIT {self.batch_size};"  # TODO: Still need something w/ batch size so we don't get everytthing.
-            cur = self.conn.cursor()
-            cur.execute(query)
-            gids = cur.fetchall()
-            return gids
+            # Step 2. For each family, update the family's status to 'PROCESSING'. THEN commit.
+            cur2 = self.conn.cursor()
+            fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id='{fid}';"
+            cur2.execute(fam_update_query)
+            self.conn.commit()
+
+            # Step 3. Get groups corresponding to a given family ID.
+            get_groups_query = f"SELECT group_id FROM group_metadata_2 WHERE family_id='{fid}';"
+            cur3 = self.conn.cursor()
+            cur3.execute(get_groups_query)
+            gids = cur3.fetchall()
+
+            return fid, gids
 
         except psycopg2.OperationalError:
             self.logger.error("[SEND] Unable to connect to Postgres database...")
@@ -106,9 +118,17 @@ class MatioExtractor:
     def send_files(self):
         # Just keep looping in case something comes up in crawl.
         while True:
-            data = {'inputs': []}
-            gids = self.get_next_groups()
+            data = {'inputs': [], "transfer_token": self.headers["Transfer"], "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec', "dest_ep": "1adf6602-3e50-11ea-b965-0e16720bb42f"}
 
+            # TODO: should be, like, get families (and those families can have groups in them)
+            # TODO: SHOULD package the exact same way as the family-test example.
+            fid, gids = self.get_next_family()
+
+            print(f"Family ID: {fid}")
+            print(f"Group IDs: {gids}")
+
+            # TODO: This doesn't need to be a loop if we just batch update the groups based on family_id :)
+            fam_dict = {"family_id": fid, "files": {}, "groups": {}}
             for gid in gids:
                 self.logger.debug(f"Processing GID: {gid[0]}")
 
@@ -136,45 +156,65 @@ class MatioExtractor:
                     continue  # TODO: If we hit this point, should likely update file to 'FAILED' or something...
 
                 # TODO: Extend this to be more than just 1 parser.
-                group = {'group_id': gid[0], 'files': [], 'parsers': [parser]}
+                group = {'group_id': gid[0], 'files': [], 'parser': parser}
 
                 # Take all of the files and append them to our payload.
                 for f_obj in old_mdata["files"]:
+                    id_count = 0
                     print(self.fx_headers)
+
+                    # Keep matching here to families.
+                    file_url = f'https://{self.source_endpoint}.e.globus.org{f_obj}'
+                    print(file_url)
                     payload = {
-                        'url': f'https://{self.source_endpoint}.e.globus.org{f_obj}',
-                        'headers': self.fx_headers, 'file_id': gid[0]}
-                    group["files"].append(payload)
+                        'url': file_url,
+                        'headers': self.fx_headers,
+                        'file_id': id_count}
+                    id_count += 1
+
+                    if file_url not in fam_dict['files']:
+                        fam_dict['files'][file_url] = payload
+
+                    group["files"].append(file_url)
                     data["transfer_token"] = self.headers['Transfer']
 
-                    data["source_endpoint"] = self.source_endpoint
-                    data["dest_endpoint"] = self.dest_endpoint
-                data["inputs"].append(group)
+                    # TODO: I should need these lines when not HTTPS!
+                    # data["source_endpoint"] = self.source_endpoint
+                    # data["dest_endpoint"] = self.dest_endpoint
+                fam_dict["groups"][gid[0]] = group
+                data["inputs"].append(fam_dict)
 
-                res = requests.post(url=self.post_url,
-                                    headers=self.fx_headers,
-                                    json={
-                                        'endpoint': self.funcx_eid,
-                                          'func': self.func_id,
-                                          'payload': serialize_fx_inputs(
-                                              event=data)}
-                                    )
-                try:
-                    fx_res = json.loads(res.content)
-                except json.decoder.JSONDecodeError as e:
-                    # TODO: MARK AS FAILED.
-                    print("MARK AS FAILED.")
-                    continue
+            print(f"Family: {fam_dict}")
+            print("MADE IT HERE!!!!")
 
-                # TODO: Actually do something here.
-                if fx_res["status"] == "failed":
-                    self.logger.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
+            # print(self.fx_headers)
+            res = requests.post(url=self.post_url,
+                                headers=self.fx_headers,
+                                json={
+                                    # TODO: THIS DOESN'T FUCKING MATCH.
+                                    'endpoint': self.funcx_eid,
+                                      'func': self.func_id,
+                                      'payload': serialize_fx_inputs(
+                                          event=data)}
+                                )
+            print(res)
+            try:
+                fx_res = json.loads(res.content)
+            except json.decoder.JSONDecodeError as e:
+                print(e)
+                # TODO: MARK AS FAILED.
+                print("MARK AS FAILED.")
+                continue
 
-                task_uuid = fx_res['task_uuid']
+            # TODO: Actually do something here.
+            if fx_res["status"] == "failed":
+                self.logger.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
 
-                self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
-                self.task_dict["active"].put(task_uuid)
-                self.logger.info(f"Approximate current size of live task queue: {self.task_dict['active'].qsize()}")
+            task_uuid = fx_res['task_uuid']
+
+            self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
+            self.task_dict["active"].put(task_uuid)
+            self.logger.info(f"Approximate current size of live task queue: {self.task_dict['active'].qsize()}")
 
             while True:
                 if self.task_dict["active"].qsize() < self.max_active_batches:
@@ -275,30 +315,45 @@ class MatioExtractor:
                                     cur.execute(update_q)
                                 self.conn.commit()
                         continue
-
                             # TODO: Should mark as failed in db.
-                    for g_obj in res["metadata"]:
-                        for parser in res["metadata"][g_obj]:
-                            gid = g_obj
-                            print(f"gid: {g_obj}")
+
+                    # TODO: Need to handle the metadata as it comes back.
+                    for fam_id in res["metadata"]:
+
+                        group_coll = res["metadata"][fam_id]["metadata"]
+                        trans_time = res["metadata"][fam_id]["metadata"]
+
+                        # print(group_coll)
+
+                        for gid in group_coll:
+                            # for parser in res["metadata"][g_obj]:
+                            print(f"gid: {gid}")
                             cur = self.conn.cursor()
                             # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
                             get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid}';"
                             cur.execute(get_mdata)
                             old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
-                            old_mdata["matio"] = res["metadata"][g_obj][parser]["matio"]
 
-                        self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
-                        update_mdata = f"UPDATE group_metadata_2 " \
-                            f"SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
-                        cur.execute(update_mdata)
+                            print(old_mdata)
 
-                        # TODO: Make sure we're updating the parser-list in the db.
-                        self.logger.debug("Updating group status (Update: 2/2)")
-                        update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
-                        cur.execute(update_q)
-                        self.conn.commit()
-                        break
+                            print("We made it here, and that's progress! ")
+                            print(group_coll[gid])
+
+                            # TODO: Should we catch the metadata that 'successfully' returned nothing here?
+                            parser = list(group_coll[gid].keys())[0] # TODO: This is weird. There's only 1!!
+                            old_mdata["matio"] = group_coll[gid][parser]["matio"]
+
+                            self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
+                            update_mdata = f"UPDATE group_metadata_2 " \
+                                f"SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
+                            cur.execute(update_mdata)
+
+                            # TODO: Make sure we're updating the parser-list in the db.
+                            self.logger.debug("Updating group status (Update: 2/2)")
+                            update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
+                            cur.execute(update_q)
+                            self.conn.commit()
+                            #break
                 else:
                     self.task_dict["active"].put(ex_id)
 
@@ -378,10 +433,10 @@ def matio_test(event):
                     file_payload['headers']['Authorization'] = f"Bearer {file_payload['headers']['Petrel']}"
                     file_id = file_payload['file_id']
                     file_path = file_payload["url"]
-                except Exception:
-                    raise PetrelRetrievalError("Unable to establish connection with Petrel.")
-            except PetrelRetrievalError:
-                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': 'todo-- add this back'}
+                except Exception as e:
+                    raise PetrelRetrievalError(e)
+            except PetrelRetrievalError as e:
+                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': str(e)}
 
             download_thr = threading.Thread(target=get_file,
                                             args=(file_path,
