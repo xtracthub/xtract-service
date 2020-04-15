@@ -98,6 +98,8 @@ class MatioExtractor:
                 t_update_families_end = time.time()
                 print(f"Time to get families: {t_update_families_end - t_update_families_start}")
 
+                # TODO: THIS IS THE ONE THAT'S TAKING A LONG TIME. Maybe put group_ids as list field in families?
+                # TODO: Then we don't care what family a group came from. 
                 t_get_groups_start = time.time()
                 # Step 3. Get groups corresponding to a given family ID.
                 get_groups_query = f"SELECT group_id FROM group_metadata_2 WHERE family_id='{fid}';"
