@@ -21,12 +21,19 @@ def get_crawl_status(crawl_id):
 
     count_val = cur1.fetchall()[0][0]
     status, started_at, ended_at = cur2.fetchall()[0]
-    files_processed, bytes_processed = cur3.fetchall()[0]
+
+    file_byte_fetches = cur3.fetchall()[0]
+
+    files_processed, bytes_processed = file_byte_fetches
+
+    if bytes_processed is None:
+        files_processed = 0
+        bytes_processed = 0
 
     if status == "complete":
         elapsed_time = ended_at - started_at
     else:
-        elapsed_time = datetime.now() - started_at
+        elapsed_time = datetime.utcnow() - started_at
 
     total_seconds = elapsed_time.total_seconds()
 

@@ -277,7 +277,6 @@ class MatioExtractor:
                     self.logger.debug(f"Failure Counter: {failed_returns}")
                     self.logger.debug(f"Received response: {res}")
 
-                    cur = None
                     # TODO: Still need to return group_ids so we can mark accordingly...
                     if "metadata" not in res:
                         if "exception" not in res:
@@ -323,7 +322,6 @@ class MatioExtractor:
                         group_coll = res["metadata"][fam_id]["metadata"]
                         trans_time = res["metadata"][fam_id]["metadata"]
 
-                        # print(group_coll)
 
                         for gid in group_coll:
                             # for parser in res["metadata"][g_obj]:
