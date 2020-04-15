@@ -73,34 +73,49 @@ class MatioExtractor:
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init.
 
-    # def pack_families(self, groups_to_pack):
 
     # TODO: Smarter batching that takes into account file size.
     def get_next_family(self):
-        try:
-            # Step 1. Get n families where status = 'INIT'.
-            cur1 = self.conn.cursor()
-            fam_get_query = f"SELECT family_id FROM families WHERE status='INIT' and crawl_id='{self.crawl_id}' " \
-                f"LIMIT {self.families_limit};"
-            cur1.execute(fam_get_query)
-            fid = cur1.fetchall()[0][0]
+        while True:
+            try:
+                # Step 1. Get n families where status = 'INIT'.
+                cur1 = self.conn.cursor()
+                fam_get_query = f"SELECT family_id FROM families WHERE status='INIT' and crawl_id='{self.crawl_id}' " \
+                    f"LIMIT {self.families_limit};"
 
-            # Step 2. For each family, update the family's status to 'PROCESSING'. THEN commit.
-            cur2 = self.conn.cursor()
-            fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id='{fid}';"
-            cur2.execute(fam_update_query)
-            self.conn.commit()
+                t_families_get_start = time.time()
+                cur1.execute(fam_get_query)
+                fid = cur1.fetchall()[0][0]
+                t_families_get_end = time.time()
+                print(f"Time to get families: {t_families_get_end - t_families_get_start}")
 
-            # Step 3. Get groups corresponding to a given family ID.
-            get_groups_query = f"SELECT group_id FROM group_metadata_2 WHERE family_id='{fid}';"
-            cur3 = self.conn.cursor()
-            cur3.execute(get_groups_query)
-            gids = cur3.fetchall()
+                # Step 2. For each family, update the family's status to 'PROCESSING'. THEN commit.
+                t_update_families_start = time.time()
+                cur2 = self.conn.cursor()
+                fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id='{fid}';"
+                cur2.execute(fam_update_query)
+                self.conn.commit()
+                t_update_families_end = time.time()
+                print(f"Time to get families: {t_update_families_end - t_update_families_start}")
 
-            return fid, gids
+                t_get_groups_start = time.time()
+                # Step 3. Get groups corresponding to a given family ID.
+                get_groups_query = f"SELECT group_id FROM group_metadata_2 WHERE family_id='{fid}';"
+                cur3 = self.conn.cursor()
+                cur3.execute(get_groups_query)
+                gids = cur3.fetchall()
+                t_get_groups_end = time.time()
 
-        except psycopg2.OperationalError:
-            self.logger.error("[SEND] Unable to connect to Postgres database...")
+                print(f"Time to get groups: {t_get_groups_end - t_get_groups_start}")
+
+                return fid, gids
+
+            except psycopg2.OperationalError:
+                self.logger.error("[SEND] Unable to connect to Postgres database...")
+            except IndexError:
+                print("[SEND FILES] No new families found from crawl! Sleeping and retrying!")
+                time.sleep(2)
+                pass
 
     def get_test_files(self):
 
@@ -122,6 +137,7 @@ class MatioExtractor:
 
             # TODO: should be, like, get families (and those families can have groups in them)
             # TODO: SHOULD package the exact same way as the family-test example.
+
             fid, gids = self.get_next_family()
 
             print(f"Family ID: {fid}")
@@ -129,6 +145,8 @@ class MatioExtractor:
 
             # TODO: This doesn't need to be a loop if we just batch update the groups based on family_id :)
             fam_dict = {"family_id": fid, "files": {}, "groups": {}}
+
+            # TODO: Make this faster (fewer DB calls)
             for gid in gids:
                 self.logger.debug(f"Processing GID: {gid[0]}")
 
@@ -155,7 +173,6 @@ class MatioExtractor:
                     print(e)
                     continue  # TODO: If we hit this point, should likely update file to 'FAILED' or something...
 
-                # TODO: Extend this to be more than just 1 parser.
                 group = {'group_id': gid[0], 'files': [], 'parser': parser}
 
                 # Take all of the files and append them to our payload.
@@ -185,19 +202,17 @@ class MatioExtractor:
                 data["inputs"].append(fam_dict)
 
             print(f"Family: {fam_dict}")
-            print("MADE IT HERE!!!!")
+            # print("MADE IT HERE!!!!")
 
             # print(self.fx_headers)
             res = requests.post(url=self.post_url,
                                 headers=self.fx_headers,
                                 json={
-                                    # TODO: THIS DOESN'T FUCKING MATCH.
                                     'endpoint': self.funcx_eid,
                                       'func': self.func_id,
                                       'payload': serialize_fx_inputs(
                                           event=data)}
                                 )
-            print(res)
             try:
                 fx_res = json.loads(res.content)
             except json.decoder.JSONDecodeError as e:
@@ -250,7 +265,8 @@ class MatioExtractor:
         while True:
             if self.task_dict["active"].empty():
                 self.logger.debug("No live IDs... sleeping...")
-                time.sleep(1)
+                # time.sleep(1)
+                time.sleep(0.25)
                 continue
 
             num_elem = self.task_dict["active"].qsize()
@@ -268,7 +284,6 @@ class MatioExtractor:
 
                 self.logger.debug(f"Status: {status_thing}")
 
-                print("result" in status_thing)
                 if "result" in status_thing:
                     res = fx_ser.deserialize(status_thing['result'])
                     # print(f"Result: {res}")
@@ -316,15 +331,14 @@ class MatioExtractor:
                         continue
                             # TODO: Should mark as failed in db.
 
-                    # TODO: Need to handle the metadata as it comes back.
                     for fam_id in res["metadata"]:
 
                         group_coll = res["metadata"][fam_id]["metadata"]
                         trans_time = res["metadata"][fam_id]["metadata"]
 
-
                         for gid in group_coll:
-                            # for parser in res["metadata"][g_obj]:
+
+
                             print(f"gid: {gid}")
                             cur = self.conn.cursor()
                             # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
@@ -338,7 +352,8 @@ class MatioExtractor:
                             print(group_coll[gid])
 
                             # TODO: Should we catch the metadata that 'successfully' returned nothing here?
-                            parser = list(group_coll[gid].keys())[0] # TODO: This is weird. There's only 1!!
+                            # TODO: Answer -- yes!
+                            parser = list(group_coll[gid].keys())[0]  # TODO: This is weird. There's only 1!!
                             old_mdata["matio"] = group_coll[gid][parser]["matio"]
 
                             self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
@@ -346,7 +361,6 @@ class MatioExtractor:
                                 f"SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
                             cur.execute(update_mdata)
 
-                            # TODO: Make sure we're updating the parser-list in the db.
                             self.logger.debug("Updating group status (Update: 2/2)")
                             update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
                             cur.execute(update_q)
