@@ -116,12 +116,14 @@ def extract_mdata():
     dest_eid = r["dest_eid"]
     mdata_store_path = r["mdata_store_path"]
 
+
+    # TODO: Have multiple send_files and
     mex = MatioExtractor(crawl_id=crawl_id,
                          headers=headers,
                          funcx_eid=funcx_eid,
                          source_eid=source_eid,
                          dest_eid =dest_eid,
-                         mdata_store_path=mdata_store_path
+                         mdata_store_path=mdata_store_path,
                          )
 
     print("SENDING FILES...")

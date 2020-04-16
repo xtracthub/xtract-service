@@ -34,7 +34,7 @@ def serialize_fx_inputs(*args, **kwargs):
 class MatioExtractor:
     # TODO: Cleanup unnnecessary args.
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
-                 mdata_store_path, logging_level='debug', suppl_store=False):
+                 mdata_store_path, logging_level='debug', suppl_store=False, instance_id=None):
         self.funcx_eid = funcx_eid
         self.func_id = "d3a94815-f92d-4998-9bf9-b3c21d4ab014"
         self.source_endpoint = source_eid
@@ -44,9 +44,11 @@ class MatioExtractor:
 
         self.headers = headers
         self.batch_size = 1
-        self.max_active_batches = 25
+        self.max_active_batches = 100
         self.families_limit = 1  # TODO: right now this HAS to be 1 or it'll break.
         self.crawl_id = crawl_id
+
+        self.tiebreak_families = set()
 
         self.mdata_store_path = mdata_store_path
         self.suppl_store = suppl_store
@@ -69,10 +71,10 @@ class MatioExtractor:
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.DEBUG)
+        self.instance_id = instance_id
 
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init.
-
 
     # TODO: Smarter batching that takes into account file size.
     def get_next_family(self):
@@ -86,20 +88,28 @@ class MatioExtractor:
                 t_families_get_start = time.time()
                 cur1.execute(fam_get_query)
                 fid = cur1.fetchall()[0][0]
+
+                if fid not in self.tiebreak_families:
+                    self.tiebreak_families.add(fid)  # TODO: take out of set soon.
+                else:
+                    # oops, need to break the race condition. Start over :)
+                    print("COLLISION")
+                    continue
+
                 t_families_get_end = time.time()
                 print(f"Time to get families: {t_families_get_end - t_families_get_start}")
 
                 # Step 2. For each family, update the family's status to 'PROCESSING'. THEN commit.
                 t_update_families_start = time.time()
                 cur2 = self.conn.cursor()
-                fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id='{fid}';"
+                fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id='{fid}'"  # LIMIT 1;"
                 cur2.execute(fam_update_query)
                 self.conn.commit()
                 t_update_families_end = time.time()
-                print(f"Time to get families: {t_update_families_end - t_update_families_start}")
+                print(f"Time to update families: {t_update_families_end - t_update_families_start}")
 
                 # TODO: THIS IS THE ONE THAT'S TAKING A LONG TIME. Maybe put group_ids as list field in families?
-                # TODO: Then we don't care what family a group came from. 
+                # TODO: Then we don't care what family a group came from.
                 t_get_groups_start = time.time()
                 # Step 3. Get groups corresponding to a given family ID.
                 get_groups_query = f"SELECT group_id FROM group_metadata_2 WHERE family_id='{fid}';"
@@ -118,19 +128,6 @@ class MatioExtractor:
                 print("[SEND FILES] No new families found from crawl! Sleeping and retrying!")
                 time.sleep(2)
                 pass
-
-    def get_test_files(self):
-
-        try:
-            query = f"SELECT group_id FROM groups " \
-                f"and crawl_id='{self.crawl_id}' LIMIT {self.batch_size};"
-            cur = self.conn.cursor()
-            cur.execute(query)
-            self.logger.debug(f"Successfully retrieved extractable file list of {self.batch_size} items from database.")
-            gids = cur.fetchall()
-            return gids
-        except:
-            print("[SEND] Unable to fetch new group_ids from DB")
 
     def send_files(self):
         # Just keep looping in case something comes up in crawl.
@@ -155,7 +152,7 @@ class MatioExtractor:
                 # Update DB to flag group_id as 'EXTRACTING'.
                 cur = self.conn.cursor()
                 try:
-                    update_q = f"UPDATE groups SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
+                    update_q = f"UPDATE group_metadata_2 SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
                     cur.execute(update_q)
                     self.conn.commit()
                 except Exception as e:
@@ -239,23 +236,27 @@ class MatioExtractor:
                 else:
                     pass
 
-                cur = self.conn.cursor()
-                crawled_query = f"SELECT COUNT(*) FROM groups WHERE status='crawled' AND crawl_id='{self.crawl_id}';"
-                cur.execute(crawled_query)
-                count_val = cur.fetchall()[0][0]
+                # cur = self.conn.cursor()
+                # crawled_query = f"SELECT COUNT(*) FROM group_metadata_2 WHERE status='crawled' AND crawl_id='{self.crawl_id}';"
+                # cur.execute(crawled_query)
+                # count_val = cur.fetchall()[0][0]
 
-                self.logger.debug(f"Num active Task IDs: {self.task_dict['active'].qsize()}")
-                self.logger.debug(f"Files left to extract: {count_val}")
+                # self.logger.debug(f"Num active Task IDs: {self.task_dict['active'].qsize()}")
+                # self.logger.debug(f"Files left to extract: {count_val}")
 
-                if count_val == 0:
-                    self.logger.info("There are no more unprocessed objects")
-                    break
+                # if count_val == 0:
+                #     self.logger.info("There are no more unprocessed objects")
+                #     break
 
-                time.sleep(1)
+                # time.sleep(1)
 
     def launch_extract(self):
-        ex_thr = threading.Thread(target=self.send_files, args=())
-        ex_thr.start()
+
+        max_threads = 3
+
+        for i in range(0, max_threads):
+            ex_thr = threading.Thread(target=self.send_files, args=())
+            ex_thr.start()
 
     def launch_poll(self):
         po_thr = threading.Thread(target=self.poll_responses, args=())
@@ -310,7 +311,7 @@ class MatioExtractor:
                                 cur = self.conn.cursor()
                                 for group in res['groups']:
                                     gid = group["group_id"]
-                                    update_q = f"UPDATE groups SET status='FAILED' WHERE group_id='{gid}';"
+                                    update_q = f"UPDATE group_metadata_2 SET status='FAILED' WHERE group_id='{gid}';"
                                     cur.execute(update_q)
                                 self.conn.commit()
 
@@ -340,7 +341,6 @@ class MatioExtractor:
 
                         for gid in group_coll:
 
-
                             print(f"gid: {gid}")
                             cur = self.conn.cursor()
                             # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
@@ -364,10 +364,10 @@ class MatioExtractor:
                             cur.execute(update_mdata)
 
                             self.logger.debug("Updating group status (Update: 2/2)")
-                            update_q = f"UPDATE groups SET status='EXTRACTED' WHERE group_id='{gid}';"
+                            update_q = f"UPDATE group_metadata_2 SET status='EXTRACTED' WHERE group_id='{gid}';"
                             cur.execute(update_q)
                             self.conn.commit()
-                            #break
+                            # break
                 else:
                     self.task_dict["active"].put(ex_id)
 

@@ -11,7 +11,7 @@ def get_crawl_status(crawl_id):
     cur1 = conn.cursor()
     cur2 = conn.cursor()
     cur3 = conn.cursor()
-    count_query = f"SELECT COUNT(*) FROM groups WHERE crawl_id='{crawl_id}';"
+    count_query = f"SELECT COUNT(*) FROM group_metadata_2 WHERE crawl_id='{crawl_id}';"
     status_query = f"SELECT status, started_on, ended_on FROM crawls WHERE crawl_id='{crawl_id}';"
     bytes_files_count_query = f"SELECT SUM(total_files), SUM(total_size) from families WHERE crawl_id='{crawl_id}';"
 
@@ -53,10 +53,10 @@ def get_extract_status(crawl_id):
     cur2 = conn.cursor()
     cur3 = conn.cursor()
     cur4 = conn.cursor()
-    pending_query = f"SELECT COUNT(*) FROM groups WHERE status='EXTRACTING' AND crawl_id='{crawl_id}';"
-    finished_query = f"SELECT COUNT(*) FROM groups WHERE status='EXTRACTED' AND crawl_id='{crawl_id}';"
-    idle_query = f"SELECT COUNT(*) FROM groups WHERE status='crawled' AND crawl_id='{crawl_id}';"
-    failed_query = f"SELECT COUNT(*) FROM groups WHERE status='FAILED' AND crawl_id='{crawl_id}';"
+    pending_query = f"SELECT COUNT(*) FROM group_metadata_2 WHERE status='EXTRACTING' AND crawl_id='{crawl_id}';"
+    finished_query = f"SELECT COUNT(*) FROM group_metadata_2 WHERE status='EXTRACTED' AND crawl_id='{crawl_id}';"
+    idle_query = f"SELECT COUNT(*) FROM group_metadata_2 WHERE status='crawled' AND crawl_id='{crawl_id}';"
+    failed_query = f"SELECT COUNT(*) FROM group_metadata_2 WHERE status='FAILED' AND crawl_id='{crawl_id}';"
 
     cur1.execute(pending_query)
     cur2.execute(finished_query)
