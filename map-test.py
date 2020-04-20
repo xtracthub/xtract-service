@@ -1,7 +1,7 @@
 
 import funcx
 import time
-from container_lib.xtract_matio import matio_test, fatio_test
+from container_lib.xtract_matio import matio_test
 from funcx.serialize import FuncXSerializer
 from fair_research_login import NativeClient
 
@@ -19,7 +19,7 @@ container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.a
                                       container_type='docker',
                                       name='kube-matio5',
                                       description='I don\'t think so!')
-fn_id = fxc.register_function(fatio_test,
+fn_id = fxc.register_function(matio_test,
                               container_uuid=container_id,
                               description="A sum function")
 
@@ -44,12 +44,12 @@ f_obj = "/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH
 
 data = {"inputs": []}
 data["transfer_token"] = transfer_token
-data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
+# data["source_endpoint"] = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
 # data["source_endpoint"] = '1c115272-a3f2-11e9-b594-0e56e8fd6d5a'
 data["dest_endpoint"] = globus_ep
 
 
-num_tasks = 2500
+num_tasks = 100
 for i in range(num_tasks):
 
     payload = {

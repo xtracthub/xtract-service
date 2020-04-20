@@ -52,13 +52,13 @@ headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token,
 print(f"Headers: {headers}")
 
 # ASE/crystal
-# old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]*batch_size}
+old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]*batch_size}
 
 # Images
 # old_mdata = {"files": ["/MDF/mdf_connect/prod/data/klh_1_v1/exposure1_jpg.jpg/01nov26b.001.002.001.001.jpg"]*batch_size}
 
 # DFT
-old_mdata ={"files": ["/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/INCAR", "/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/OUTCAR", "/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/POSCAR"]}
+# old_mdata ={"files": ["/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/INCAR", "/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/OUTCAR", "/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/POSCAR"]}
 
 data = {"inputs": [], "transfer_token": transfer_token, "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec',
         "dest_endpoint": globus_ep}
@@ -69,7 +69,7 @@ groups_in_family = 1
 family = {"family_id": "test-family", "files": {}, "groups": {}}
 
 for i in range(groups_in_family):
-    group = {'group_id': group_count, 'files': [], 'parser': 'dft'}
+    group = {'group_id': group_count, 'files': [], 'parser': 'ase'}
     group_count += 1
 
     # Here we populate the groups.
@@ -142,5 +142,3 @@ for n in range(int(n_tasks/burst_size)):
             # break
         else:
             task_dict["active"].put(cur_tid)
-
-            # Manager: f2ab81f26f40

@@ -1,19 +1,17 @@
 
 import threading
+import psycopg2
 import requests
 import logging
-import psycopg2
 import pickle
 import time
 import json
 
-from funcx.serialize import FuncXSerializer
-from queue import Queue
-
 from exceptions import XtractError, HttpsDownloadTimeout, PetrelRetrievalError, ExtractorError
-
-
+from funcx.serialize import FuncXSerializer
 from utils.pg_utils import pg_conn
+from funcx import FuncXClient
+from queue import Queue
 
 
 fx_ser = FuncXSerializer()
@@ -36,7 +34,7 @@ class MatioExtractor:
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
                  mdata_store_path, logging_level='debug', suppl_store=False, instance_id=None):
         self.funcx_eid = funcx_eid
-        self.func_id = "d3a94815-f92d-4998-9bf9-b3c21d4ab014"
+        self.func_id = "f455f8d7-5c71-4e52-91b9-c2695c63067f"
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
 
@@ -45,7 +43,7 @@ class MatioExtractor:
         self.headers = headers
         self.batch_size = 1
         self.max_active_batches = 100
-        self.families_limit = 1  # TODO: right now this HAS to be 1 or it'll break.
+        self.families_limit = 100
         self.crawl_id = crawl_id
 
         self.tiebreak_families = set()
@@ -62,6 +60,8 @@ class MatioExtractor:
         self.post_url = 'https://dev.funcx.org/api/v1/submit'
         self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
+        self.fx_client = FuncXClient()
+
         self.logging_level = logging_level
 
         self.logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class MatioExtractor:
         # TODO: And do it here in the init.
 
     # TODO: Smarter batching that takes into account file size.
-    def get_next_family(self):
+    def get_next_families(self):
         while True:
             try:
                 # Step 1. Get n families where status = 'INIT'.
@@ -87,40 +87,66 @@ class MatioExtractor:
 
                 t_families_get_start = time.time()
                 cur1.execute(fam_get_query)
-                fid = cur1.fetchall()[0][0]
+                fid_list = cur1.fetchall()[0]  # TODO: removed the second [0]. Does it still work?
 
-                if fid not in self.tiebreak_families:
-                    self.tiebreak_families.add(fid)  # TODO: take out of set soon.
-                else:
-                    # oops, need to break the race condition. Start over :)
-                    print("COLLISION")
-                    continue
+                # TODO: Can bring this back (iterating over fid list) when we add back multi-threading here.
+                # if fid not in self.tiebreak_families:
+                #     self.tiebreak_families.add(fid)  # TODO: take out of set soon.
+                # else:
+                #     # oops, need to break the race condition. Start over :)
+                #     print("COLLISION")
+                #     continue
+                print("FID LIST")
+                print(fid_list)
+
+                # Here we prepare a tuple of family_ids to batch insert the status update.
+                rows = []
+                for fid in fid_list:
+                    rows.append({"family_id": fid})
+                # Cast to tuple  # TODO: Is there really no better way of doing this?
+                rows = tuple(rows)
 
                 t_families_get_end = time.time()
                 print(f"Time to get families: {t_families_get_end - t_families_get_start}")
 
-                # Step 2. For each family, update the family's status to 'PROCESSING'. THEN commit.
+                # Step 2. BATCH UPDATE each family's status to 'PROCESSING'. THEN commit.
+                # TODO: https://stackoverflow.com/questions/30162121/bulk-update-postgresql-from-python-dict
                 t_update_families_start = time.time()
                 cur2 = self.conn.cursor()
-                fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id='{fid}'"  # LIMIT 1;"
-                cur2.execute(fam_update_query)
+                fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id= %(family_id)s"
+                cur2.executemany(fam_update_query, rows)
                 self.conn.commit()
                 t_update_families_end = time.time()
                 print(f"Time to update families: {t_update_families_end - t_update_families_start}")
 
-                # TODO: THIS IS THE ONE THAT'S TAKING A LONG TIME. Maybe put group_ids as list field in families?
-                # TODO: Then we don't care what family a group came from.
+                # TODO: Can we batch select this one (not one group at a time).
+                # TODO: Maybe from here? https://stackoverflow.com/questions/28117576/python-psycopg2-where-in-statement
                 t_get_groups_start = time.time()
                 # Step 3. Get groups corresponding to a given family ID.
-                get_groups_query = f"SELECT group_id FROM group_metadata_2 WHERE family_id='{fid}';"
+                get_groups_query = f"SELECT group_id, family_id FROM group_metadata_2 WHERE family_id IN %s;"
                 cur3 = self.conn.cursor()
-                cur3.execute(get_groups_query)
+
+                # TODO: pull all of them down. Pack dict of {fam_id: [gids], fam...}
+
+                load_fids = tuple(fid_list)
+                cur3.execute(get_groups_query, (load_fids,))
                 gids = cur3.fetchall()
                 t_get_groups_end = time.time()
 
+                print(f"GIDS: {gids}")
+
                 print(f"Time to get groups: {t_get_groups_end - t_get_groups_start}")
 
-                return fid, gids
+                families ={}
+                for item in gids:
+                    fid = item[1]
+                    gid = item[0]
+
+                    if fid not in families:
+                        families[fid] = []
+                    families[fid].append(gid)
+
+                return families
 
             except psycopg2.OperationalError:
                 self.logger.error("[SEND] Unable to connect to Postgres database...")
@@ -128,6 +154,14 @@ class MatioExtractor:
                 print("[SEND FILES] No new families found from crawl! Sleeping and retrying!")
                 time.sleep(2)
                 pass
+
+    def pack_and_submit_map(self, data):
+
+        # TODO: data should be a list of, like 100+ families.
+        pack_map = self.fx_client.map_run(data, endpoint_id=self.funcx_eid, function_id=self.func_id)
+
+        for item in pack_map:
+            self.task_dict["active"].put(item)
 
     def send_files(self):
         # Just keep looping in case something comes up in crawl.
@@ -137,98 +171,81 @@ class MatioExtractor:
             # TODO: should be, like, get families (and those families can have groups in them)
             # TODO: SHOULD package the exact same way as the family-test example.
 
-            fid, gids = self.get_next_family()
+            families = self.get_next_families()
 
-            print(f"Family ID: {fid}")
-            print(f"Group IDs: {gids}")
+            print(f"Families CHECK CHECK: {families}")
 
-            # TODO: This doesn't need to be a loop if we just batch update the groups based on family_id :)
-            fam_dict = {"family_id": fid, "files": {}, "groups": {}}
+            fam_list = []
+            for fid in families:
+                print(f"Family ID: {fid}")
+                # print(f"Group IDs: {gids}")
 
-            # TODO: Make this faster (fewer DB calls)
-            for gid in gids:
-                self.logger.debug(f"Processing GID: {gid[0]}")
+                gids = families[fid]
+                print(gids)
 
-                # Update DB to flag group_id as 'EXTRACTING'.
-                cur = self.conn.cursor()
-                try:
-                    update_q = f"UPDATE group_metadata_2 SET status='EXTRACTING' WHERE group_id='{gid[0]}';"
-                    cur.execute(update_q)
-                    self.conn.commit()
-                except Exception as e:
-                    print("[SEND] Unable to update status to 'EXTRACTING'.")
-                    print(e)
+                # TODO: This doesn't need to be a loop if we just batch update the groups based on family_id :)
+                fam_dict = {"family_id": fid, "files": {}, "groups": {}}
 
-                # Get the metadata for each group_id
-                try:
-                    get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid[0]}' LIMIT 1;"
-                    cur.execute(get_mdata)
-                    old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
+                # TODO: Make this faster (fewer DB calls)
+                for gid in gids:
+                    self.logger.debug(f"Processing GID: {gid}")
 
-                    parser = old_mdata['parser']
-                    print(f"[DEBUG] :: OLD METADATA: {old_mdata}")
-                except psycopg2.OperationalError as e:
-                    print("[Xtract] Unable to retrieve metadata from Postgres. Error: {e}")
-                    print(e)
-                    continue  # TODO: If we hit this point, should likely update file to 'FAILED' or something...
+                    # Update DB to flag group_id as 'EXTRACTING'.
+                    cur = self.conn.cursor()
+                    try:
+                        update_q = f"UPDATE group_metadata_2 SET status='EXTRACTING' WHERE group_id='{gid}';"
+                        cur.execute(update_q)
+                        self.conn.commit()
+                    except Exception as e:
+                        print("[SEND] Unable to update status to 'EXTRACTING'.")
+                        print(e)
 
-                group = {'group_id': gid[0], 'files': [], 'parser': parser}
+                    # Get the metadata for each group_id
+                    try:
+                        get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid}' LIMIT 1;"
+                        cur.execute(get_mdata)
+                        old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
 
-                # Take all of the files and append them to our payload.
-                for f_obj in old_mdata["files"]:
-                    id_count = 0
-                    print(self.fx_headers)
+                        parser = old_mdata['parser']
+                        print(f"[DEBUG] :: OLD METADATA: {old_mdata}")
+                    except psycopg2.OperationalError as e:
+                        print("[Xtract] Unable to retrieve metadata from Postgres. Error: {e}")
+                        print(e)
+                        continue  # TODO: If we hit this point, should likely update file to 'FAILED' or something...
 
-                    # Keep matching here to families.
-                    file_url = f'https://{self.source_endpoint}.e.globus.org{f_obj}'
-                    print(file_url)
-                    payload = {
-                        'url': file_url,
-                        'headers': self.fx_headers,
-                        'file_id': id_count}
-                    id_count += 1
+                    group = {'group_id': gid, 'files': [], 'parser': parser}
 
-                    if file_url not in fam_dict['files']:
-                        fam_dict['files'][file_url] = payload
+                    # Take all of the files and append them to our payload.
+                    for f_obj in old_mdata["files"]:
+                        id_count = 0
+                        print(self.fx_headers)
 
-                    group["files"].append(file_url)
-                    data["transfer_token"] = self.headers['Transfer']
+                        # Keep matching here to families.
+                        file_url = f'https://{self.source_endpoint}.e.globus.org{f_obj}'
+                        print(file_url)
+                        payload = {
+                            'url': file_url,
+                            'headers': self.fx_headers,
+                            'file_id': id_count}
+                        id_count += 1
+
+                        if file_url not in fam_dict['files']:
+                            fam_dict['files'][file_url] = payload
+
+                        group["files"].append(file_url)
+                        data["transfer_token"] = self.headers['Transfer']
 
                     # TODO: I should need these lines when not HTTPS!
                     # data["source_endpoint"] = self.source_endpoint
                     # data["dest_endpoint"] = self.dest_endpoint
-                fam_dict["groups"][gid[0]] = group
-                data["inputs"].append(fam_dict)
+                    fam_dict["groups"][gid] = group
+                    data["inputs"].append(fam_dict)
+                fam_list.append(data)
 
-            print(f"Family: {fam_dict}")
-            # print("MADE IT HERE!!!!")
+            print(f"Family List: {fam_list}")
 
-            # print(self.fx_headers)
-            res = requests.post(url=self.post_url,
-                                headers=self.fx_headers,
-                                json={
-                                    'endpoint': self.funcx_eid,
-                                      'func': self.func_id,
-                                      'payload': serialize_fx_inputs(
-                                          event=data)}
-                                )
-            try:
-                fx_res = json.loads(res.content)
-            except json.decoder.JSONDecodeError as e:
-                print(e)
-                # TODO: MARK AS FAILED.
-                print("MARK AS FAILED.")
-                continue
-
-            # TODO: Actually do something here.
-            if fx_res["status"] == "failed":
-                self.logger.error("TODO: DO SOMETHING IF BAD FUNCX ENDPOINT GIVEN. ")
-
-            task_uuid = fx_res['task_uuid']
-
-            self.logger.info(f"Placing Task ID {task_uuid} onto live queue")
-            self.task_dict["active"].put(task_uuid)
-            self.logger.info(f"Approximate current size of live task queue: {self.task_dict['active'].qsize()}")
+            # TODO: What's the failure case here?
+            self.pack_and_submit_map(fam_list)
 
             while True:
                 if self.task_dict["active"].qsize() < self.max_active_batches:
@@ -236,23 +253,9 @@ class MatioExtractor:
                 else:
                     pass
 
-                # cur = self.conn.cursor()
-                # crawled_query = f"SELECT COUNT(*) FROM group_metadata_2 WHERE status='crawled' AND crawl_id='{self.crawl_id}';"
-                # cur.execute(crawled_query)
-                # count_val = cur.fetchall()[0][0]
-
-                # self.logger.debug(f"Num active Task IDs: {self.task_dict['active'].qsize()}")
-                # self.logger.debug(f"Files left to extract: {count_val}")
-
-                # if count_val == 0:
-                #     self.logger.info("There are no more unprocessed objects")
-                #     break
-
-                # time.sleep(1)
-
     def launch_extract(self):
 
-        max_threads = 3
+        max_threads = 1
 
         for i in range(0, max_threads):
             ex_thr = threading.Thread(target=self.send_files, args=())
@@ -275,6 +278,8 @@ class MatioExtractor:
             num_elem = self.task_dict["active"].qsize()
             for _ in range(0, num_elem):
                 ex_id = self.task_dict["active"].get()
+
+                # TODO: Switch this to batch gets.
                 status_thing = requests.get(self.get_url.format(ex_id), headers=self.fx_headers)
 
                 try:
@@ -416,7 +421,7 @@ def matio_test(event):
 
     def get_file(file_path, headers, dir_name, file_id, family_id):
         try:
-            req = requests.get(file_path, headers)
+            req = requests.get(file_path, headers=headers)
         except Exception as e:
             try:
                 raise PetrelRetrievalError(f"Caught the following error when downloading from Petrel: {e}")
@@ -430,6 +435,7 @@ def matio_test(event):
         # TODO: IT IS POSSIBLE TO GET A CI LOGON HTML PAGE RETURNED HERE!!!
         with open(local_file_path, 'wb') as f:
             f.write(req.content)
+        return req.content
 
     thread_pool = []
     timeout = 30
@@ -445,6 +451,7 @@ def matio_test(event):
             try:
                 try:
                     file_payload['headers']['Authorization'] = f"Bearer {file_payload['headers']['Petrel']}"
+                    # return file_payload['headers']['Authorization']
                     file_id = file_payload['file_id']
                     file_path = file_payload["url"]
                 except Exception as e:
@@ -452,6 +459,7 @@ def matio_test(event):
             except PetrelRetrievalError as e:
                 return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': str(e)}
 
+            # TODO: Uncomment when working again.
             download_thr = threading.Thread(target=get_file,
                                             args=(file_path,
                                                   file_payload['headers'],
@@ -462,6 +470,7 @@ def matio_test(event):
             thread_pool.append(download_thr)
 
     # Walk through the thread-pool until they've all completed.
+    # TODO: uncomment when working again.
     for thr in thread_pool:
         thr.join(timeout=timeout)
 
@@ -535,5 +544,5 @@ def save_mdata(event):
 def hello_world(event):
     import time
     import os
-    time.sleep(5)
+    time.sleep(1)
     return f"Container Version: {os.environ['container_version']}"
