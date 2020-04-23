@@ -16,7 +16,6 @@ from queue import Queue
 
 fx_ser = FuncXSerializer()
 
-# TODO: Figure out how to be smart about these DB requests -- should I have multiple cursors? Commit each? Batch commit?
 # TODO: Do a proper logger to a file.
 
 
@@ -93,8 +92,6 @@ class MatioExtractor:
                 #     # oops, need to break the race condition. Start over :)
                 #     print("COLLISION")
                 #     continue
-                print("FID LIST")
-                print(fid_list)
 
                 # Here we prepare a tuple of family_ids to batch insert the status update.
                 rows = []
@@ -104,7 +101,7 @@ class MatioExtractor:
                 rows = tuple(rows)
 
                 t_families_get_end = time.time()
-                print(f"Time to get families: {t_families_get_end - t_families_get_start}")
+                logging.debug(f"Time to get families: {t_families_get_end - t_families_get_start}")
 
                 # Step 2. BATCH UPDATE each family's status to 'PROCESSING'. THEN commit.
                 # TODO: https://stackoverflow.com/questions/30162121/bulk-update-postgresql-from-python-dict
@@ -114,7 +111,7 @@ class MatioExtractor:
                 cur2.executemany(fam_update_query, rows)
                 self.conn.commit()
                 t_update_families_end = time.time()
-                print(f"Time to update families: {t_update_families_end - t_update_families_start}")
+                logging.debug(f"Time to update families: {t_update_families_end - t_update_families_start}")
 
                 # TODO: Can we batch select this one (not one group at a time).
                 # TODO: Maybe from here? https://stackoverflow.com/questions/28117576/python-psycopg2-where-in-statement
@@ -128,13 +125,11 @@ class MatioExtractor:
                 gids = cur3.fetchall()
                 t_get_groups_end = time.time()
 
-                print(f"GIDS: {gids}")
-                print(f"Time to get groups: {t_get_groups_end - t_get_groups_start}")
+                logging.debug(f"Time to get groups: {t_get_groups_end - t_get_groups_start}")
 
                 families ={}
                 for item in gids:
-                    fid = item[1]
-                    gid = item[0]
+                    gid, fid = item
 
                     if fid not in families:
                         families[fid] = []
@@ -145,7 +140,7 @@ class MatioExtractor:
             except psycopg2.OperationalError:
                 self.logger.error("[SEND] Unable to connect to Postgres database...")
             except IndexError:
-                print("[SEND FILES] No new families found from crawl! Sleeping and retrying!")
+                logging.info("[SEND] No new families found from crawl! Sleeping and retrying!")
                 time.sleep(2)
                 pass
 
@@ -169,7 +164,7 @@ class MatioExtractor:
             fam_list = []
             for fid in families:
 
-                print(f"Processing family ID: {fid}")
+                logging.info(f"Processing family ID: {fid}")
                 gids = families[fid]
 
                 # TODO: This doesn't need to be a loop if we just batch update the groups based on family_id :)
@@ -186,8 +181,8 @@ class MatioExtractor:
                         cur.execute(update_q)
                         self.conn.commit()
                     except Exception as e:
-                        print("[SEND] Unable to update status to 'EXTRACTING'.")
-                        print(e)
+                        logging.error("[SEND] Unable to update status to 'EXTRACTING'.")
+                        logging.error(e)
 
                     # Get the metadata for each group_id
                     try:
@@ -196,10 +191,9 @@ class MatioExtractor:
                         old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
 
                         parser = old_mdata['parser']
-                        print(f"[DEBUG] :: OLD METADATA: {old_mdata}")
                     except psycopg2.OperationalError as e:
-                        print("[Xtract] Unable to retrieve metadata from Postgres. Error: {e}")
-                        print(e)
+                        logging.error("[Xtract] Unable to retrieve metadata from Postgres. Error: {e}")
+                        logging.error(e)
                         continue  # TODO: If we hit this point, should likely update file to 'FAILED' or something...
 
                     group = {'group_id': gid, 'files': [], 'parser': parser}
@@ -207,11 +201,9 @@ class MatioExtractor:
                     # Take all of the files and append them to our payload.
                     for f_obj in old_mdata["files"]:
                         id_count = 0
-                        print(self.fx_headers)
 
                         # Keep matching here to families.
                         file_url = f'https://{self.source_endpoint}.e.globus.org{f_obj}'
-                        print(file_url)
                         payload = {
                             'url': file_url,
                             'headers': self.fx_headers,
@@ -230,8 +222,6 @@ class MatioExtractor:
                     fam_dict["groups"][gid] = group
                     data["inputs"].append(fam_dict)
                 fam_list.append(data)
-
-            print(f"Family List: {fam_list}")
 
             # TODO: What's the failure case here?
             self.pack_and_submit_map(fam_list)
@@ -260,7 +250,6 @@ class MatioExtractor:
         while True:
             if self.task_dict["active"].empty():
                 self.logger.debug("No live IDs... sleeping...")
-                # time.sleep(1)
                 time.sleep(0.25)
                 continue
 
@@ -283,7 +272,6 @@ class MatioExtractor:
 
                 if "result" in status_thing:
                     res = fx_ser.deserialize(status_thing['result'])
-                    # print(f"Result: {res}")
                     success_returns += 1
                     self.logger.debug(f"Success Counter: {success_returns}")
                     self.logger.debug(f"Failure Counter: {failed_returns}")
@@ -335,17 +323,12 @@ class MatioExtractor:
 
                         for gid in group_coll:
 
-                            print(f"gid: {gid}")
+                            logging.debug(f"Processing GID: {gid}")
                             cur = self.conn.cursor()
                             # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
                             get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid}';"
                             cur.execute(get_mdata)
                             old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
-
-                            print(old_mdata)
-
-                            print("We made it here, and that's progress! ")
-                            print(group_coll[gid])
 
                             # TODO: Should we catch the metadata that 'successfully' returned nothing here?
                             # TODO: Answer -- yes!
@@ -365,13 +348,9 @@ class MatioExtractor:
                 else:
                     self.task_dict["active"].put(ex_id)
 
-            # TODO: Get rid of sleep soon.
-            print("sleeping...")
-            time.sleep(2)
-
 
 # TODO: .put() data for HTTPS on Petrel.
-# TODO: Move these functions to outside this file (like a dir of functions.
+# TODO: Move these functions to outside this file (like a dir of functions)
 
 def matio_test(event):
 
@@ -459,7 +438,6 @@ def matio_test(event):
             thread_pool.append(download_thr)
 
     # Walk through the thread-pool until they've all completed.
-    # TODO: uncomment when working again.
     for thr in thread_pool:
         thr.join(timeout=timeout)
 
@@ -478,7 +456,6 @@ def matio_test(event):
 
         all_groups = family['groups']
 
-        # TODO: In the future, we can parallelize parser execution?
         mat_mdata = {}
         for group in all_groups:
             parser = all_groups[group]['parser']
