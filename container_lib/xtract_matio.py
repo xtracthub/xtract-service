@@ -30,9 +30,10 @@ def serialize_fx_inputs(*args, **kwargs):
 
 
 class MatioExtractor:
-    # TODO: Cleanup unnnecessary args.
+    # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
-                 mdata_store_path, logging_level='debug', suppl_store=False, instance_id=None):
+                 mdata_store_path, logging_level='debug', instance_id=None):
+
         self.funcx_eid = funcx_eid
         self.func_id = "f455f8d7-5c71-4e52-91b9-c2695c63067f"
         self.source_endpoint = source_eid
@@ -40,28 +41,24 @@ class MatioExtractor:
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
-        self.headers = headers
-        self.batch_size = 1
-        self.max_active_batches = 100
+        self.max_active_families = 100
         self.families_limit = 100
         self.crawl_id = crawl_id
 
         self.tiebreak_families = set()
 
         self.mdata_store_path = mdata_store_path
-        self.suppl_store = suppl_store
 
         self.conn = pg_conn()
+        self.headers = headers
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
 
         if 'Petrel' in self.headers:
             self.fx_headers['Petrel'] = self.headers['Petrel']
 
-        self.post_url = 'https://dev.funcx.org/api/v1/submit'
         self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
         self.fx_client = FuncXClient()
-
         self.logging_level = logging_level
 
         self.logger = logging.getLogger(__name__)
@@ -126,15 +123,12 @@ class MatioExtractor:
                 get_groups_query = f"SELECT group_id, family_id FROM group_metadata_2 WHERE family_id IN %s;"
                 cur3 = self.conn.cursor()
 
-                # TODO: pull all of them down. Pack dict of {fam_id: [gids], fam...}
-
                 load_fids = tuple(fid_list)
                 cur3.execute(get_groups_query, (load_fids,))
                 gids = cur3.fetchall()
                 t_get_groups_end = time.time()
 
                 print(f"GIDS: {gids}")
-
                 print(f"Time to get groups: {t_get_groups_end - t_get_groups_start}")
 
                 families ={}
@@ -157,7 +151,6 @@ class MatioExtractor:
 
     def pack_and_submit_map(self, data):
 
-        # TODO: data should be a list of, like 100+ families.
         pack_map = self.fx_client.map_run(data, endpoint_id=self.funcx_eid, function_id=self.func_id)
 
         for item in pack_map:
@@ -173,20 +166,16 @@ class MatioExtractor:
 
             families = self.get_next_families()
 
-            print(f"Families CHECK CHECK: {families}")
-
             fam_list = []
             for fid in families:
-                print(f"Family ID: {fid}")
-                # print(f"Group IDs: {gids}")
 
+                print(f"Processing family ID: {fid}")
                 gids = families[fid]
-                print(gids)
 
                 # TODO: This doesn't need to be a loop if we just batch update the groups based on family_id :)
+                # TODO: OMG ... actually DO THIS.
                 fam_dict = {"family_id": fid, "files": {}, "groups": {}}
 
-                # TODO: Make this faster (fewer DB calls)
                 for gid in gids:
                     self.logger.debug(f"Processing GID: {gid}")
 
@@ -248,7 +237,7 @@ class MatioExtractor:
             self.pack_and_submit_map(fam_list)
 
             while True:
-                if self.task_dict["active"].qsize() < self.max_active_batches:
+                if self.task_dict["active"].qsize() < self.max_active_families:
                     break
                 else:
                     pass
