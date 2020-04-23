@@ -86,7 +86,7 @@ def hello():
 @application.route('/crawl', methods=['POST'])
 def crawl_repo():
 
-    crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
+    crawl_url = 'http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/crawl'
 
     x = requests.post(crawl_url, json=request.json)
     print(x.content)
