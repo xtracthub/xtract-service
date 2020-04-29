@@ -11,7 +11,7 @@ from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
-
+from routes.xcs_routes import xcs_bp
 
 from uuid import uuid4
 import requests
@@ -20,6 +20,7 @@ import json
 import os
 
 application = Flask(__name__)
+application.register_blueprint(xcs_bp)
 
 
 class Status(Enum):
