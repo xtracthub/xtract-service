@@ -419,7 +419,6 @@ def matio_test(event):
             try:
                 try:
                     file_payload['headers']['Authorization'] = f"Bearer {file_payload['headers']['Petrel']}"
-                    # return file_payload['headers']['Authorization']
                     file_id = file_payload['file_id']
                     file_path = file_payload["url"]
                 except Exception as e:
@@ -474,7 +473,10 @@ def matio_test(event):
 
             mat_mdata[group] = {}
             try:
+                #return all_items
                 new_mdata = xtract_matio_main.extract_matio(all_items, parser)
+                # return new_mdata
+                return new_mdata
                 mat_mdata[group][parser] = new_mdata
 
             except Exception as e:

@@ -116,7 +116,6 @@ def extract_mdata():
     dest_eid = r["dest_eid"]
     mdata_store_path = r["mdata_store_path"]
 
-
     # TODO: Have multiple send_files and
     mex = MatioExtractor(crawl_id=crawl_id,
                          headers=headers,
@@ -148,14 +147,8 @@ def get_extr_status():
     return resp
 
 
-@application.route('/login', methods=['POST'])
-def login():
-    # Login is primarily handled in the notebooks now.
-    headers = request.json
-    return json.dumps(headers)
-
-
-# TODO: This is incomplete.
+# TODO: We need to index the database before doing this.
+# TODO:   Otherwise such a query could take hours.
 @application.route('/get_mdata', methods=['POST'])
 def get_mdata():
     r = request

@@ -2,15 +2,95 @@
 import funcx
 import time
 import json
+import os
 import requests
 from container_lib.xtract_matio import serialize_fx_inputs, matio_test, hello_world
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
 from queue import Queue
+from mdf_matio.validator import MDFValidator
+from materials_io.utils.interface import ParseResult
+from typing import Iterable, Set, List
+from functools import reduce, partial
+from mdf_matio.grouping import groupby_file, groupby_directory
+
+
+from mdf_toolbox import dict_merge
+
+_merge_func = partial(dict_merge, append_lists=True)
+
+
+def _merge_directories(parse_results: Iterable[ParseResult], dirs_to_group: List[str])\
+        -> Iterable[ParseResult]:
+    """Merge records from user-specified directories
+    Args:
+        parse_results (ParseResult): Generator of ParseResults
+    Yields:
+        (ParseResult): ParserResults merged for each record
+    """
+
+    # Add a path separator to the end of each directory
+    #  Used to simplify checking whether each file is a subdirectory of the matched groups
+    dirs_to_group = [d + os.path.sep for d in dirs_to_group]
+
+    def is_in_directory(f):
+        """Check whether a file is in one fo the directories to group"""
+        f = os.path.dirname(f) + os.path.sep
+        return any(f.startswith(d) for d in dirs_to_group)
+
+    # Gather records that are in directories to group or any of their subdirectories
+    flagged_records = []
+    for record in parse_results:
+        if any(is_in_directory(f) for f in record.group):
+            flagged_records.append(record)
+        else:
+            yield record
+
+    # Once all of the parse results are through, group by directory
+    for group in groupby_directory(flagged_records):
+        yield _merge_records(group)
+
+def _merge_files(parse_results: Iterable[ParseResult]) -> Iterable[ParseResult]:
+    """Merge metadata of records associated with the same file(s)
+    Args:
+        parse_results (ParseResult): Generator of ParseResults
+    Yields:
+        (ParseResult): ParserResults merged for each file.
+    """
+    return map(_merge_records, groupby_file(parse_results))
+
+
+def _merge_records(group: List[ParseResult]):
+    """Merge a group of records
+    Args:
+        group ([ParseResult]): List of parse results to group
+    """
+
+    # Group the file list and parsers
+    group_files = list(set(sum([tuple(x.group) for x in group], ())))
+    group_parsers = '-'.join(sorted(set(sum([[x.parser] for x in group], []))))
+
+    # Merge the metadata
+    is_list = [isinstance(x.metadata, list) for x in group]
+    if sum(is_list) > 1:
+        raise NotImplementedError('We have not defined how to merge >1 list-type data')
+    elif sum(is_list) == 1:
+        list_data = group[is_list.index(True)].metadata
+        if len(is_list) > 1:
+            other_metadata = reduce(_merge_func,
+                                    [x.metadata for x, t in zip(group, is_list) if not t])
+            group_metadata = [_merge_func(x, other_metadata) for x in list_data]
+        else:
+            group_metadata = list_data
+    else:
+        group_metadata = reduce(_merge_func, [x.metadata for x in group])
+    return ParseResult(group_files, group_parsers, group_metadata)
 
 
 fxc = funcx.FuncXClient()
 fx_ser = FuncXSerializer()
+
+vald_obj = MDFValidator(schema_branch="master")
 
 post_url = 'https://dev.funcx.org/api/v1/submit'
 get_url = 'https://dev.funcx.org/api/v1/{}/status'
@@ -52,7 +132,7 @@ headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token,
 print(f"Headers: {headers}")
 
 # ASE/crystal
-old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]*batch_size}
+old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]}
 
 # Images
 # old_mdata = {"files": ["/MDF/mdf_connect/prod/data/klh_1_v1/exposure1_jpg.jpg/01nov26b.001.002.001.001.jpg"]*batch_size}
@@ -63,13 +143,41 @@ old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/w
 data = {"inputs": [], "transfer_token": transfer_token, "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec',
         "dest_endpoint": globus_ep}
 
+dataset = {'dc': {'titles': [{'title': 'Xtract Integration Sample Metadata'}],
+  'creators': [{'creatorName': 'Bar, Foo',
+    'familyName': 'Bar',
+    'givenName': 'Foo',
+    'affiliations': ['Totally Legitimate University']},
+   {'creatorName': 'Bash Sr., Baz',
+    'familyName': 'Bash Sr.',
+    'givenName': 'Baz',
+    'affiliations': ['Totally Legitimate University']},
+   {'creatorName': 'Science',
+    'familyName': 'Science',
+    'givenName': '',
+    'affiliations': ['Totally Legitimate University']}],
+  'publisher': 'Materials Data Facility',
+  'publicationYear': '2020',
+  'resourceType': {'resourceTypeGeneral': 'Dataset',
+   'resourceType': 'Dataset'},
+  'descriptions': [{'description': 'A dataset for testing Xtract integrations, including validation of valid metadata.',
+    'descriptionType': 'Other'}]},
+ 'mdf': {'source_id': 'bar_xtract_integration_metadata_v1.1',
+  'source_name': 'bar_xtract_integration_metadata',
+  'version': 1,
+  'acl': ['public']},
+ 'data': {'endpoint_path': 'globus://False/MDF/mdf_connect/dev/data/bar_xtract_integration_metadata_v1.1/',
+  'link': 'https://app.globus.org/file-manager?origin_id=False&origin_path=/MDF/mdf_connect/dev/data/bar_xtract_integration_metadata_v1.1/'}}
+
+validation_info = None
+
 id_count = 0
 group_count = 0
 groups_in_family = 1
 family = {"family_id": "test-family", "files": {}, "groups": {}}
 
 for i in range(groups_in_family):
-    group = {'group_id': group_count, 'files': [], 'parser': 'ase'}
+    group = {'group_id': group_count, 'files': [], 'parser': 'crystal'}
     group_count += 1
 
     # Here we populate the groups.
@@ -135,6 +243,28 @@ for n in range(int(n_tasks/burst_size)):
             result = fx_ser.deserialize(status_thing['result'])
             print(f"Result: {result}")
             task_dict["results"].append(result)
+
+            unchecked_metadata = result['matio']
+            parse_results = _merge_directories(unchecked_metadata, [])
+            print(f"With merged directories: {parse_results}")
+
+            merged_records = _merge_files(parse_results)
+            print(f"With merged files: {merged_records}")
+
+            vald_gen = vald_obj.validate_mdf_dataset(dataset)
+            dataset_entry = next(vald_gen)
+
+            for group in merged_records:
+                metadata = group.metadata if isinstance(group.metadata, list) else [group.metadata]
+                print(f"Metadata for group w/ parser {group.parser} is: {metadata}")
+
+                for record in metadata:
+                    print(f"The record: {record}")
+                    record_entry = vald_gen.send(record)
+
+                print("RECORD ENTRY")
+                vald_gen.send(None)
+
             print(len(task_dict["results"]))
 
         elif 'exception' in status_thing:
@@ -142,3 +272,4 @@ for n in range(int(n_tasks/burst_size)):
             # break
         else:
             task_dict["active"].put(cur_tid)
+

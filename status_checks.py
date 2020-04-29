@@ -16,7 +16,7 @@ def get_crawl_status(crawl_id):
 
     cur2.execute(status_query)
 
-    r = requests.get("http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/get_status", json={'crawl_id': crawl_id})
+    r = requests.get("http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/get_crawl_status", json={'crawl_id': crawl_id})
 
     vals = json.loads(r.content)
 
