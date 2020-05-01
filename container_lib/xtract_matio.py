@@ -127,7 +127,7 @@ class MatioExtractor:
 
                 logging.debug(f"Time to get groups: {t_get_groups_end - t_get_groups_start}")
 
-                families ={}
+                families = {}
                 for item in gids:
                     gid, fid = item
 
