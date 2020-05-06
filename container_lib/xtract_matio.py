@@ -106,10 +106,10 @@ class MatioExtractor:
                 # Step 2. BATCH UPDATE each family's status to 'PROCESSING'. THEN commit.
                 # TODO: https://stackoverflow.com/questions/30162121/bulk-update-postgresql-from-python-dict
                 t_update_families_start = time.time()
-                cur2 = self.conn.cursor()
+                # cur2 = self.conn.cursor()  # TODO 1.
                 fam_update_query = f"UPDATE families SET status='PROCESSING' where family_id= %(family_id)s"
-                cur2.executemany(fam_update_query, rows)
-                self.conn.commit()
+                # cur2.executemany(fam_update_query, rows)  # TODO 2.
+                # self.conn.commit()  # TODO 3.
                 t_update_families_end = time.time()
                 logging.debug(f"Time to update families: {t_update_families_end - t_update_families_start}")
 
