@@ -94,12 +94,13 @@ vald_obj = MDFValidator(schema_branch="master")
 
 post_url = 'https://dev.funcx.org/api/v1/submit'
 get_url = 'https://dev.funcx.org/api/v1/{}/status'
-globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
+# globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
+globus_ep = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"
 
 fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
 n_tasks = 5000
 
-burst_size = 25
+burst_size = 5
 
 batch_size = 5
 
@@ -120,19 +121,28 @@ tokens = client.login(
     requested_scopes=['https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all',
                       'urn:globus:auth:scope:transfer.api.globus.org:all',
                      "https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all",
+                    "urn:globus:auth:scope:data.materialsdatafacility.org:all",
                      'email', 'openid'],
     no_local_server=True,
     no_browser=True)
 
+# print(tokens)
+# exit()
+
 auth_token = tokens["petrel_https_server"]['access_token']
 transfer_token = tokens['transfer.api.globus.org']['access_token']
+mdf_token = tokens["data.materialsdatafacility.org"]['access_token']
 funcx_token = tokens['funcx_service']['access_token']
 
-headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token, 'Petrel': auth_token}
+headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token, 'Petrel': mdf_token}
 print(f"Headers: {headers}")
 
+# NCSA file
+old_mdata = {"files": ["/mdf_open/tsopanidis_wha_amaps_v1.1/WHA Dataset/Cropped Images/A_102_1.png"]}
+
+
 # ASE/crystal
-old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]}
+# old_mdata = {"files": ["/MDF/mdf_connect/prod/data/h2o_13_v1-1/split_xyz_files/watergrid_60_HOH_180__0.7_rOH_1.8_vario_PBE0_AV5Z_delta_PS_data/watergrid_PBE0_record-1237.xyz"]}
 
 # Images
 # old_mdata = {"files": ["/MDF/mdf_connect/prod/data/klh_1_v1/exposure1_jpg.jpg/01nov26b.001.002.001.001.jpg"]*batch_size}
@@ -177,12 +187,14 @@ groups_in_family = 1
 family = {"family_id": "test-family", "files": {}, "groups": {}}
 
 for i in range(groups_in_family):
-    group = {'group_id': group_count, 'files': [], 'parser': 'crystal'}
+    group = {'group_id': group_count, 'files': [], 'parser': 'image'}
     group_count += 1
 
     # Here we populate the groups.
     for f_obj in old_mdata["files"]:
-        file_url = f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}'
+        # file_url = f'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org{f_obj}'
+        file_url = f'https://82f1b5c6-6e9b-11e5-ba47-22000b92c6ec.e.globus.org{f_obj}'
+        print(file_url)
         payload = {
             'url': file_url,
             'headers': headers, 'file_id': id_count}
@@ -260,10 +272,10 @@ for n in range(int(n_tasks/burst_size)):
 
                 for record in metadata:
                     print(f"The record: {record}")
-                    record_entry = vald_gen.send(record)
+                    #record_entry = vald_gen.send(record)  # TODO 1
 
-                print("RECORD ENTRY")
-                vald_gen.send(None)
+                # print("RECORD ENTRY")
+                # vald_gen.send(None)  # TODO 2
 
             print(len(task_dict["results"]))
 
