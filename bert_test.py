@@ -1,18 +1,14 @@
 
+
 import funcx
 import time
-import json
-import os
-import requests
-from container_lib.xtract_matio import serialize_fx_inputs, matio_test, hello_world
+from container_lib.xtract_matio import serialize_fx_inputs
+from container_lib.xtract_bert import bert_extract
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
 from queue import Queue
 from mdf_matio.validator import MDFValidator
-from materials_io.utils.interface import ParseResult
-from typing import Iterable, Set, List
 from functools import reduce, partial
-from mdf_matio.grouping import groupby_file, groupby_directory
 
 
 from mdf_toolbox import dict_merge
@@ -49,11 +45,11 @@ burst_size = 5
 
 batch_size = 5
 
-container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest',
+container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-bert:latest',
                                       container_type='docker',
-                                      name='kube-matio5',
+                                      name='kube-bert',
                                       description='I don\'t think so!')
-fn_id = fxc.register_function(matio_test,
+fn_id = fxc.register_function(images_extract,
                               container_uuid=container_id,
                               description="A sum function")
 

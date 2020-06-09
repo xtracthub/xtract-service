@@ -1,18 +1,12 @@
-
 import funcx
 import time
-import json
-import os
-import requests
-from container_lib.xtract_matio import serialize_fx_inputs, matio_test, hello_world
+from container_lib.xtract_matio import serialize_fx_inputs
+from container_lib.xtract_tabular import tabular_extract
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
 from queue import Queue
 from mdf_matio.validator import MDFValidator
-from materials_io.utils.interface import ParseResult
-from typing import Iterable, Set, List
 from functools import reduce, partial
-from mdf_matio.grouping import groupby_file, groupby_directory
 
 
 from mdf_toolbox import dict_merge
@@ -49,11 +43,11 @@ burst_size = 5
 
 batch_size = 5
 
-container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest',
+container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest',
                                       container_type='docker',
-                                      name='kube-matio5',
+                                      name='kube-tabular',
                                       description='I don\'t think so!')
-fn_id = fxc.register_function(matio_test,
+fn_id = fxc.register_function(tabular_extract,
                               container_uuid=container_id,
                               description="A sum function")
 
@@ -119,8 +113,16 @@ def do_login_flow():
 
 # THIS should force-open a Google Auth window in your local browser. If not, you can manually copy-paste it.
 auth_creds = do_login_flow()
-data["gdrive_pkl"] = pickle.dumps(auth_creds)
-data["file_id"] = "1zAJJy4bFQ2ZANV7W3iv7WdpZWRBp8iEN"
+data["gdrive"] = auth_creds[0]
+
+# TODO: This needs to be a REGULAR tabular file.
+# data["file_id"] = "0B5nDSpS9a_3kUFdiTXRFdS12QUk"
+# data["is_gdoc"] = False
+# cdiac_site32006.csv
+
+# TODO: This needs to be a SHEETS tabular file.
+data["file_id"] = "1XCS2Xqu35TiQgCpI8J8uu4Mss9FNnp1-AuHo-pMujb4"
+data["is_gdoc"] = True
 
 id_count = 0
 group_count = 0
