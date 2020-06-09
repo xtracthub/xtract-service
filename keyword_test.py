@@ -4,7 +4,8 @@ import time
 import json
 import os
 import requests
-from container_lib.xtract_matio import serialize_fx_inputs, matio_test, hello_world
+from container_lib.xtract_matio import serialize_fx_inputs
+from container_lib.xtract_keyword import keyword_extract
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
 from queue import Queue
@@ -49,11 +50,11 @@ burst_size = 5
 
 batch_size = 5
 
-container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest',
+container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-keyword:latest',
                                       container_type='docker',
-                                      name='kube-matio5',
+                                      name='kube-keyword',
                                       description='I don\'t think so!')
-fn_id = fxc.register_function(matio_test,
+fn_id = fxc.register_function(keyword_extract,
                               container_uuid=container_id,
                               description="A sum function")
 
@@ -85,9 +86,10 @@ print(f"Headers: {headers}")
 # NCSA file
 old_mdata = {"files": ["/mdf_open/kearns_biofilm_rupture_location_v1.1/Biofilm Images/Paper Images/Isofluence Images (79.4)/THY+75mM AA/1.jpg"]}
 
-
-data = {"inputs": [], "transfer_token": transfer_token, "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec',
-        "dest_endpoint": globus_ep}
+# TODO: bring back
+# data = {"inputs": [], "transfer_token": transfer_token, "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec',
+#         "dest_endpoint": globus_ep}
+data = {}
 
 
 SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly', 'https://www.googleapis.com/auth/drive']
@@ -119,8 +121,13 @@ def do_login_flow():
 
 # THIS should force-open a Google Auth window in your local browser. If not, you can manually copy-paste it.
 auth_creds = do_login_flow()
-data["gdrive_pkl"] = pickle.dumps(auth_creds)
-data["file_id"] = "1zAJJy4bFQ2ZANV7W3iv7WdpZWRBp8iEN"
+
+data["gdrive"] = auth_creds[0]
+data["file_id"] = "1u1bQtdFNmSk8UJ-O4VJSEbUX25aK6LkwNFVcwhwv4WE"
+data["is_gdoc"] = False
+data["extension"] = "pdf"
+# data = {'gdrive_pkl': b'\x80\x03cgoogle.oauth2.credentials\nCredentials\nq\x00)\x81q\x01}q\x02(X\x05\x00\x00\x00tokenq\x03X\xab\x00\x00\x00ya29.a0AfH6SMDkmvH9GI9EL6eKYaQo5OUF4c9Um3oIqgel5IN-Fc9nJqIbke9PTGPc3BuJvWhSuKuWT9NnXZmy9PIN1xMi7rkhCH_gY8bQttlPUEkBJ7HoKi_xPj1nU_pd3qQMnQvyV7oi_CeAaf_LTBrsK22x--WK7wA5cbjFq\x04X\x06\x00\x00\x00expiryq\x05cdatetime\ndatetime\nq\x06C\n\x07\xe4\x06\x08\x152\x1f\x08\x89\x05q\x07\x85q\x08Rq\tX\x0e\x00\x00\x00_refresh_tokenq\nXg\x00\x00\x001//0fYtW4N1qkLF2CgYIARAAGA8SNwF-L9Ir8QaekPkzMwhqN8orPQxeV_ayzLVwFmIHDsW4fmVRU_pj2zJZew1j3dqSY_XywTP_S3gq\x0bX\t\x00\x00\x00_id_tokenq\x0cNX\x07\x00\x00\x00_scopesq\r]q\x0e(X7\x00\x00\x00https://www.googleapis.com/auth/drive.metadata.readonlyq\x0fX%\x00\x00\x00https://www.googleapis.com/auth/driveq\x10eX\n\x00\x00\x00_token_uriq\x11X#\x00\x00\x00https://oauth2.googleapis.com/tokenq\x12X\n\x00\x00\x00_client_idq\x13XH\x00\x00\x00364500245041-r1eebsermd1qp1qo68a3qp09hhpc5dfi.apps.googleusercontent.comq\x14X\x0e\x00\x00\x00_client_secretq\x15X\x18\x00\x00\x00XMGaOYAeBxLz9ZWvsVQCvWtkq\x16X\x11\x00\x00\x00_quota_project_idq\x17NubN\x86q\x18.', 'file_id': '1zAJJy4bFQ2ZANV7W3iv7WdpZWRBp8iEN'}
+
 
 id_count = 0
 group_count = 0
@@ -146,11 +153,8 @@ for i in range(groups_in_family):
         group['files'].append(file_url)
     family["groups"][group_count-1] = group
 
+# data["inputs"].append(family)
 
-data["inputs"].append(family)
-# print(data)
-
-# exit()
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 t_launch_times = {}
 
@@ -161,6 +165,8 @@ for n in range(int(n_tasks/burst_size)):
 
     for i in range(burst_size):
         print(headers)
+        print(data)
+        # exit()
         res = requests.post(url=post_url,
                             headers=headers,
                             json={'endpoint': fx_ep,

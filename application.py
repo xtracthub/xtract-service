@@ -1,7 +1,7 @@
 
 from flask import Flask, request, jsonify
 from enum import Enum
-
+import time
 from datetime import datetime, timedelta, timezone
 
 # from globus_action_provider_tools.authentication import TokenChecker
@@ -11,13 +11,37 @@ from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
 from container_lib.xtract_matio import MatioExtractor
+# from container_lib.xtract_matio import send_one_file
 
-
+import pickle
 from uuid import uuid4
+get_url = 'https://dev.funcx.org/api/v1/{}/status'
+
 import requests
 
 import json
 import os
+
+# Python standard libraries
+import json
+import os
+import sqlite3
+
+# Third-party libraries
+from flask import Flask, redirect, request, url_for
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from oauthlib.oauth2 import WebApplicationClient
+import requests
+
+# Internal imports
+# from db import init_db_command
+# from user import User
 
 application = Flask(__name__)
 
@@ -104,17 +128,28 @@ def get_cr_status():
 
     return resp
 
+@application.route('/login/callback', methods=['GET', 'POST'])
+def callback():
+    return "Hello"
+
 
 @application.route('/extract', methods=['POST'])
 def extract_mdata():
 
-    r = request.json
-    crawl_id = r["crawl_id"]
-    headers = json.loads(r["headers"])
-    funcx_eid = r["funcx_eid"]
-    source_eid = r["source_eid"]
-    dest_eid = r["dest_eid"]
-    mdata_store_path = r["mdata_store_path"]
+    r = request.data
+    data = pickle.loads(r)
+
+    print(data)
+    # return "salad"
+    # exit()
+
+    crawl_id = data["crawl_id"]
+    headers = json.loads(data["headers"])
+    funcx_eid = data["funcx_eid"]
+    source_eid = data["source_eid"]
+    dest_eid = data["dest_eid"]
+    mdata_store_path = data["mdata_store_path"]
+    gdrive_token = data["gdrive_pkl"]
 
     # TODO: Have multiple send_files and
     mex = MatioExtractor(crawl_id=crawl_id,
@@ -123,13 +158,21 @@ def extract_mdata():
                          source_eid=source_eid,
                          dest_eid =dest_eid,
                          mdata_store_path=mdata_store_path,
+                         gdrive_token=gdrive_token
                          )
+
+    print("POLLING RESPONSES...")
+    mex.launch_poll()
 
     print("SENDING FILES...")
     mex.launch_extract()
 
-    print("POLLING RESPONSES...")
-    mex.launch_poll()
+
+    #mex.pack_and_submit_map()
+    # time.sleep(1)
+
+
+
 
     # TODO: Shouldn't this extract_id be stored somewhere? 
     extract_id = str(uuid4())
@@ -288,4 +331,4 @@ def automate_release(action_id):
 
 
 if __name__ == '__main__':
-    application.run(debug=True, threaded=True)
+    application.run(debug=True, threaded=True, ssl_context="adhoc")

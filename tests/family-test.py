@@ -50,6 +50,7 @@ def _merge_directories(parse_results: Iterable[ParseResult], dirs_to_group: List
     for group in groupby_directory(flagged_records):
         yield _merge_records(group)
 
+
 def _merge_files(parse_results: Iterable[ParseResult]) -> Iterable[ParseResult]:
     """Merge metadata of records associated with the same file(s)
     Args:
@@ -265,6 +266,7 @@ for n in range(int(n_tasks/burst_size)):
 
             vald_gen = vald_obj.validate_mdf_dataset(dataset)
             dataset_entry = next(vald_gen)
+            vald_gen.send(None)
 
             for group in merged_records:
                 metadata = group.metadata if isinstance(group.metadata, list) else [group.metadata]

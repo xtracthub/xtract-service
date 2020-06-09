@@ -1,25 +1,4 @@
 
-import threading
-import psycopg2
-import requests
-import logging
-import pickle
-import boto3
-import time
-import json
-import os
-
-from exceptions import XtractError, HttpsDownloadTimeout, PetrelRetrievalError, ExtractorError
-from funcx.serialize import FuncXSerializer
-from utils.pg_utils import pg_conn
-from funcx import FuncXClient
-from queue import Queue
-
-
-fx_ser = FuncXSerializer()
-
-# TODO: Do a proper logger to a file.
-
 
 def serialize_fx_inputs(*args, **kwargs):
     from funcx.serialize import FuncXSerializer
@@ -30,20 +9,75 @@ def serialize_fx_inputs(*args, **kwargs):
     return payload
 
 
+import threading
+import requests
+import logging
+import pickle
+import boto3
+import time
+import ast
+import json
+import os
+
+from exceptions import XtractError, HttpsDownloadTimeout, PetrelRetrievalError, ExtractorError
+from funcx.serialize import FuncXSerializer
+from utils.pg_utils import pg_conn
+from funcx import FuncXClient
+from queue import Queue
+from uuid import uuid4
+
+import funcx
+import time
+import json
+import requests
+from container_lib.xtract_images import images_extract
+from fair_research_login import NativeClient
+from funcx.serialize import FuncXSerializer
+from queue import Queue
+from mdf_matio.validator import MDFValidator
+from materials_io.utils.interface import ParseResult
+from typing import Iterable, Set, List
+from functools import reduce, partial
+from mdf_matio.grouping import groupby_file, groupby_directory
+
+
+from mdf_toolbox import dict_merge
+
+
+# Standard Py Imports
+import os
+import pickle
+import requests
+
+fx_ser = FuncXSerializer()
+fxc = funcx.FuncXClient()
+
+get_url = 'https://dev.funcx.org/api/v1/{}/status'
+
+
 class MatioExtractor:
     # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
     def __init__(self, crawl_id, headers, funcx_eid, source_eid, dest_eid,
-                 mdata_store_path, logging_level='debug', instance_id=None):
+                 mdata_store_path, gdrive_token=None, logging_level='debug', instance_id=None):
 
         self.funcx_eid = funcx_eid
-        self.func_id = "bb0a2b19-e9f5-49e4-abde-a92220cbb567"
+        self.func_dict = {"image": "6ce9b5cf-1847-4339-b204-2db113034113",
+                          "tabular": "aa7c44ea-340f-4829-bcc6-6f9ad372f3d0",
+                          "text": "08cf53cd-e0a8-440c-bd1e-4003601a76c4"}
+
+        # self.image_func_id = "8274fe2f-a132-4a9e-b8e2-9ad891e997a1"
+        self.tabular_func_id = 0
+        self.bert_func_id = 0
+        self.keyword_func_id = 0
+
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
+        self.gdrive_token = gdrive_token
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         self.max_active_families = 100
-        self.families_limit = 100
+        self.families_limit = 2
         self.crawl_id = crawl_id
 
         self.tiebreak_families = set()
@@ -58,8 +92,8 @@ class MatioExtractor:
             self.fx_headers['Petrel'] = self.headers['Petrel']
 
         self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
+        self.post_url = 'https://dev.funcx.org/api/v1/submit'
 
-        self.fx_client = FuncXClient()
         self.logging_level = logging_level
 
         self.logger = logging.getLogger(__name__)
@@ -88,6 +122,7 @@ class MatioExtractor:
 
         response = self.client.get_queue_url(
             QueueName=f'crawl_{self.crawl_id}',
+            # TODO: env variable
             QueueOwnerAWSAccountId='576668000072'
         )
 
@@ -95,6 +130,91 @@ class MatioExtractor:
 
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init.
+
+    def pack_and_submit_map(self):
+
+        num_none = 0
+        num_tabular = 0
+        num_keyword = 0
+        num_images = 0
+        while True:
+            post_url = 'https://dev.funcx.org/api/v1/submit'
+            fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
+
+            #task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+
+            # TODO: fixed at 0.
+            # TODO: Remove GDrive cred from token.
+
+            family_list = self.get_next_families()
+
+            for family in family_list:
+                family = json.loads(family)
+
+                file_id = family["id"]
+                extractor = family["extractor"]
+                is_gdoc = True if 'google' in family["mimeType"] else False
+
+                if extractor == "text":
+                    num_keyword += 1
+                    func = self.func_dict["text"]
+                elif extractor == "images":
+                    num_images += 1
+                    func = self.func_dict["image"]
+                elif extractor == "tabular":
+                    num_tabular += 1
+                    func = self.func_dict["tabular"]
+                elif extractor == None:
+                    num_none += 1
+                    print("NoneType -- skipping! ")
+                    continue
+                else:
+                    print(extractor)
+                    raise ValueError
+
+                data = {'gdrive': self.gdrive_token[0], 'file_id': file_id, 'is_gdoc': is_gdoc, 'extension': family["extension"]}
+
+                res = requests.post(url=post_url,
+                                            headers=self.fx_headers,
+                                            json={'endpoint': fx_ep,
+                                                  'func': func,
+                                                  'payload': serialize_fx_inputs(
+                                                      event=data)})
+                # print(res.content)
+                if res.status_code == 200:
+                    task_uuid = json.loads(res.content)['task_uuid']
+                    self.task_dict["active"].put(task_uuid)
+                    print(f"Queue size: {self.task_dict['active'].qsize()}")
+
+            failed_counter = 0
+
+    def launch_poll(self):
+        print("POLLER IS STARTING!!!!")
+        po_thr = threading.Thread(target=self.poll_responses, args=())
+        po_thr.start()
+
+
+            # while True:
+            #
+            #     if task_dict["active"].empty():
+            #         print("Active task queue empty... sleeping... ")
+            #         time.sleep(0.5)
+            #         break  # This should jump out to main_loop
+            #
+            #     cur_tid = task_dict["active"].get()
+            #     print(cur_tid)
+            #     status_thing = requests.get(get_url.format(cur_tid), headers=self.fx_headers).json()
+            #
+            #     if 'result' in status_thing:
+            #         result = fx_ser.deserialize(status_thing['result'])
+            #         print(f"Result: {result}")
+            #
+            #     elif 'exception' in status_thing:
+            #         print(f"Exception: {fx_ser.deserialize(status_thing['exception'])}")
+            #         # break
+            #     else:
+            #         task_dict["active"].put(cur_tid)
+
 
     # TODO: Smarter batching that takes into account file size.
     def get_next_families(self):
@@ -111,6 +231,7 @@ class MatioExtractor:
                 del_list = []
                 for message in sqs_response["Messages"]:
                     message_body = message["Body"]
+
                     family_list.append(message_body)
 
                     del_list.append({'ReceiptHandle': message["ReceiptHandle"],
@@ -124,113 +245,57 @@ class MatioExtractor:
                     # TODO: Do the 200 check. WEird data format.
                     # if response["HTTPStatusCode"] is not 200:
                     #     raise ConnectionError("Could not delete messages from queue!")
-
-                t_families_get_end = time.time()
-                logging.debug(f"Time to get families: {t_families_get_end - t_families_get_start}")
-
+                #continue
+                time.sleep(0.5)
                 return family_list
             except:
                 ConnectionError("Could not get new families! ")
-
-    def pack_and_submit_map(self, data):
-
-        pack_map = self.fx_client.map_run(data, endpoint_id=self.funcx_eid, function_id=self.func_id)
-
-        for item in pack_map:
-            self.task_dict["active"].put(item)
-
-    def send_files(self):
-        # Just keep looping in case something comes up in crawl.
-        while True:
-            data = {'inputs': [], "transfer_token": self.headers["Transfer"], "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec', "dest_ep": "1adf6602-3e50-11ea-b965-0e16720bb42f"}
-
-            # TODO: should be, like, get families (and those families can have groups in them)
-            # TODO: SHOULD package the exact same way as the family-test example.
-
-            families = self.get_next_families()
-
-            funcx_fam_ship_list = []
-
-            print(len(families))
-            print(type(families))
-
-            for family in families:
-
-                family = json.loads(family)
-                fid = family["family_id"]
-                logging.info(f"Processing family ID: {fid}")
-
-                fam_dict = {"family_id": fid, "files": {}, "groups": {}}
-
-                for group in family["groups"]:
-
-                    gid = group
-                    gr = family["groups"][group]
-                    parser = gr["parser"]
-                    print(parser)
-                    files = gr["files"]
-
-                    self.logger.debug(f"Processing GID: {gid}")
-
-                    group = {'group_id': gid, 'files': [], 'parser': parser}
-
-                    # Take all of the files and append them to our payload.
-                    # TODO: There is no longer 'old_mdata'.
-                    for f_obj in files:
-                        id_count = 0
-
-                        # Keep matching here to families.
-                        # TODO: Uncomment for Petrel
-                        # TODO: Allow endpoint_id to be a URL.
-                        # file_url = f'https://{self.source_endpoint}.e.globus.org{f_obj}'
-                        file_url = f'https://data.materialsdatafacility.org{f_obj}'
-                        payload = {
-                            'url': file_url,
-                            'headers': self.fx_headers,
-                            'file_id': id_count}
-                        id_count += 1
-
-                        if file_url not in fam_dict['files']:
-                            fam_dict['files'][file_url] = payload
-
-                        group["files"].append(file_url)
-                        data["transfer_token"] = self.headers['Transfer']
-
-                    # TODO: I should need these lines when not HTTPS!
-                    # data["source_endpoint"] = self.source_endpoint
-                    # data["dest_endpoint"] = self.dest_endpoint
-                    fam_dict["groups"][gid] = group
-                    data["inputs"].append(fam_dict)
-                funcx_fam_ship_list.append(data)
-
-            # TODO: What's the failure case here?
-            self.pack_and_submit_map(funcx_fam_ship_list)
-            # exit()
-
-            while True:
-                if self.task_dict["active"].qsize() < self.max_active_families:
-                    break
-                else:
-                    pass
 
     def launch_extract(self):
 
         max_threads = 1
 
         for i in range(0, max_threads):
-            ex_thr = threading.Thread(target=self.send_files, args=())
+            ex_thr = threading.Thread(target=self.pack_and_submit_map(), args=())
             ex_thr.start()
-
-    def launch_poll(self):
-        po_thr = threading.Thread(target=self.poll_responses, args=())
-        po_thr.start()
-
     def poll_responses(self):
         success_returns = 0
         failed_returns = 0
+
+        total_success = 0
+
+        success_keyword = 0
+        success_tabular = 0
+        success_images = 0
+
+        tot_keyword_trans = 0
+        tot_images_trans = 0
+        tot_tabular_trans = 0
+
+        tot_keyword_tot = 0
+        tot_images_tot = 0
+        tot_tabular_tot = 0
+
+        mod_not_found = 0
+        poll_start = time.time()
         while True:
+
+            if success_keyword > 0:
+                print("Average Keyword Stats")
+                print(f"Transfer: {tot_keyword_trans/success_keyword} | Total: {tot_keyword_tot/success_keyword}")
+
+            if success_images > 0:
+                print("Average Image Stats")
+                print(f"Transfer: {tot_images_trans / success_images} | Total: {tot_images_tot / success_images}")
+
+            if success_tabular >0:
+                print("Average Tabular Stats")
+                print(f"Transfer: {tot_tabular_trans / success_tabular} | Total: {tot_tabular_tot / success_tabular}")
+
             if self.task_dict["active"].empty():
                 self.logger.debug("No live IDs... sleeping...")
+                p_empty = time.time()
+                print(p_empty)
                 time.sleep(2.5)
                 continue
 
@@ -252,261 +317,470 @@ class MatioExtractor:
                 self.logger.debug(f"Status: {status_thing}")
 
                 if "result" in status_thing:
-                    res = fx_ser.deserialize(status_thing['result'])
+                    try:
+                        res = fx_ser.deserialize(status_thing['result'])
+                    except ModuleNotFoundError as e:
+                        mod_not_found +=1
+                        print(e)
+                        print(f"NUM MOD NOT FOUND: {mod_not_found}")
+                        continue
                     success_returns += 1
                     self.logger.debug(f"Success Counter: {success_returns}")
                     self.logger.debug(f"Failure Counter: {failed_returns}")
                     self.logger.debug(f"Received response: {res}")
 
                     # TODO: Still need to return group_ids so we can mark accordingly...
-                    if "metadata" not in res:
-                        if "exception" not in res:
-                            raise XtractError("[POLL] Received undefined empty from funcX. Trapping. Marking as failed")
-                        else:
-                            failed_returns += 1
-                            try:
-                                res['exception'].reraise()
-                            except HttpsDownloadTimeout as e1:
-                                self.logger.error(e1)
-                                self.logger.error("May need longer timeout or lower network load. "
-                                                  "Marking as FAILED for later retry.")
-
-                                # TODO: Put on failed queue.
-                                # cur = self.conn.cursor()
-                                # for group in res['groups']:
-                                #     gid = group["group_id"]
-                                #     update_q = f"UPDATE group_metadata_2 SET status='FAILED' WHERE group_id='{gid}';"
-                                #     cur.execute(update_q)
-                                # self.conn.commit()
-
-                            except PetrelRetrievalError as e2:
-                                self.logger.error(e2)
-                                # TODO: Should have max_retries that are tracked here.
-                                self.logger.error("Petrel Retrieval Error. "
-                                                  "Re-queuing immediately...")
-                                self.task_dict["active"].put(ex_id)
-                            except ExtractorError as e3:
-                                self.logger.error(e3)
-                                self.logger.error("Not a retry class! "
-                                                  "Marking as failed and deleting from work queue!")
-                                # cur = self.conn.cursor()
-                                # for group in res['groups']:
-                                #     gid = group["group_id"]
-                                #     update_q = f"UPDATE groups SET status='FAILED' WHERE group_id='{gid}';"
-                                #     cur.execute(update_q)
-                                self.conn.commit()
+                    if type(res) is not dict:
                         continue
-                            # TODO: Should mark as failed in db.
 
-                    for fam_id in res["metadata"]:
+                    print("Do we ever make it down here???")
 
-                        group_coll = res["metadata"][fam_id]["metadata"]
-                        trans_time = res["metadata"][fam_id]["metadata"]
+                    print("metadata" in res)
+                    if "metadata" in res:
+                        print("WAHOOOOOOOOOOOOO")
 
-                        # TODO: Lowkey just delete all of this?
-                        # for gid in group_coll:
 
-                            # logging.debug(f"Processing GID: {gid}")
-                            # cur = self.conn.cursor()
-                            # # TODO: [Optimize] Do something smarter than pulling this down a second time (cache???)
-                            # get_mdata = f"SELECT metadata FROM group_metadata_2 where group_id='{gid}';"
-                            # cur.execute(get_mdata)
-                            # old_mdata = pickle.loads(bytes(cur.fetchone()[0]))
-                            #
-                            # # TODO: Should we catch the metadata that 'successfully' returned nothing here?
-                            # # TODO: Answer -- yes!
-                            # parser = list(group_coll[gid].keys())[0]  # TODO: This is weird. There's only 1!!
-                            # old_mdata["matio"] = group_coll[gid][parser]["matio"]
-                            #
-                            # self.logger.debug("Pushing freshly-retrieved metadata to DB (Update: 1/2)")
-                            # update_mdata = f"UPDATE group_metadata_2 " \
-                            #     f"SET metadata={psycopg2.Binary(pickle.dumps(old_mdata))} where group_id='{gid}';"
-                            # cur.execute(update_mdata)
-                            #
-                            # self.logger.debug("Updating group status (Update: 2/2)")
-                            # update_q = f"UPDATE group_metadata_2 SET status='EXTRACTED' WHERE group_id='{gid}';"
-                            # cur.execute(update_q)
-                            # self.conn.commit()
-                            # break
+
+                        if "tabular" in res["metadata"]:
+                            if res["metadata"]["tabular"] != {}:
+                                 print("GOOD TABULAR!!!")
+                                 tot_tabular_trans += res["trans_time"]
+                                 tot_tabular_tot += res["tot_time"]
+
+                                 success_tabular += 1
+                                 total_success += 1
+
+
+                        elif "keywords" in res["metadata"]:
+                            if res["metadata"]["keywords"] is not None and res["metadata"]["keywords"] != {}:
+                                  print("GOOD KEYWORD!!!")
+                                  tot_keyword_trans += res["trans_time"]
+                                  tot_keyword_tot += res["tot_time"]
+
+                                  success_keyword += 1
+                                  total_success += 1
+
+                        elif "image-sort" in res["metadata"]:
+                            if res["metadata"]["image-sort"] != {}:
+                                print("GOOD IMAGES!!!")
+                                tot_images_trans += res["trans_time"]
+                                tot_images_tot += res["tot_time"]
+                                success_images += 1
+                                total_success += 1
+
+                    else:
+                        print("else")
+                        print(f"Here's the res: {res}")
+
+                        # group_coll = res["metadata"][fam_id]["metadata"]
+                        # trans_time = res["metadata"][fam_id]["metadata"]
+
+
+
                 else:
                     self.task_dict["active"].put(ex_id)
 
 
-# TODO: .put() data for HTTPS on Petrel.
-# TODO: Move these functions to outside this file (like a dir of functions)
+#
+#     def pack_and_submit_map(self, data):
+#
+#         # extractor_type = data["extractor"]
+#         # print("IN PACK_AND_SUBMIT")
+#         # print(data)
+#         # extractor_type = data["extractor"]
+#         # print(extractor_type)
+#         # print(data)
+#         # print("HERE'S THE DATA")
+#         # data = serialize_fx_inputs(data)
+#         # print("HERE GOES ROUND 2!!!")
+#         # data = serialize_fx_inputs(data)
+#         #print(data)
+#
+#         # data2 = pickle.dumps(data[0])
+#         # exit()
+#
+#         fn_id = "0671c0ef-d9d4-4382-89f1-6f4e56f45720"
+#         fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
+#         post_url = 'https://dev.funcx.org/api/v1/submit'
+#
+#         headers = {'Authorization': 'Bearer AgK8Dkvx90XY5qX2Vajxn0boaoedlOyJaXbVvmWjnaoybo3QlMieCQz48e67PydOVmpke1734kkb8vC1NMymVu7w3n', 'Transfer': 'Ag8496kzod33gmepjDNXVxNYVP2wkJeYO1rnVqpjgnyEPXxa15I8Cv9wnGGQaxbed4YmXVYBKD9wyKt7KPgNvcoqlv', 'FuncX': 'AgK8Dkvx90XY5qX2Vajxn0boaoedlOyJaXbVvmWjnaoybo3QlMieCQz48e67PydOVmpke1734kkb8vC1NMymVu7w3n', 'Petrel': 'AgmJJ674z4wEvj1o4Jmwar78kDj2QrkdVxaKkeaDD6pgkEJjlyH8C0zbkEvq3GKWgykEydwGGJG1qVC8rnE7XHgGEJ'}
+#         t_launch_times = {}
+#         task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+#
+#         data = {
+#             'gdrive_pkl': b'\x80\x03cgoogle.oauth2.credentials\nCredentials\nq\x00)\x81q\x01}q\x02(X\x05\x00\x00\x00tokenq\x03X\xab\x00\x00\x00ya29.a0AfH6SMDkmvH9GI9EL6eKYaQo5OUF4c9Um3oIqgel5IN-Fc9nJqIbke9PTGPc3BuJvWhSuKuWT9NnXZmy9PIN1xMi7rkhCH_gY8bQttlPUEkBJ7HoKi_xPj1nU_pd3qQMnQvyV7oi_CeAaf_LTBrsK22x--WK7wA5cbjFq\x04X\x06\x00\x00\x00expiryq\x05cdatetime\ndatetime\nq\x06C\n\x07\xe4\x06\x08\x152\x1f\x08\x89\x05q\x07\x85q\x08Rq\tX\x0e\x00\x00\x00_refresh_tokenq\nXg\x00\x00\x001//0fYtW4N1qkLF2CgYIARAAGA8SNwF-L9Ir8QaekPkzMwhqN8orPQxeV_ayzLVwFmIHDsW4fmVRU_pj2zJZew1j3dqSY_XywTP_S3gq\x0bX\t\x00\x00\x00_id_tokenq\x0cNX\x07\x00\x00\x00_scopesq\r]q\x0e(X7\x00\x00\x00https://www.googleapis.com/auth/drive.metadata.readonlyq\x0fX%\x00\x00\x00https://www.googleapis.com/auth/driveq\x10eX\n\x00\x00\x00_token_uriq\x11X#\x00\x00\x00https://oauth2.googleapis.com/tokenq\x12X\n\x00\x00\x00_client_idq\x13XH\x00\x00\x00364500245041-r1eebsermd1qp1qo68a3qp09hhpc5dfi.apps.googleusercontent.comq\x14X\x0e\x00\x00\x00_client_secretq\x15X\x18\x00\x00\x00XMGaOYAeBxLz9ZWvsVQCvWtkq\x16X\x11\x00\x00\x00_quota_project_idq\x17NubN\x86q\x18.',
+#             'file_id': '1zAJJy4bFQ2ZANV7W3iv7WdpZWRBp8iEN'}
+#
+#         res = requests.post(url=post_url,
+#                             headers=headers,
+#                             json={'endpoint': fx_ep,
+#                                   'func': fn_id,
+#                                   'payload': serialize_fx_inputs(
+#                                       event=data)
+#                                   }
+#                             )
+#
+#         print(res.content)
+#         if res.status_code == 200:
+#             task_uuid = json.loads(res.content)['task_uuid']
+#             task_dict["active"].put(task_uuid)
+#             t_launch_times[task_uuid] = time.time()
+#
+#
+#         # print(pack_map)
+#         # print(f"Length of pack_map (from above): {len(pack_map)}")
+#         # for item in pack_map:
+#         #     self.task_dict["active"].put(item)
+#
+#         if res.status_code == 200:
+#             task_uuid = json.loads(res.content)['task_uuid']
+#             print("TASK ID!")
+#             print(task_uuid)
+#             self.task_dict["active"].put(task_uuid)
+#         exit()
+#
+#     def send_files(self):
+#         # Just keep looping in case something comes up in crawl.
+#         while True:
+#             data = {'inputs': [], "transfer_token": self.headers["Transfer"], "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec', "dest_ep": "1adf6602-3e50-11ea-b965-0e16720bb42f"}
+#
+#             # TODO: should be, like, get families (and those families can have groups in them)
+#             # TODO: SHOULD package the exact same way as the family-test example.
+#
+#             families = self.get_next_families()
+#
+#             funcx_fam_ship_list = []
+#
+#             print(len(families))
+#             print(type(families))
+#
+#             for family in families:
+#
+#                 family = json.loads(family)
+#
+#                 # TODO: In the case of Google Drive (should do on crawler-side)
+#                 if 'family_id' not in family:
+#
+#                     family['family_id'] = str(uuid4())
+#
+#                 fid = family["family_id"]
+#                 logging.info(f"Processing family ID: {fid}")
+#
+#                 fam_dict = {"family_id": fid, "files": {}, "groups": {}}
+#
+#                 # TODO: special wrapping for gdrive again.
+#                 if not 'groups' in family:
+#                     family["groups"] = {}
+#
+#                     print("ITEM AND FAMILY")
+#                     print(family)
+#
+#                     group_id = str(uuid4())
+#                     family["groups"][group_id] = family
+#                     family["groups"][group_id]["parser"] = family["extractor"]
+#                     family["groups"][group_id]["files"] = [family["id"]]
+#
+#                 for group in family["groups"]:
+#
+#                     gid = group
+#                     gr = family["groups"][group]
+#                     parser = gr["parser"]
+#                     print(parser)
+#                     files = gr["files"]
+#
+#                     self.logger.debug(f"Processing GID: {gid}")
+#
+#                     group = {'group_id': gid, 'files': [], 'parser': parser}
+#
+#                     # Take all of the files and append them to our payload.
+#                     # TODO: There is no longer 'old_mdata'.
+#
+#                     # TODO: Bring this all back for Globus
+#                     # for f_obj in files:
+#                     #     id_count = 0
+#                     #
+#                     #     # Keep matching here to families.
+#                     #     # TODO: Uncomment for Petrel
+#                     #     # TODO: Allow endpoint_id to be a URL.
+#                     #     # file_url = f'https://{self.source_endpoint}.e.globus.org{f_obj}'
+#                     #     file_url = f'https://data.materialsdatafacility.org{f_obj}'
+#                     #     payload = {
+#                     #         'url': file_url,
+#                     #         'headers': self.fx_headers,
+#                     #         'file_id': id_count}
+#                     #     id_count += 1
+#                     #
+#                     #     if file_url not in fam_dict['files']:
+#                     #         fam_dict['files'][file_url] = payload
+#                     #
+#                     #     group["files"].append(file_url)
+#                     #     data["transfer_token"] = self.headers['Transfer']
+#
+#                     #### TODO: EVERYTHING IN THIS BOX IS GOOGLE DRIVE REQUEST CONSTRUCTION ZONE ####
+#
+#                     for filename in family["groups"][gid]["files"]:
+#                         print(filename)
+#
+#                     print("HOORAY!")
+#                     # exit()
+#
+#                     # TODO: I should need these lines when not HTTPS!
+#                     # data["source_endpoint"] = self.source_endpoint
+#                     # data["dest_endpoint"] = self.dest_endpoint
+#                     ###################################################
+#
+#                     fam_dict["groups"][gid] = group
+#                     # data["inputs"].append(fam_dict)
+#
+#                     # TODO: if GDRIIVE
+#                 data["inputs"] = []
+#                 data["file_id"] = family["id"]
+#                 data["gdrive_pkl"] = pickle.dumps((self.gdrive_token, None))
+#                 data["extractor"] = family["extractor"]
+#                 funcx_fam_ship_list.append(data)
+#
+#
+#             print(f"Length of family shipping list: {len(funcx_fam_ship_list)}")
+#             # TODO: What's the failure case here?
+#             self.pack_and_submit_map(funcx_fam_ship_list)
+#
+#             print("EXITED PACK AND SUBMIT")
+#
+#             while True:
+#                 if self.task_dict["active"].qsize() < self.max_active_families:
+#                     print("BREAKING")
+#                     break
+#                 else:
+#                     print(self.task_dict["active"].qsize())
+#                     print("SPINNING IN PLACE!")
+#                     time.sleep(3)
+#                     pass
+#
 
-def matio_test(event):
+#
+#     def launch_poll(self):
+#         po_thr = threading.Thread(target=self.poll_responses, args=())
+#         po_thr.start()
+# #
 
-    """
-    Function
-    :param event (dict) -- contains auth header and list of HTTP links to extractable files:
-    :return metadata (dict) -- metadata as gotten from the materials_io library:
-    """
-
-    import os
-    import sys
-    import time
-    import shutil
-    import requests
-    import tempfile
-    import threading
-
-    t0 = time.time()
-
-    try:
-        sys.path.insert(1, '/')
-        import xtract_matio_main
-        from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
-
-    except Exception as e:
-        return e
-
-    # A list of file paths
-    all_families = event['inputs']
-    https_bool = True
-    dir_name = None
-
-    if https_bool:
-        dir_name = tempfile.mkdtemp()
-        os.chdir(dir_name)
-
-    def get_file(file_path, headers, dir_name, file_id, family_id):
-
-        try:
-            # file_path is https://link
-            # return "but am i here tho"
-            # return file_path
-            req = requests.get(file_path, headers=headers)
-            # return req.co
-        except Exception as e:
-            # return e
-            try:
-                raise PetrelRetrievalError(f"Caught the following error when downloading from Petrel: {e}")
-            except PetrelRetrievalError:
-                return RemoteExceptionWrapper(*sys.exc_info())
-
-        os.makedirs(f"{dir_name}/{family_id}", exist_ok=True)
-        local_file_path = f"{dir_name}/{family_id}/{file_path.split('/')[-1]}"
-
-        # return req.content
-
-        # TODO: if response is 200...
-        # TODO: IT IS POSSIBLE TO GET A CI LOGON HTML PAGE RETURNED HERE!!!
-        with open(local_file_path, 'wb') as f:
-            f.write(req.content)
-        # TODO: Why do I need this? Lol.
-        return req.content
-
-    thread_pool = []
-    timeout = 60
-
-    if len(all_families) == 0:
-        return "Received no file-group families. Returning!"
-
-    t_download_start = time.time()
-    for family in all_families:
-        for file_url in family['files']:
-            file_payload = family['files'][file_url]
-
-            try:
-                try:
-                    file_payload['headers']['Authorization'] = f"Bearer {file_payload['headers']['Petrel']}"
-                    file_id = file_payload['file_id']
-                    file_path = file_payload["url"]
-                except Exception as e:
-                    raise PetrelRetrievalError(e)
-            except PetrelRetrievalError as e:
-                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': str(e)}
-
-            # TODO: Uncomment when working again.
-            download_thr = threading.Thread(target=get_file,
-                                            args=(file_path,
-                                                  file_payload['headers'],
-                                                  dir_name,
-                                                  file_id,
-                                                  family['family_id']))  # TODO: relax for families.
-            download_thr.start()
-            thread_pool.append(download_thr)
-
-            # file_content = get_file(file_path, file_payload['headers'], dir_name, file_id, family['family_id'])
-            # return file_content
-
-    # Walk through the thread-pool until they've all completed.
-    for thr in thread_pool:
-        thr.join(timeout=timeout)
-
-        if thr.is_alive():
-            try:
-                raise HttpsDownloadTimeout(f"Download failed with timeout: {timeout}")
-            except HttpsDownloadTimeout:
-                return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': 'todo-- add this back'}
-    t_download_finish = time.time()
-
-    total_download_time = t_download_finish - t_download_start
-    # return "FILES DOWNLOADED, BUTCH. "
-
-    mat_mdata = None
-    family_metadata = {}
-    for family in all_families:
-
-        all_groups = family['groups']
-
-        mat_mdata = {}
-        for group in all_groups:
-            parser = all_groups[group]['parser']
-            native_file_collection = all_groups[group]['files']
-
-            local_file_collection = []
-            for file_item in native_file_collection:
-                local_file_collection.append(dir_name + '/' + family['family_id'] + '/' + file_item.split('/')[-1])
-
-            all_items = []
-            try:
-                for item in local_file_collection:
-                    all_items.append(item)
-            except Exception as e:
-                return e
-
-            mat_mdata[group] = {}
-            try:
-                # return "HERE"
-                # return all_items
-                new_mdata = xtract_matio_main.extract_matio(all_items, parser)
-                mat_mdata[group][parser] = new_mdata
-
-            except Exception as e:
-                try:
-                    raise XtractError(f"Caught the following error trying to extract metadata: {e}")
-                except XtractError:
-                    return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
-                    # TODO: I think we want more returned here (filenames?).
-        # return ("Made it here! ")
-        family_metadata[family["family_id"]] = {'trans_time': total_download_time, "metadata": mat_mdata}
-
-    # Don't be an animal -- clean up your mess!
-    shutil.rmtree(dir_name)
-    t1 = time.time()
-    # return "MADE IT HERE. "
-    return {'metadata': family_metadata, 'tot_time': t1-t0}
-
-
-# TODO: Batch metadata saving requests (And store in different file).
-def save_mdata(event):
-
-    import json
-
-    main_dir = event['dirname']
-    crawl_id = str(event['crawl_id'])
-    group_id = str(event['group_id'])
-    mdata = event['metadata']
-
-    with open(f"{main_dir}{crawl_id}/{group_id}", 'w') as f:
-        json.dump(mdata, f)
-    return None
-
-
-def hello_world(event):
-    import time
-    import os
-    time.sleep(1)
-    return f"Container Version: {os.environ['container_version']}"
+#
+#
+# # TODO: .put() data for HTTPS on Petrel.
+# # TODO: Move these functions to outside this file (like a dir of functions)
+#
+# def matio_test(event):
+#
+#     """
+#     Function
+#     :param event (dict) -- contains auth header and list of HTTP links to extractable files:
+#     :return metadata (dict) -- metadata as gotten from the materials_io library:
+#     """
+#     import io
+#     import os
+#     import sys
+#     import time
+#     import shutil
+#     import requests
+#     import tempfile
+#     import threading
+#
+#     from googleapiclient.discovery import build
+#     from googleapiclient.http import MediaIoBaseDownload
+#     from google_auth_oauthlib.flow import InstalledAppFlow
+#     from google.auth.transport.requests import Request
+#
+#     # return "imports working"
+#
+#     t0 = time.time()
+#
+#     try:
+#         sys.path.insert(1, '/')
+#         import xtract_matio_main
+#         from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
+#
+#     except Exception as e:
+#         return e
+#
+#     # A list of file paths
+#     all_families = event['inputs']
+#     https_bool = True
+#     dir_name = None
+#
+#     if https_bool:
+#         dir_name = tempfile.mkdtemp()
+#         os.chdir(dir_name)
+#
+#     # return "yo"
+#     def generate_drive_connection(creds):
+#         service = build('drive', 'v3', credentials=creds)
+#         return service
+#
+#     def get_https_file(file_path, headers, dir_name, file_id, family_id):
+#
+#         try:
+#             # file_path is https://link
+#             req = requests.get(file_path, headers=headers)
+#
+#         except Exception as e:
+#             try:
+#                 raise PetrelRetrievalError(f"Caught the following error when downloading from Petrel: {e}")
+#             except PetrelRetrievalError:
+#                 return RemoteExceptionWrapper(*sys.exc_info())
+#
+#         os.makedirs(f"{dir_name}/{family_id}", exist_ok=True)
+#         local_file_path = f"{dir_name}/{family_id}/{file_path.split('/')[-1]}"
+#
+#         # TODO: if response is 200...
+#         # TODO: IT IS POSSIBLE TO GET A CI LOGON HTML PAGE RETURNED HERE!!!
+#         with open(local_file_path, 'wb') as f:
+#             f.write(req.content)
+#
+#     thread_pool = []
+#     timeout = 60
+#
+#     if len(all_families) == 0:
+#         return "Received no file-group families. Returning!"
+#
+#     t_download_start = time.time()
+#     d_type = "GLOBUS"
+#     #return d_type
+#     # return d_type
+#
+#     if d_type is "GLOBUS":
+#         for family in all_families:
+#             for file_url in family['files']:
+#                 file_payload = family['files'][file_url]
+#
+#                 try:
+#                     try:
+#                         file_payload['headers']['Authorization'] = f"Bearer {file_payload['headers']['Petrel']}"
+#                         file_id = file_payload['file_id']
+#                         file_path = file_payload["url"]
+#                     except Exception as e:
+#                         raise PetrelRetrievalError(e)
+#                 except PetrelRetrievalError as e:
+#                     return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': str(e)}
+#
+#                 # TODO: Uncomment when working again.
+#                 download_thr = threading.Thread(target=get_https_file,
+#                                                 args=(file_path,
+#                                                       file_payload['headers'],
+#                                                       dir_name,
+#                                                       file_id,
+#                                                       family['family_id']))  # TODO: relax for families.
+#                 download_thr.start()
+#                 thread_pool.append(download_thr)
+#
+#         # Walk through the thread-pool until they've all completed.
+#         for thr in thread_pool:
+#             thr.join(timeout=timeout)
+#
+#             if thr.is_alive():
+#                 try:
+#                     raise HttpsDownloadTimeout(f"Download failed with timeout: {timeout}")
+#                 except HttpsDownloadTimeout:
+#                     return {'exception': RemoteExceptionWrapper(*sys.exc_info()), 'groups': 'todo-- add this back'}
+#
+#     elif d_type is "GDRIVE":
+#         creds = pickle.loads(event["gdrive_pkl"])[0]
+#         file_id = event["file_id"]
+#         # TODO: These DO NOT need to cascade...
+#         try:
+#             service = generate_drive_connection(creds)
+#         except Exception as e:
+#             return e
+#
+#         try:
+#             request = service.files().get_media(fileId=file_id)
+#         except Exception as e:
+#             return e
+#
+#         try:
+#             fh = io.FileIO(file_id, 'wb')
+#             downloader = MediaIoBaseDownload(fh, request)
+#         except Exception as e:
+#             return e
+#
+#         try:
+#
+#             done = False
+#             while done is False:
+#                 status, done = downloader.next_chunk()
+#                 print("Download %d%%." % int(status.progress() * 100))
+#         except Exception as e:
+#             return e
+#
+#         # TODO: Keep going right here.
+#         # TODO: for drive, might need to add this to get SIZE.
+#         # return os.stat(file_id).st_size
+#
+#     t_download_finish = time.time()
+#
+#
+#     return "Made it all the way here! "
+#
+#     # total_download_time = t_download_finish - t_download_start
+#     #
+#     # mat_mdata = None
+#     # family_metadata = {}
+#     # for family in all_families:
+#     #
+#     #     all_groups = family['groups']
+#     #
+#     #     mat_mdata = {}
+#     #     for group in all_groups:
+#     #         parser = all_groups[group]['parser']
+#     #         native_file_collection = all_groups[group]['files']
+#     #
+#     #         local_file_collection = []
+#     #         for file_item in native_file_collection:
+#     #             local_file_collection.append(dir_name + '/' + family['family_id'] + '/' + file_item.split('/')[-1])
+#     #
+#     #         all_items = []
+#     #         try:
+#     #             for item in local_file_collection:
+#     #                 all_items.append(item)
+#     #         except Exception as e:
+#     #             return e
+#     #
+#     #         mat_mdata[group] = {}
+#     #         try:
+#     #             new_mdata = xtract_matio_main.extract_matio(all_items, parser)
+#     #             mat_mdata[group][parser] = new_mdata
+#     #
+#     #         except Exception as e:
+#     #             try:
+#     #                 raise XtractError(f"Caught the following error trying to extract metadata: {e}")
+#     #             except XtractError:
+#     #                 return {'exception': RemoteExceptionWrapper(*sys.exc_info())}
+#     #                 # TODO: I think we want more returned here (filenames?).
+#     #     # return ("Made it here! ")
+#     #     family_metadata[family["family_id"]] = {'trans_time': total_download_time, "metadata": mat_mdata}
+#     #
+#     # # Don't be an animal -- clean up your mess!
+#     # shutil.rmtree(dir_name)
+#     # t1 = time.time()
+#     # # return "MADE IT HERE. "
+#     # return {'metadata': family_metadata, 'tot_time': t1-t0}
+#
+#
+# # TODO: Batch metadata saving requests (And store in different file).
+# def save_mdata(event):
+#
+#     import json
+#
+#     main_dir = event['dirname']
+#     crawl_id = str(event['crawl_id'])
+#     group_id = str(event['group_id'])
+#     mdata = event['metadata']
+#
+#     with open(f"{main_dir}{crawl_id}/{group_id}", 'w') as f:
+#         json.dump(mdata, f)
+#     return None
+#
+#
+# def hello_world(event):
+#     import time
+#     import os
+#     time.sleep(1)
+#     return f"Container Version: {os.environ['container_version']}"
