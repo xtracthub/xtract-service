@@ -1,14 +1,11 @@
 
+from extractors.extractor import Extractor
 
-from funcx.sdk.client import FuncXClient
-
-fxc = FuncXClient()
-
-location = '039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular'
-description = 'Xtract image types container'
-container_type = 'docker'
-name = "xtract/tabular"
-container_uuid = fxc.register_container(name, location, description, container_type)
+tab_extr = Extractor(extr_id=None,
+                     func_id=None,
+                     extr_name="xtract-tabular",
+                     store_type="ecr",
+                     store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
 
 
 def tabular_extract(event):
@@ -26,8 +23,6 @@ def tabular_extract(event):
 
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseDownload
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from google.auth.transport.requests import Request
 
     t0 = time.time()
     # from shutil import copyfile
@@ -90,8 +85,6 @@ def tabular_extract(event):
 
         tb = time.time()
 
-        # return "here???"
-
         try:
             new_mdata = xtract_tabular_main.extract_columnar_metadata(file_id)
         except Exception as e:
@@ -99,4 +92,10 @@ def tabular_extract(event):
 
     t1 = time.time()
     return {'metadata': new_mdata, 'tot_time': t1-t0, 'trans_time': tb-ta}
+
+
+tab_extr.set_extr_func(tabular_extract)
+
+print(tab_extr.extr_func("potato"))
+
 
