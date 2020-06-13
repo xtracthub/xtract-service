@@ -37,7 +37,10 @@ def tabular_extract(event):
 
     ta = time.time()
     downloader = GoogleDriveDownloader(auth_creds=creds)
-    downloader.fetch(fid=file_id, download_type="export", mimeType=mimeType)
+    if is_gdoc:
+        downloader.fetch(fid=file_id, download_type="export", mimeType=mimeType)
+    else:
+        downloader.fetch(fid=file_id, download_type="media")
     tb = time.time()
 
     file_paths = downloader.success_files
