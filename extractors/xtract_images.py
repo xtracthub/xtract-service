@@ -7,10 +7,10 @@ class ImageExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="???",
-                         extr_name="xtract-image",
+                         func_id="09afe12d-4a85-4cae-9be2-4f1b1f518360",
+                         extr_name="xtract-keyword",
                          store_type="ecr",
-                         store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
+                         store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-keyword:latest")
         super().set_extr_func(images_extract)
 
 

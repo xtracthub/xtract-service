@@ -19,7 +19,6 @@ def keyword_extract(event):
     import sys
     import time
 
-
     from xtract_sdk.downloaders.globus_https import GlobusHttpsDownloader
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
