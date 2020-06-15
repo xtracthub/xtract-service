@@ -1,747 +1,523 @@
 
+import os
+import json
 import time
-import psycopg2
-
+import boto3
+import logging
+import requests
+import threading
 
 from queue import Queue
-from files import FileObj
+from funcx.serialize import FuncXSerializer
 
+from utils.pg_utils import pg_conn
+from utils.fx_utils import serialize_fx_inputs
 
-from funcx.sdk.client import FuncXClient
-
-# TODO: Make a class that represents a group
-fxc = FuncXClient()
 
 class Orchestrator:
-
-    def __init__(self, directory, crawl_type, crawl_dict):
-        # TODO: Move much of this to config file.
-        self.crawl_dict = '/Users/tylerskluzacek/Desktop/result.json'  # TODO: Remove hardcode.
-        #self.endpoint_uuid = 'a92945a1-2778-4417-8cd1-4957bc35ce66'
-        self.endpoint_uuid = '3cc6d6ce-9a60-4559-bf21-1a3d2ce5da20'
-        self.globus_target_uuid = 'e38ee745-6d04-11e5-ba46-22000b92c6ec'
-        self.globus_https_base = "https://{}.e.globus.org/".format(self.globus_target_uuid)
-
-        self.counter = 0
-
-        ''' Init metadata_collection with k:v -> (str) file_uri : (dict) metadata'''
-        self.metadata_map = {}
-        self.active_extraction = set()  # Set of files currently in the extraction process.
-        self.max_concurrency = 4
-        self.total_files = 0  # Total number of files -- fully updated AFTER CRAWL
-
-        self.extraction_queues = {"sampler_starting": Queue(),
-                                  "sampler_completed": Queue(),
-                                  "unknown": Queue()}  # (dict) k:v -> (str) extractor_name : (Queue) work_queue.
-
-        self.trash_set = set()  # Set of files that have not returned valid metadata until after extraction
-        self.directory = directory
-        self.crawl_type = crawl_type
-        self.crawl_dict = crawl_dict
-
-    def orchestrate(self, crawl_file):
-        """ STEP 1: CRAWL user-provided directory """
-        crawl_dict = self.crawler()
-
-        for file_uri in crawl_dict:
-            file_obj = FileObj(file_uri, metadata=crawl_dict[file_uri], inflated=False)  # TODO: Check if file was deflated.
-            self.metadata_map[file_uri] = file_obj
-            self.total_files += 1
-            self.extraction_queues["sampler_starting"].put(file_obj)
-
-        """ STEP 2 :: SAMPLE each file by predicting on a few bytes of the file """
-        for file_obj in iter(self.extraction_queues["sampler_starting"].get(), None):
-            self.sampler(file_obj)
-
-        """ STEP 3 :: SEND OFF EXTRACTION TASKS -- funcX will do the container scheduling :) """
-        # STEP 3 :: Send the tasks to the appropriate queue.
-
-
-        print("Finished sending off tasks to appropriate extractors")
-
-    def get_url(self):
-        print("TODO.")
-
-    def get_native_client(self):
-        from fair_research_login import NativeClient
-        client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
-        tokens = client.login(
-            requested_scopes=['https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all'],
-            no_local_server=True, 
-            no_browser=True)
-        auth_token = tokens["petrel_https_server"]['access_token']
-        self.headers = {'Authorization': f'Bearer {auth_token}'}
-        # return headers
-
-        # TODO: REASSIGN/CLOSE TASKS THREAD
-
-    # TODO: Right now this is running on Cooley.
-    def crawler(self, crawl_type="POSIX"):
-        print("[TODO] Crawl UNIX directories")
-        print("[TODO] Crawl Globus directories")
-
-    def sampler_loop(self, orch, batch_size=1):
-        sampler_query = """ SELECT file_id, path FROM files WHERE cur_phase='CRAWLED' LIMIT {};"""
-        sampling_update = """UPDATE files SET cur_phase='SAMPLED', sample_type='{}', cur_task_id='{}', extract_time={}, transfer_time={}, total_time={} WHERE file_id={};"""
-
-        try:
-            conn = psycopg2.connect(
-        except Exception as e:
-            print("Cannot connect to database")
-            raise e
-        cur = conn.cursor()
-        existing_files = 0
-        old_task_ids = {}
-        task_ids = {}
-
-        while True:
-            total_size = 50 - existing_files
-            print("ATTEMPTING TO PULL DOWN {} FILES.".format(total_size))
-            cur.execute(sampler_query.format(total_size))
-            file_records = cur.fetchall()
-
-            print("Pulled down {} more file records!".format(len(file_records)))
-            counter = 0
-            path_list = []
-
-            for item in file_records:
-                file_id, raw_path = item
-                path_list.append(item)
-                counter += 1
-                if counter % batch_size == 0:
-                    # TODO: Never launching the last n jobs.
-                    print("Invoking batch!")
-                    task_id1 = orch.sampler(path_list)
-                    task_ids[task_id1] = file_id
-                    path_list = []
-                time.sleep(0.25)
-
-                if counter % 100 == 0:
-                    print(counter)
-            # Do checks for new results!
-            removable_task_ids = []
-
-            # Iterate over batches
-            print("Processing {} task ids!".format(len(task_ids)))
-            for id in task_ids:
-                status = fxc.get_task_status(id)
-                print(status)
-
-                if status['status'] == 'SUCCEEDED':
-                    for item in status['details']['result']['metadata']:
-                    # mdata = status['details']['result']['metadata'][0]
-                        # print(mdata)
-                        extract_time = item['extract time']
-                        transfer_time = status['details']['result']['trans_time']
-                        tot_time = status['details']['result']['tot_time']
-
-                        f_type = None
-                        for key in item['sampler']:
-                            f_type = item['sampler'][key]
-                            break
-                        update_query = sampling_update.format(f_type, id, extract_time, transfer_time, tot_time,
-                                                              item['file_id'])
-                        print(update_query)
-                        cur.execute(update_query)
-                    print("Committing to DB!")
-                    conn.commit()
-                    removable_task_ids.append(id)
-                elif status['status'] == 'FAILED':
-                    print("Fancy retry scenario. ****************")
-                    # time.sleep(10)
-            # Clean up the searchable dict
-            for id in removable_task_ids:
-                del task_ids[id]
-            # for id in old_task_ids:
-            #     if id in task_ids:
-            #         del task_ids[id]
-            old_task_ids = task_ids
-            existing_files = len(task_ids)*batch_size  # TODO: Not quite accurate in case batch isn't full.
-            print("restarting!")
-            time.sleep(1)
-
-    # TODO: Right now training this can't be run in PetrelKube.
-    def sampler(self, filepaths):
-        """ Sample files from the sampler_starting queue. """
-
-        sampler_func_id = 'c5432da1-4899-4639-aa95-7aeb159b55f4'
-
-        data = {'inputs': []}
-
-        for item in filepaths:
-
-            file_id, filepath = item
-
-            url = '{}{}'.format(self.globus_https_base, filepath.replace('//', '/'))
-            url = url.replace('/~/', '/')
-            url = url.replace('e.globus.org/', 'e.globus.org')
-
-            payload = {'url': url,
-                       'headers': self.headers, 'file_id': file_id}
-
-            data['inputs'].append(payload)
-
-        # print("DATA: {}".format(data))
-        task_id = fxc.run(data, self.endpoint_uuid, sampler_func_id, asynchronous=True, async_poll=20)
-
-        return task_id
-
-    def tabular_extract(self, filename=None):
-        # filename = "/~/MDF/mdf_connect/prod/data/binary_metallic_alloys_ab_initio_v1/mmc1.csv"
-
-        func_uuid = 'cd75cfe7-b4d0-4f16-bd0d-cc5d30b2ffa9'
-
-        # Creating the payload
-        # payload = {'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/binary_metallic_alloys_ab_initio_v1/mmc1.csv', 'headers': self.headers}
-
-        url = '{}{}'.format(self.globus_https_base, filename.replace('//', '/'))
-        url = url.replace('/~/', '/')
-        url = url.replace('e.globus.org/', 'e.globus.org')
-        print(url)
-        payload = {'url': url, 'headers': self.headers}
-        print("Payload: {}".format(payload))
-        # payload = {'url': 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/INCAR'}  # MDF
-        # payload = {'url': 'https://3a261574-3a83-11e8-b997-0ac6873fc732.e.globus.org/weather_2012.csv'}  # CDIAC
-        # print("Payload is {}".format(payload))
-        print("Sending payload to endpoint...")
-        res = fxc.run(payload, self.endpoint_uuid, func_uuid, asynchronous=True, async_poll=60)
-
-        # print("Waiting for result...")
-        # result = res.result()
-        return res
-
-        # TODO:  If preamble, then requeue for keyword w/ freetext_payload.
-
-
-    def keyword_extract(self, filepath=None, freetext_payload=None, prior_extractor=None):
-        func_uuid = '9a22f1e1-f7b1-476a-a6c2-42c7fd2eba1a'
-
-        # Creating the payload
-        payload = {'url': '{}{}'.format(self.globus_https_base, filepath),
-                   'headers': self.headers}
-
-        print("Payload is {}".format(payload))
-
-        res = fxc.run(payload, self.endpoint_uuid, func_uuid, asynchronous=True)
-
-        print("Waiting for result...")
-        result = res.result()
-        return result
-
-
-    def image_loop(self, orch):
-        images_query = """ SELECT file_id, path FROM files WHERE cur_phase NOT LIKE 'IMAGES%' and (extension='jpg' or extension='tif' or extension='tiff' or extension='png') LIMIT {};"""
-
-        images_intermed = """UPDATE files SET cur_phase='IMAGES0' WHERE file_id={};"""
-
-        images_update = """UPDATE files SET cur_phase='IMAGES1', cur_task_id='{}', metadata={}, downstream_time={}, transfer_time={} WHERE file_id={};"""
-
-        try:
-            conn = psycopg2.connect(
-        except Exception as e:
-            print("Cannot connect to database")
-            raise e
-
-        cur = conn.cursor()
-
-        existing_files = 0
-        old_task_ids = {}
-
-        task_ids = {}
-
-        while True:
-
-            total_size = 4000 - existing_files
-
-            print("ATTEMPTING TO PULL DOWN {} FILES.".format(total_size))
-
-            cur.execute(images_query.format(total_size))
-
-            file_records = cur.fetchall()
-
-            print("Pulled down {} more file records!".format(len(file_records)))
-
-            counter = 0
-
-            path_list = []
-
-            for item in file_records:
-                file_id, raw_path = item
-
-                path_list.append(item)
-
-
-                query = images_intermed.format(file_id)
-                cur.execute(query)
-
-                query = images_intermed.format(file_id)
-
-                counter += 1
-                if counter % batch_size == 0:
-                    # TODO: Never launching the last n jobs.
-                    print("Invoking batch!")
-                    task_id1 = orch.image_extract(path_list)
-
-                    task_ids[task_id1] = file_id
-                    path_list = []
-
-
-                    conn.commit()
-                time.sleep(0.1)
-
-                if counter % 100 == 0:
-                    print(counter)
-
-
-            # Do checks for new results!
-            removable_task_ids = []
-
-            # Iterate over batches
-
-            print("Processing {} task ids!".format(len(task_ids)))
-            for id in task_ids:
-
-                status = fxc.get_task_status(id)
-
-                print(status)
-                time.sleep(0.1)
-
-                if status['status'] == 'SUCCEEDED':
-
-                    if 'metadata' in status['details']['result']:
-                        for item in status['details']['result']['metadata']:
-
-                            # mdata = status['details']['result']['metadata'][0]
-
-                            # print(mdata)
-
-                            try:
-                                extract_time = item['extract time']
-                                transfer_time = item['trans_time']
-                                task_id = status['task_id']
-                                # tot_time = status['details']['result']['tot_time']
-
-                                # img_type = Json({'img_type': item['image-sort']['img_type']})
-
-                                # cur_task_id='{}', metadata={}, downstream_time={}, transfer_time={} WHERE file_id={}
-                                update_query = images_update.format(task_id, extract_time, transfer_time, item['file_id'])
-                                print(update_query)
-
-                                cur.execute(update_query)
-                            except:
-                                print("FAILURE!!!")
-                                # removable_task_ids.append(id)
-
-                        print("Committing to DB!")
-                        conn.commit()
-
-                        removable_task_ids.append(id)
-
-                elif status['status'] == 'FAILED':
-                    print("Fancy retry scenario. ****************")
-                    removable_task_ids.append(id)
-                    # time.sleep(10)
-
-            # Clean up the searchable dict
-            for id in removable_task_ids:
-                del task_ids[id]
-
-            # for id in old_task_ids:
-            #     if id in task_ids:
-            #         del task_ids[id]
-
-            old_task_ids = task_ids
-
-            existing_files = len(task_ids) * batch_size  # TODO: Not quite accurate in case batch isn't full.
-
-            print("restarting!")
-            time.sleep(20)
-
-    def image_extract(self, filepaths, prior_extractor=None):
-
-        func_uuid = "74fa1add-bb10-4726-9197-292a0ac97392"
-
-        data = {'inputs': []}
-
-        for item in filepaths:
-
-            file_id, filepath = item
-
-            url = '{}{}'.format(self.globus_https_base, filepath.replace('//', '/'))
-            url = url.replace('/~/', '/')
-            url = url.replace('e.globus.org/', 'e.globus.org')
-
-            payload = {'url': url,
-                    'headers': self.headers, 'file_id': file_id}
-
-            data['inputs'].append(payload)
-        
-        dlhub_endpoint = 'a92945a1-2778-4417-8cd1-4957bc35ce66'
-
-        if self.counter % 2 == 0:
-            endpoint_uuid = dlhub_endpoint
+    # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
+    def __init__(self, crawl_id, headers, funcx_eid,
+                 mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None, logging_level='debug', instance_id=None):
+
+        self.funcx_eid = funcx_eid
+        self.func_dict = {"image": "6ce9b5cf-1847-4339-b204-2db113034113",
+                          "tabular": "aa7c44ea-340f-4829-bcc6-6f9ad372f3d0",
+                          "text": "08cf53cd-e0a8-440c-bd1e-4003601a76c4"}
+
+        # self.image_func_id = "8274fe2f-a132-4a9e-b8e2-9ad891e997a1"
+        self.fx_ser = FuncXSerializer()
+        self.tabular_func_id = 0
+        self.bert_func_id = 0
+        self.keyword_func_id = 0
+
+        self.source_endpoint = source_eid
+        self.dest_endpoint = dest_eid
+        self.gdrive_token = gdrive_token
+
+        self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
+
+        self.max_active_families = 100
+        self.families_limit = 2
+        self.crawl_id = crawl_id
+
+        self.mdata_store_path = mdata_store_path
+
+        self.conn = pg_conn()
+        self.headers = headers
+        self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
+
+        if 'Petrel' in self.headers:
+            self.fx_headers['Petrel'] = self.headers['Petrel']
+
+        self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
+        self.post_url = 'https://dev.funcx.org/api/v1/submit'
+
+        self.logging_level = logging_level
+
+        self.logger = logging.getLogger(__name__)
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.DEBUG)
+        self.instance_id = instance_id
+
+        self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"
+        self.client = boto3.client('sqs',
+                                   aws_access_key_id=os.environ["aws_access"],
+                                   aws_secret_access_key=os.environ["aws_secret"], region_name='us-east-1')
+        print(f"Creating queue for crawl_id: {self.crawl_id}")
+        xtract_queue = self.client.create_queue(QueueName=f"xtract_{str(self.crawl_id)}")
+        validation_queue = self.client.create_queue(QueueName=f"validate_{str(self.crawl_id)}")
+
+        if xtract_queue["ResponseMetadata"]["HTTPStatusCode"] == 200 and \
+                validation_queue["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            self.xtract_queue_url = xtract_queue["QueueUrl"]
+            self.validation_queue_url = validation_queue["QueueUrl"]
         else:
-            endpoint_uuid = self.endpoint_uuid
+            raise ConnectionError("Received non-200 status from SQS!")
 
-        self.counter += 1
-        task_id = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True, async_poll=20)
+        response = self.client.get_queue_url(
+            QueueName=f'crawl_{self.crawl_id}',
+            # TODO: env variable
+            QueueOwnerAWSAccountId='576668000072'
+        )
 
-        # print("[TODO] Automatically make calls to map extractor.")
-        # print("[TODO] Send keywords to keyword extractor")
+        self.crawl_queue = response["QueueUrl"]
 
-        return task_id
+        # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
+        # TODO: And do it here in the init.
+
+    def pack_and_submit_map(self):
+
+        num_none = 0
+        num_tabular = 0
+        num_keyword = 0
+        num_images = 0
+        while True:
+            post_url = 'https://dev.funcx.org/api/v1/submit'
+            fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
+
+            #task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+
+            # TODO: fixed at 0.
+            # TODO: Remove GDrive cred from token.
+
+            family_list = self.get_next_families()
+
+            for family in family_list:
+                family = json.loads(family)
+
+                file_id = family["id"]
+                extractor = family["extractor"]
+                is_gdoc = True if 'google' in family["mimeType"] else False
+
+                if extractor == "text":
+                    num_keyword += 1
+                    func = self.func_dict["text"]
+                elif extractor == "images":
+                    num_images += 1
+                    func = self.func_dict["image"]
+                elif extractor == "tabular":
+                    num_tabular += 1
+                    func = self.func_dict["tabular"]
+                elif extractor == None:
+                    num_none += 1
+                    print("NoneType -- skipping! ")
+                    continue
+                else:
+                    print(extractor)
+                    raise ValueError
+
+                data = {'gdrive': self.gdrive_token[0], 'file_id': file_id, 'is_gdoc': is_gdoc, 'extension': family["extension"]}
+
+                res = requests.post(url=post_url,
+                                            headers=self.fx_headers,
+                                            json={'endpoint': fx_ep,
+                                                  'func': func,
+                                                  'payload': serialize_fx_inputs(
+                                                      event=data)})
+                # print(res.content)
+                if res.status_code == 200:
+                    task_uuid = json.loads(res.content)['task_uuid']
+                    self.task_dict["active"].put(task_uuid)
+                    print(f"Queue size: {self.task_dict['active'].qsize()}")
+
+            failed_counter = 0
+
+    def launch_poll(self):
+        print("POLLER IS STARTING!!!!")
+        po_thr = threading.Thread(target=self.poll_responses, args=())
+        po_thr.start()
 
 
-    def json_xml_extract(self, filepath):
-        func_uuid = "368dcef9-5eed-4caa-8eea-e1249e42b0ed"
-
-        data = {'inputs': []}
-
-        for item in filepaths:
-            file_id, filepath = item
-
-            url = '{}{}'.format(self.globus_https_base, filepath.replace('//', '/'))
-            url = url.replace('/~/', '/')
-            url = url.replace('e.globus.org/', 'e.globus.org')
-
-            payload = {'url': url,
-                       'headers': self.headers, 'file_id': file_id}
-
-            data['inputs'].append(payload)
-
-        dlhub_endpoint = 'a92945a1-2778-4417-8cd1-4957bc35ce66'
-
-        if self.counter % 2 == 0:
-            endpoint_uuid = dlhub_endpoint
-        else:
-            endpoint_uuid = self.endpoint_uuid
-
-        self.counter += 1
-        task_id = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True, async_poll=20)
-
-        return task_id
-
-    def netcdf_extract(self, filepath):
-        print("Extractor NetCDF files here")
-        print("Send freetext data to FREETEXT")
-
-    def maps_extract(filepath):
-        print("Extract from maps")
+            # while True:
+            #
+            #     if task_dict["active"].empty():
+            #         print("Active task queue empty... sleeping... ")
+            #         time.sleep(0.5)
+            #         break  # This should jump out to main_loop
+            #
+            #     cur_tid = task_dict["active"].get()
+            #     print(cur_tid)
+            #     status_thing = requests.get(get_url.format(cur_tid), headers=self.fx_headers).json()
+            #
+            #     if 'result' in status_thing:
+            #         result = fx_ser.deserialize(status_thing['result'])
+            #         print(f"Result: {result}")
+            #
+            #     elif 'exception' in status_thing:
+            #         print(f"Exception: {fx_ser.deserialize(status_thing['exception'])}")
+            #         # break
+            #     else:
+            #         task_dict["active"].put(cur_tid)
 
 
-    def materials_loop(self, orch):
-        materials_query = """ SELECT file_id, path FROM files WHERE cur_phase NOT LIKE 'MATERIALS%' and (extension='xyz') LIMIT {};"""
-        materials_intermed = """UPDATE files SET cur_phase='MATERIALS0' WHERE file_id={};"""
-        materials_update = """UPDATE files SET cur_phase='MATERIALS-XYZ1', cur_task_id='{}', downstream_time={}, transfer_time={} WHERE file_id={};"""
+    # TODO: Smarter batching that takes into account file size.
+    def get_next_families(self):
+        while True:
+            try:
+                # Step 1. Get ceiling(batch_size/10) messages down from queue.
+                t_families_get_start = time.time()
+                sqs_response = self.client.receive_message(
+                    QueueUrl=self.crawl_queue,
+                    MaxNumberOfMessages=10,
+                    WaitTimeSeconds=20)
 
-        try:
-            conn = psycopg2.connect(
-        except Exception as e:
-            print("Cannot connect to database")
-            raise e
+                family_list = []
+                del_list = []
+                for message in sqs_response["Messages"]:
+                    message_body = message["Body"]
 
-        cur = conn.cursor()
+                    family_list.append(message_body)
 
-        existing_files = 0
-        old_task_ids = {}
+                    del_list.append({'ReceiptHandle': message["ReceiptHandle"],
+                                     'Id': message["MessageId"]})
 
-        task_ids = {}
+                # Step 2. Delete the messages from SQS.
+                if len(del_list) > 0:
+                    response = self.client.delete_message_batch(
+                        QueueUrl=self.crawl_queue,
+                        Entries=del_list)
+                    # TODO: Do the 200 check. WEird data format.
+                    # if response["HTTPStatusCode"] is not 200:
+                    #     raise ConnectionError("Could not delete messages from queue!")
+                #continue
+                time.sleep(0.5)
+                return family_list
+            except:
+                ConnectionError("Could not get new families! ")
 
+    def launch_extract(self):
+
+        max_threads = 1
+
+        for i in range(0, max_threads):
+            ex_thr = threading.Thread(target=self.pack_and_submit_map(), args=())
+            ex_thr.start()
+
+    def poll_responses(self):
+        success_returns = 0
+        failed_returns = 0
+
+        total_success = 0
+
+        success_keyword = 0
+        success_tabular = 0
+        success_images = 0
+
+        tot_keyword_trans = 0
+        tot_images_trans = 0
+        tot_tabular_trans = 0
+
+        tot_keyword_tot = 0
+        tot_images_tot = 0
+        tot_tabular_tot = 0
+
+        mod_not_found = 0
+        poll_start = time.time()
         while True:
 
-            total_size = 000 - existing_files
+            if success_keyword > 0:
+                print("Average Keyword Stats")
+                print(f"Transfer: {tot_keyword_trans/success_keyword} | Total: {tot_keyword_tot/success_keyword}")
 
-            print("ATTEMPTING TO PULL DOWN {} FILES.".format(total_size))
-
-            cur.execute(materials_query.format(total_size))
-
-            file_records = cur.fetchall()
-
-            print("Pulled down {} more file records!".format(len(file_records)))
-
-            counter = 0
-
-            path_list = []
-
-            for item in file_records:
-                file_id, raw_path = item
-
-                path_list.append(item)
-
-                query = materials_intermed.format(file_id)
-                cur.execute(query)
-
-                query = materials_intermed.format(file_id)
-
-                counter += 1
-                if counter % batch_size == 0:
-                    # TODO: Never launching the last n jobs.
-                    print("Invoking batch!")
-                    task_id1 = orch.materials_extract(path_list)
-                    task_ids[task_id1] = file_id
-                    path_list = []
-                # time.sleep(0.5)
-
-                if counter % 100 == 0:
-                    print(counter)
-
-            # Do checks for new results!
-            removable_task_ids = []
-
-            # Iterate over batches
-            print("Processing {} task ids!".format(len(task_ids)))
-            for id in task_ids:
-
-                status = fxc.get_task_status(id)
-
-                print(status)
-                time.sleep(0.1)
-
-                if status['status'] == 'SUCCEEDED':
-
-                    if 'metadata' in status['details']['result']:
-                        for item in status['details']['result']['metadata']:
-
-                            # mdata = status['details']['result']['metadata'][0]
-
-                            # print(mdata)
-
-                            try:
-                                extract_time = item['extract time']
-                                transfer_time = item['trans_time']
-                                task_id = status['task_id']
-                                # tot_time = status['details']['result']['tot_time']
-
-                                # img_type = Json({'img_type': item['image-sort']['img_type']})
-
-                                # cur_task_id='{}', metadata={}, downstream_time={}, transfer_time={} WHERE file_id={}
-                                update_query = materials_update.format(task_id, extract_time, transfer_time,
-                                                                       item['file_id'])
-                                print(update_query)
-
-                                cur.execute(update_query)
-                            except:
-                                print("FAILURE!!!")
-                                # removable_task_ids.append(id)
-
-                        print("Committing to DB!")
-                        conn.commit()
-
-                        removable_task_ids.append(id)
-
-                elif status['status'] == 'FAILED':
-                    print("Fancy retry scenario. ****************")
-                    removable_task_ids.append(id)
-                    # time.sleep(10)
-
-            # Clean up the searchable dict
-            for id in removable_task_ids:
-                del task_ids[id]
-
-            # for id in old_task_ids:
-            #     if id in task_ids:
-            #         del task_ids[id]
-
-            old_task_ids = task_ids
-
-            existing_files = len(task_ids) * batch_size  # TODO: Not quite accurate in case batch isn't full.
-
-            print("restarting!")
-            time.sleep(30)
-
-
-    def materials_extract(self, filepaths, group_logic='file'):
-        if group_logic == 'file':
-            func_uuid = '4925e5bc-59f0-4b14-b655-e771fe74f603'
-
-            data = {'inputs': []}
-
-            for item in filepaths:
-
-                file_id, filepath = item
-
-                # print(filepath)
-                url = '{}{}'.format(self.globus_https_base, filepath.replace('//', '/'))
-                url = url.replace('/~/', '/')
-                url = url.replace('e.globus.org/', 'e.globus.org')
-
-                payload = {'url': url,
-                           'headers': self.headers, 'file_id': file_id}
-
-                data['inputs'].append(payload)
-
-            if self.counter % 2 == 0:
-                endpoint_uuid = self.endpoint_uuid
-            else:
-                endpoint_uuid = "a92945a1-2778-4417-8cd1-4957bc35ce66"
-            self.counter += 1
-
-            print("DATA: {}".format(data))
-            task_id = fxc.run(data, endpoint_uuid, func_uuid, asynchronous=True, async_poll=20)
-            # Note that this will change each time the function is re-registered.
-            # TODO: MAKE ISSUE: [CACHE] Database keeping track of function registration changes.
-
-            # payload = {'url': '{}{}'.format(self.globus_https_base, uri_path),
-            #            'headers': self.headers}
-            # print("Payload is {}".format(payload))
-            #
-            # res = fxc.run(payload, self.endpoint_uuid, func_uuid, asynchronous=True)
-            #
-            # print("Waiting for result...")
-            # # result = res.result()
-            return task_id
-
-
-if __name__ == "__main__":
-
-    orch = Orchestrator()
-
-    # Get a new token.
-    orch.get_native_client()
-
-    t0 = time.time()
-    # print(orch.tabular_extract('bumbum'))
-    # print(orch.keyword_extract('/MDF/mdf_connect/prod//data//mdr_item_1505_v2//iprPy_v0_6.tar//iprPy_v0_6//iprPy//records//LAMMPS-potential//README.md'))
-
-    task_ids = []
-
-    import json
-
-    # with open('/Users/tylerskluzacek/Desktop/result.json', 'r') as f:
-    #
-    #     crawl_data = json.load(f)
-
-    i = 0
-
-    # Images here!
-    batch_size = 1
-
-    max_files = 25
-    filepaths = []
-
-    file_set = set()  # helper to ensure we're not sending duplicate filepaths.
-
-    # orch.sampler_loop(orch, batch_size=batch_size)
-
-    jsonxml_query = """ SELECT file_id, path FROM files WHERE cur_phase NOT LIKE 'JSONXML%' and (extension='json' or extension='xml') LIMIT {};"""
-    jsonxml_intermed = """UPDATE files SET cur_phase='JSONXML0' WHERE file_id={};"""
-    jsonxml_update = """UPDATE files SET cur_phase='JSONXML1', cur_task_id='{}', downstream_time={}, transfer_time={}, extract_time={} WHERE file_id={};"""
-
-    try:
-        conn = psycopg2.connect(
-    except Exception as e:
-        print("Cannot connect to database")
-        raise e
-
-    cur = conn.cursor()
-
-    existing_files = 0
-    old_task_ids = {}
-
-    task_ids = {}
-
-    while True:
-
-        total_size = 100 - existing_files
-
-        print("ATTEMPTING TO PULL DOWN {} FILES.".format(total_size))
-
-        cur.execute(jsonxml_query.format(total_size))
-
-        file_records = cur.fetchall()
-
-        print("Pulled down {} more file records!".format(len(file_records)))
-
-        counter = 0
-
-        path_list = []
-
-        for item in file_records:
-            file_id, raw_path = item
-
-            path_list.append(item)
-
-            query = jsonxml_intermed.format(file_id)
-            cur.execute(query)
-
-            # query = jsonxml_intermed.format(file_id)
-
-            counter += 1
-            if counter % batch_size == 0:
-                # TODO: Never launching the last n jobs.
-                print("Invoking batch!")
-                task_id1 = orch.json_xml_extract(path_list)
-                task_ids[task_id1] = file_id
-                path_list = []
-            # time.sleep(0.5)
-
-            if counter % 100 == 0:
-                print(counter)
-
-        # Do checks for new results!
-        removable_task_ids = []
-
-        # Iterate over batches
-        print("Processing {} task ids!".format(len(task_ids)))
-        for id in task_ids:
-
-            status = fxc.get_task_status(id)
-
-            print(status)
-            time.sleep(0.1)
-
-            if status['status'] == 'SUCCEEDED':
-
-                # print(status)
-
-                if status['details']['result']:
-                    for item in status['details']['result']['metadata']:
-
-                        # mdata = status['details']['result']['metadata'][0]
-
-                        # print(mdata)
-
-                        #try:
-                        extract_time = item['extract time']
-                        transfer_time = item['trans_time']
-                        task_id = status['task_id']
-                        # tot_time = status['details']['result']['tot_time']
-
-                        # img_type = Json({'img_type': item['image-sort']['img_type']})
-
-                        # cur_task_id='{}', metadata={}, downstream_time={}, transfer_time={} WHERE file_id={}
-                        update_query = jsonxml_update.format(task_id, extract_time, transfer_time, item['file_id'])
-                        print(update_query)
-
-                        cur.execute(update_query)
-                        # except:
-                        #     print("FAILURE!!!")
-                        #     removable_task_ids.append(id)
-
-                    print("Committing to DB!")
-                    conn.commit()
-
-                removable_task_ids.append(id)
-
-            elif status['status'] == 'FAILED':
-                print("Fancy retry scenario. ****************")
-                removable_task_ids.append(id)
-                # time.sleep(10)
-
-        # Clean up the searchable dict
-        for id in removable_task_ids:
-            del task_ids[id]
-
-        # for id in old_task_ids:
-        #     if id in task_ids:
-        #         del task_ids[id]
-
-        old_task_ids = task_ids
-
-        existing_files = len(task_ids) * batch_size  # TODO: Not quite accurate in case batch isn't full.
-
-        print("restarting!")
-        time.sleep(3)
-
-
-    # print(t1-t0)
+            if success_images > 0:
+                print("Average Image Stats")
+                print(f"Transfer: {tot_images_trans / success_images} | Total: {tot_images_tot / success_images}")
+
+            if success_tabular >0:
+                print("Average Tabular Stats")
+                print(f"Transfer: {tot_tabular_trans / success_tabular} | Total: {tot_tabular_tot / success_tabular}")
+
+            if self.task_dict["active"].empty():
+                self.logger.debug("No live IDs... sleeping...")
+                p_empty = time.time()
+                print(p_empty)
+                time.sleep(2.5)
+                continue
+
+            num_elem = self.task_dict["active"].qsize()
+            for _ in range(0, num_elem):
+                ex_id = self.task_dict["active"].get()
+
+                # TODO: Switch this to batch gets.
+                status_thing = requests.get(self.get_url.format(ex_id), headers=self.fx_headers)
+
+                try:
+                    status_thing = json.loads(status_thing.content)
+                except json.decoder.JSONDecodeError as e:
+                    self.logger.error(e)
+                    self.logger.error("Status unloadable. Marking as failed.")
+                    continue
+                    # TODO. What exactly SHOULD I do?
+
+                self.logger.debug(f"Status: {status_thing}")
+
+                if "result" in status_thing:
+                    try:
+                        res = self.fx_ser.deserialize(status_thing['result'])
+                    except ModuleNotFoundError as e:
+                        mod_not_found +=1
+                        print(e)
+                        print(f"NUM MOD NOT FOUND: {mod_not_found}")
+                        continue
+                    success_returns += 1
+                    self.logger.debug(f"Success Counter: {success_returns}")
+                    self.logger.debug(f"Failure Counter: {failed_returns}")
+                    self.logger.debug(f"Received response: {res}")
+
+                    # TODO: Still need to return group_ids so we can mark accordingly...
+                    if type(res) is not dict:
+                        continue
+
+                    print("Do we ever make it down here???")
+
+                    print("metadata" in res)
+                    if "metadata" in res:
+                        print("WAHOOOOOOOOOOOOO")
+
+
+
+                        if "tabular" in res["metadata"]:
+                            if res["metadata"]["tabular"] != {}:
+                                 print("GOOD TABULAR!!!")
+                                 tot_tabular_trans += res["trans_time"]
+                                 tot_tabular_tot += res["tot_time"]
+
+                                 success_tabular += 1
+                                 total_success += 1
+
+
+                        elif "keywords" in res["metadata"]:
+                            if res["metadata"]["keywords"] is not None and res["metadata"]["keywords"] != {}:
+                                  print("GOOD KEYWORD!!!")
+                                  tot_keyword_trans += res["trans_time"]
+                                  tot_keyword_tot += res["tot_time"]
+
+                                  success_keyword += 1
+                                  total_success += 1
+
+                        elif "image-sort" in res["metadata"]:
+                            if res["metadata"]["image-sort"] != {}:
+                                print("GOOD IMAGES!!!")
+                                tot_images_trans += res["trans_time"]
+                                tot_images_tot += res["tot_time"]
+                                success_images += 1
+                                total_success += 1
+
+                    else:
+                        print("else")
+                        print(f"Here's the res: {res}")
+
+                        # group_coll = res["metadata"][fam_id]["metadata"]
+                        # trans_time = res["metadata"][fam_id]["metadata"]
+
+
+
+                else:
+                    self.task_dict["active"].put(ex_id)
+
+
+#
+#     def pack_and_submit_map(self, data):
+#
+#         # extractor_type = data["extractor"]
+#         # print("IN PACK_AND_SUBMIT")
+#         # print(data)
+#         # extractor_type = data["extractor"]
+#         # print(extractor_type)
+#         # print(data)
+#         # print("HERE'S THE DATA")
+#         # data = serialize_fx_inputs(data)
+#         # print("HERE GOES ROUND 2!!!")
+#         # data = serialize_fx_inputs(data)
+#         #print(data)
+#
+#         # data2 = pickle.dumps(data[0])
+#         # exit()
+#
+#         fn_id = "0671c0ef-d9d4-4382-89f1-6f4e56f45720"
+#         fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
+#         post_url = 'https://dev.funcx.org/api/v1/submit'
+#
+#         headers = {'Authorization': 'Bearer AgK8Dkvx90XY5qX2Vajxn0boaoedlOyJaXbVvmWjnaoybo3QlMieCQz48e67PydOVmpke1734kkb8vC1NMymVu7w3n', 'Transfer': 'Ag8496kzod33gmepjDNXVxNYVP2wkJeYO1rnVqpjgnyEPXxa15I8Cv9wnGGQaxbed4YmXVYBKD9wyKt7KPgNvcoqlv', 'FuncX': 'AgK8Dkvx90XY5qX2Vajxn0boaoedlOyJaXbVvmWjnaoybo3QlMieCQz48e67PydOVmpke1734kkb8vC1NMymVu7w3n', 'Petrel': 'AgmJJ674z4wEvj1o4Jmwar78kDj2QrkdVxaKkeaDD6pgkEJjlyH8C0zbkEvq3GKWgykEydwGGJG1qVC8rnE7XHgGEJ'}
+#         t_launch_times = {}
+#         task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+#
+#         data = {
+#             'gdrive_pkl': b'\x80\x03cgoogle.oauth2.credentials\nCredentials\nq\x00)\x81q\x01}q\x02(X\x05\x00\x00\x00tokenq\x03X\xab\x00\x00\x00ya29.a0AfH6SMDkmvH9GI9EL6eKYaQo5OUF4c9Um3oIqgel5IN-Fc9nJqIbke9PTGPc3BuJvWhSuKuWT9NnXZmy9PIN1xMi7rkhCH_gY8bQttlPUEkBJ7HoKi_xPj1nU_pd3qQMnQvyV7oi_CeAaf_LTBrsK22x--WK7wA5cbjFq\x04X\x06\x00\x00\x00expiryq\x05cdatetime\ndatetime\nq\x06C\n\x07\xe4\x06\x08\x152\x1f\x08\x89\x05q\x07\x85q\x08Rq\tX\x0e\x00\x00\x00_refresh_tokenq\nXg\x00\x00\x001//0fYtW4N1qkLF2CgYIARAAGA8SNwF-L9Ir8QaekPkzMwhqN8orPQxeV_ayzLVwFmIHDsW4fmVRU_pj2zJZew1j3dqSY_XywTP_S3gq\x0bX\t\x00\x00\x00_id_tokenq\x0cNX\x07\x00\x00\x00_scopesq\r]q\x0e(X7\x00\x00\x00https://www.googleapis.com/auth/drive.metadata.readonlyq\x0fX%\x00\x00\x00https://www.googleapis.com/auth/driveq\x10eX\n\x00\x00\x00_token_uriq\x11X#\x00\x00\x00https://oauth2.googleapis.com/tokenq\x12X\n\x00\x00\x00_client_idq\x13XH\x00\x00\x00364500245041-r1eebsermd1qp1qo68a3qp09hhpc5dfi.apps.googleusercontent.comq\x14X\x0e\x00\x00\x00_client_secretq\x15X\x18\x00\x00\x00XMGaOYAeBxLz9ZWvsVQCvWtkq\x16X\x11\x00\x00\x00_quota_project_idq\x17NubN\x86q\x18.',
+#             'file_id': '1zAJJy4bFQ2ZANV7W3iv7WdpZWRBp8iEN'}
+#
+#         res = requests.post(url=post_url,
+#                             headers=headers,
+#                             json={'endpoint': fx_ep,
+#                                   'func': fn_id,
+#                                   'payload': serialize_fx_inputs(
+#                                       event=data)
+#                                   }
+#                             )
+#
+#         print(res.content)
+#         if res.status_code == 200:
+#             task_uuid = json.loads(res.content)['task_uuid']
+#             task_dict["active"].put(task_uuid)
+#             t_launch_times[task_uuid] = time.time()
+#
+#
+#         # print(pack_map)
+#         # print(f"Length of pack_map (from above): {len(pack_map)}")
+#         # for item in pack_map:
+#         #     self.task_dict["active"].put(item)
+#
+#         if res.status_code == 200:
+#             task_uuid = json.loads(res.content)['task_uuid']
+#             print("TASK ID!")
+#             print(task_uuid)
+#             self.task_dict["active"].put(task_uuid)
+#         exit()
+#
+#     def send_files(self):
+#         # Just keep looping in case something comes up in crawl.
+#         while True:
+#             data = {'inputs': [], "transfer_token": self.headers["Transfer"], "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec', "dest_ep": "1adf6602-3e50-11ea-b965-0e16720bb42f"}
+#
+#             # TODO: should be, like, get families (and those families can have groups in them)
+#             # TODO: SHOULD package the exact same way as the family-test example.
+#
+#             families = self.get_next_families()
+#
+#             funcx_fam_ship_list = []
+#
+#             print(len(families))
+#             print(type(families))
+#
+#             for family in families:
+#
+#                 family = json.loads(family)
+#
+#                 # TODO: In the case of Google Drive (should do on crawler-side)
+#                 if 'family_id' not in family:
+#
+#                     family['family_id'] = str(uuid4())
+#
+#                 fid = family["family_id"]
+#                 logging.info(f"Processing family ID: {fid}")
+#
+#                 fam_dict = {"family_id": fid, "files": {}, "groups": {}}
+#
+#                 # TODO: special wrapping for gdrive again.
+#                 if not 'groups' in family:
+#                     family["groups"] = {}
+#
+#                     print("ITEM AND FAMILY")
+#                     print(family)
+#
+#                     group_id = str(uuid4())
+#                     family["groups"][group_id] = family
+#                     family["groups"][group_id]["parser"] = family["extractor"]
+#                     family["groups"][group_id]["files"] = [family["id"]]
+#
+#                 for group in family["groups"]:
+#
+#                     gid = group
+#                     gr = family["groups"][group]
+#                     parser = gr["parser"]
+#                     print(parser)
+#                     files = gr["files"]
+#
+#                     self.logger.debug(f"Processing GID: {gid}")
+#
+#                     group = {'group_id': gid, 'files': [], 'parser': parser}
+#
+#                     # Take all of the files and append them to our payload.
+#                     # TODO: There is no longer 'old_mdata'.
+#
+#                     # TODO: Bring this all back for Globus
+#                     # for f_obj in files:
+#                     #     id_count = 0
+#                     #
+#                     #     # Keep matching here to families.
+#                     #     # TODO: Uncomment for Petrel
+#                     #     # TODO: Allow endpoint_id to be a URL.
+#                     #     # file_url = f'https://{self.source_endpoint}.e.globus.org{f_obj}'
+#                     #     file_url = f'https://data.materialsdatafacility.org{f_obj}'
+#                     #     payload = {
+#                     #         'url': file_url,
+#                     #         'headers': self.fx_headers,
+#                     #         'file_id': id_count}
+#                     #     id_count += 1
+#                     #
+#                     #     if file_url not in fam_dict['files']:
+#                     #         fam_dict['files'][file_url] = payload
+#                     #
+#                     #     group["files"].append(file_url)
+#                     #     data["transfer_token"] = self.headers['Transfer']
+#
+#                     #### TODO: EVERYTHING IN THIS BOX IS GOOGLE DRIVE REQUEST CONSTRUCTION ZONE ####
+#
+#                     for filename in family["groups"][gid]["files"]:
+#                         print(filename)
+#
+#                     print("HOORAY!")
+#                     # exit()
+#
+#                     # TODO: I should need these lines when not HTTPS!
+#                     # data["source_endpoint"] = self.source_endpoint
+#                     # data["dest_endpoint"] = self.dest_endpoint
+#                     ###################################################
+#
+#                     fam_dict["groups"][gid] = group
+#                     # data["inputs"].append(fam_dict)
+#
+#                     # TODO: if GDRIIVE
+#                 data["inputs"] = []
+#                 data["file_id"] = family["id"]
+#                 data["gdrive_pkl"] = pickle.dumps((self.gdrive_token, None))
+#                 data["extractor"] = family["extractor"]
+#                 funcx_fam_ship_list.append(data)
+#
+#
+#             print(f"Length of family shipping list: {len(funcx_fam_ship_list)}")
+#             # TODO: What's the failure case here?
+#             self.pack_and_submit_map(funcx_fam_ship_list)
+#
+#             print("EXITED PACK AND SUBMIT")
+#
+#             while True:
+#                 if self.task_dict["active"].qsize() < self.max_active_families:
+#                     print("BREAKING")
+#                     break
+#                 else:
+#                     print(self.task_dict["active"].qsize())
+#                     print("SPINNING IN PLACE!")
+#                     time.sleep(3)
+#                     pass
+#
+
+#
+#     def launch_poll(self):
+#         po_thr = threading.Thread(target=self.poll_responses, args=())
+#         po_thr.start()
+# #
