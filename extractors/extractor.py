@@ -1,8 +1,7 @@
 
-from abc import ABCMeta, abstractmethod
-import requests
+from abc import ABCMeta
 from queue import Queue
-from extractors.utils.fx_utils import invoke_solo_function
+from utils.fx_utils import invoke_solo_function
 
 
 class Extractor(metaclass=ABCMeta):
@@ -52,4 +51,3 @@ class Extractor(metaclass=ABCMeta):
         print(f"The function has been updated! "
               f"Please copy/paste the following code into {self.func_id} function class:\n")
         print(self.func_id)
-

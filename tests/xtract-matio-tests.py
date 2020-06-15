@@ -1,5 +1,5 @@
 
-from container_lib.xtract_matio import MatioExtractor
+from extractors.xtract_matio import MatioExtractor
 
 from fair_research_login import NativeClient
 
