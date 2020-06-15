@@ -10,8 +10,7 @@ from datetime import datetime, timedelta, timezone
 from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
-from container_lib.xtract_matio import MatioExtractor
-# from container_lib.xtract_matio import send_one_file
+from orchestrator import Orchestrator
 
 import pickle
 from uuid import uuid4
@@ -128,6 +127,7 @@ def get_cr_status():
 
     return resp
 
+
 @application.route('/login/callback', methods=['GET', 'POST'])
 def callback():
     return "Hello"
@@ -139,10 +139,6 @@ def extract_mdata():
     r = request.data
     data = pickle.loads(r)
 
-    print(data)
-    # return "salad"
-    # exit()
-
     crawl_id = data["crawl_id"]
     headers = json.loads(data["headers"])
     funcx_eid = data["funcx_eid"]
@@ -152,27 +148,20 @@ def extract_mdata():
     gdrive_token = data["gdrive_pkl"]
 
     # TODO: Have multiple send_files and
-    mex = MatioExtractor(crawl_id=crawl_id,
-                         headers=headers,
-                         funcx_eid=funcx_eid,
-                         source_eid=source_eid,
-                         dest_eid =dest_eid,
-                         mdata_store_path=mdata_store_path,
-                         gdrive_token=gdrive_token
-                         )
+    orch = Orchestrator(crawl_id=crawl_id,
+                        headers=headers,
+                        funcx_eid=funcx_eid,
+                        source_eid=source_eid,
+                        dest_eid =dest_eid,
+                        mdata_store_path=mdata_store_path,
+                        gdrive_token=gdrive_token
+                        )
 
     print("POLLING RESPONSES...")
-    mex.launch_poll()
+    orch.launch_poll()
 
     print("SENDING FILES...")
-    mex.launch_extract()
-
-
-    #mex.pack_and_submit_map()
-    # time.sleep(1)
-
-
-
+    orch.launch_extract()
 
     # TODO: Shouldn't this extract_id be stored somewhere? 
     extract_id = str(uuid4())
