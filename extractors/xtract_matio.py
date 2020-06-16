@@ -10,7 +10,7 @@ class MatioExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="?",
+                         func_id="dcffea71-cf3d-4c01-9c42-06c04576fea5",
                          extr_name="xtract-matio",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest")
@@ -40,7 +40,13 @@ class MatioExtractor(Extractor):
         headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token,
                    'Petrel': mdf_token}
 
-        family = {"family_id": "fam_id_0", "files": file_ls, "headers": headers, "groups": [{"group_id": "gid_0", "parser": "dft", "files": file_ls}]}
+        #family = {"family_id": "fam_id_0", "files": file_ls, "headers": headers, "groups": [{"group_id": "gid_0", "parser": "dft", "files": file_ls}]}
+        family = {'family_id': '3450d3f3-0fe2-4d3c-bc66-e3b59a45a27d', 'files': {
+            '/mdf_open/tsopanidis_wha_amaps_v1.1/Activation Maps/Activation Maps for the WHA Dataset/A_102_28.png': {
+                'physical': {'size': 422059, 'extension': 'png', 'path_type': 'globus'}}}, 'groups': [
+            {'group_id': '3d62d5e7-bd08-4302-a538-08d6a46ac265', 'parser': 'image', 'files': [
+                '/mdf_open/tsopanidis_wha_amaps_v1.1/Activation Maps/Activation Maps for the WHA Dataset/A_102_28.png']}],
+         'extractor': 'matio', 'headers': headers, 'base_url': test_base_url}
 
         families = {"families": [family]}
 
@@ -96,11 +102,18 @@ def matio_extract(event):
         family_id = family["family_id"]
         fam_files = family["files"]
         headers = family["headers"]
+        base_url = family["base_url"]
+
+        # return fam_files
         for filename in fam_files:
+
+            filename = base_url + filename
             local_filename = filename.split('/')[-1]
+
             new_path = os.path.join(family_id, local_filename)
             filename_to_path_map[filename] = new_path
             batch_thruple = (filename, new_path, headers)
+            # return batch_thruple
             batch_thruple_ls.append(batch_thruple)
             file_counter += 1
 
@@ -109,16 +122,20 @@ def matio_extract(event):
     downloader.batch_fetch(batch_thruple_ls)
     down_end_t = time.time()
 
+    # return downloader.success_files
+
     # This extracts the metadata for each group in each family.
     all_family_mdata = []
     for family in all_families:
         family_mdata = []
         family_id = family["family_id"]
+        base_url = family["base_url"]
         for group in family["groups"]:
             gid = group["group_id"]
             parser = group["parser"]
             actual_group_paths = []
             for filename in group["files"]:
+                filename = base_url + filename
                 actual_group_paths.append(filename_to_path_map[filename])
             extraction_start_t = time.time()
             new_mdata = extract_matio(paths=actual_group_paths, parser=parser)
@@ -129,6 +146,10 @@ def matio_extract(event):
 
         family_entry = {"family_id": family_id, "mdata": family_mdata}
         all_family_mdata.append(family_entry)
+
+        # return downloader.success_files
+        # TODO: throw earlier if download failed.
+        # TODO 2: Xtract-sdk needs to throw error on failed download.
         shutil.rmtree(family_id)  # Cleanup the clutter -- will not need file again since family includes all groups
     t1 = time.time()
 
@@ -138,8 +159,8 @@ def matio_extract(event):
             "total_time": t1 - t0
             }
 
-
-miox = MatioExtractor()
-func_id = miox.register_function()
-miox.test_matio()
+# #
+# miox = MatioExtractor()
+# func_id = miox.register_function()
+# miox.test_matio()
 

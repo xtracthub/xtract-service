@@ -13,6 +13,8 @@ from funcx.serialize import FuncXSerializer
 from utils.pg_utils import pg_conn
 from utils.fx_utils import serialize_fx_inputs
 
+from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
+
 
 class Orchestrator:
     # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
@@ -20,15 +22,13 @@ class Orchestrator:
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None, logging_level='debug', instance_id=None):
 
         self.funcx_eid = funcx_eid
-        self.func_dict = {"image": "6ce9b5cf-1847-4339-b204-2db113034113",
-                          "tabular": "aa7c44ea-340f-4829-bcc6-6f9ad372f3d0",
-                          "text": "08cf53cd-e0a8-440c-bd1e-4003601a76c4"}
+        self.func_dict = {"image": xtract_images.ImageExtractor(),
+                          "tabular": xtract_tabular.TabularExtractor(),
+                          "text": xtract_keyword.KeywordExtractor(),
+                          "matio": xtract_matio.MatioExtractor()}
 
         # self.image_func_id = "8274fe2f-a132-4a9e-b8e2-9ad891e997a1"
         self.fx_ser = FuncXSerializer()
-        self.tabular_func_id = 0
-        self.bert_func_id = 0
-        self.keyword_func_id = 0
 
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
@@ -91,15 +91,10 @@ class Orchestrator:
 
     def pack_and_submit_map(self):
 
-        num_none = 0
-        num_tabular = 0
-        num_keyword = 0
-        num_images = 0
         while True:
-            post_url = 'https://dev.funcx.org/api/v1/submit'
             fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
 
-            #task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+            # task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 
             # TODO: fixed at 0.
             # TODO: Remove GDrive cred from token.
@@ -109,40 +104,22 @@ class Orchestrator:
             for family in family_list:
                 family = json.loads(family)
 
-                file_id = family["id"]
-                extractor = family["extractor"]
-                is_gdoc = True if 'google' in family["mimeType"] else False
+                extractor_name = family["extractor"]
+                family["headers"] = self.headers
+                extractor = self.func_dict[extractor_name]
 
-                if extractor == "text":
-                    num_keyword += 1
-                    func = self.func_dict["text"]
-                elif extractor == "images":
-                    num_images += 1
-                    func = self.func_dict["image"]
-                elif extractor == "tabular":
-                    num_tabular += 1
-                    func = self.func_dict["tabular"]
-                elif extractor == None:
-                    num_none += 1
-                    print("NoneType -- skipping! ")
-                    continue
-                else:
-                    print(extractor)
-                    raise ValueError
+                print(family)
+                # exit()
 
-                data = {'gdrive': self.gdrive_token[0], 'file_id': file_id, 'is_gdoc': is_gdoc, 'extension': family["extension"]}
+                task_id = extractor.remote_extract_solo({"families": [family]}, fx_ep, headers=self.fx_headers)
 
-                res = requests.post(url=post_url,
-                                            headers=self.fx_headers,
-                                            json={'endpoint': fx_ep,
-                                                  'func': func,
-                                                  'payload': serialize_fx_inputs(
-                                                      event=data)})
-                # print(res.content)
-                if res.status_code == 200:
-                    task_uuid = json.loads(res.content)['task_uuid']
-                    self.task_dict["active"].put(task_uuid)
-                    print(f"Queue size: {self.task_dict['active'].qsize()}")
+
+                # TODO: Bring back for Google Drive.
+                # data = {'gdrive': self.gdrive_token[0], 'file_id': file_id, 'is_gdoc': is_gdoc, 'extension': family["extension"]}
+
+                self.task_dict["active"].put(task_id)
+                print(f"Queue size: {self.task_dict['active'].qsize()}")
+                exit()
 
             failed_counter = 0
 
@@ -173,7 +150,6 @@ class Orchestrator:
             #     else:
             #         task_dict["active"].put(cur_tid)
 
-
     # TODO: Smarter batching that takes into account file size.
     def get_next_families(self):
         while True:
@@ -182,7 +158,7 @@ class Orchestrator:
                 t_families_get_start = time.time()
                 sqs_response = self.client.receive_message(
                     QueueUrl=self.crawl_queue,
-                    MaxNumberOfMessages=10,
+                    MaxNumberOfMessages=2,  # TODO: Change back to 10.
                     WaitTimeSeconds=20)
 
                 family_list = []
@@ -203,7 +179,7 @@ class Orchestrator:
                     # TODO: Do the 200 check. WEird data format.
                     # if response["HTTPStatusCode"] is not 200:
                     #     raise ConnectionError("Could not delete messages from queue!")
-                #continue
+                # continue
                 time.sleep(0.5)
                 return family_list
             except:
@@ -219,38 +195,10 @@ class Orchestrator:
 
     def poll_responses(self):
         success_returns = 0
-        failed_returns = 0
-
-        total_success = 0
-
-        success_keyword = 0
-        success_tabular = 0
-        success_images = 0
-
-        tot_keyword_trans = 0
-        tot_images_trans = 0
-        tot_tabular_trans = 0
-
-        tot_keyword_tot = 0
-        tot_images_tot = 0
-        tot_tabular_tot = 0
-
         mod_not_found = 0
+        failed_returns = 0
         poll_start = time.time()
         while True:
-
-            if success_keyword > 0:
-                print("Average Keyword Stats")
-                print(f"Transfer: {tot_keyword_trans/success_keyword} | Total: {tot_keyword_tot/success_keyword}")
-
-            if success_images > 0:
-                print("Average Image Stats")
-                print(f"Transfer: {tot_images_trans / success_images} | Total: {tot_images_tot / success_images}")
-
-            if success_tabular >0:
-                print("Average Tabular Stats")
-                print(f"Transfer: {tot_tabular_trans / success_tabular} | Total: {tot_tabular_tot / success_tabular}")
-
             if self.task_dict["active"].empty():
                 self.logger.debug("No live IDs... sleeping...")
                 p_empty = time.time()
@@ -279,7 +227,7 @@ class Orchestrator:
                     try:
                         res = self.fx_ser.deserialize(status_thing['result'])
                     except ModuleNotFoundError as e:
-                        mod_not_found +=1
+                        mod_not_found += 1
                         print(e)
                         print(f"NUM MOD NOT FOUND: {mod_not_found}")
                         continue
@@ -298,43 +246,11 @@ class Orchestrator:
                     if "metadata" in res:
                         print("WAHOOOOOOOOOOOOO")
 
+                elif "exception" in status_thing:
+                    exc = self.fx_ser.deserialize(status_thing['exception'])
+                    exc.reraise()
 
-
-                        if "tabular" in res["metadata"]:
-                            if res["metadata"]["tabular"] != {}:
-                                 print("GOOD TABULAR!!!")
-                                 tot_tabular_trans += res["trans_time"]
-                                 tot_tabular_tot += res["tot_time"]
-
-                                 success_tabular += 1
-                                 total_success += 1
-
-
-                        elif "keywords" in res["metadata"]:
-                            if res["metadata"]["keywords"] is not None and res["metadata"]["keywords"] != {}:
-                                  print("GOOD KEYWORD!!!")
-                                  tot_keyword_trans += res["trans_time"]
-                                  tot_keyword_tot += res["tot_time"]
-
-                                  success_keyword += 1
-                                  total_success += 1
-
-                        elif "image-sort" in res["metadata"]:
-                            if res["metadata"]["image-sort"] != {}:
-                                print("GOOD IMAGES!!!")
-                                tot_images_trans += res["trans_time"]
-                                tot_images_tot += res["tot_time"]
-                                success_images += 1
-                                total_success += 1
-
-                    else:
-                        print("else")
-                        print(f"Here's the res: {res}")
-
-                        # group_coll = res["metadata"][fam_id]["metadata"]
-                        # trans_time = res["metadata"][fam_id]["metadata"]
-
-
+                    print(f"Exception caught: {exc}")
 
                 else:
                     self.task_dict["active"].put(ex_id)

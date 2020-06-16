@@ -118,8 +118,10 @@ def callback():
 @application.route('/extract', methods=['POST'])
 def extract_mdata():
 
-    r = request.data
-    data = pickle.loads(r)
+    # data = request.data
+    # data = pickle.loads(r)  # Bring this back from GDrive vs Globus unpacking.
+
+    data = request.json
 
     crawl_id = data["crawl_id"]
     headers = json.loads(data["headers"])
@@ -127,7 +129,7 @@ def extract_mdata():
     source_eid = data["source_eid"]
     dest_eid = data["dest_eid"]
     mdata_store_path = data["mdata_store_path"]
-    gdrive_token = data["gdrive_pkl"]
+    # gdrive_token = data["gdrive_pkl"]
 
     # TODO: Can have parallel orchestrators, esp now that we're using queues.
     orch = Orchestrator(crawl_id=crawl_id,
@@ -136,7 +138,7 @@ def extract_mdata():
                         source_eid=source_eid,
                         dest_eid =dest_eid,
                         mdata_store_path=mdata_store_path,
-                        gdrive_token=gdrive_token
+                        gdrive_token=None # TODO: pass in if GDrive.
                         )
 
     print("POLLING RESPONSES...")
