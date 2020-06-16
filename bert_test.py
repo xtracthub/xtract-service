@@ -2,8 +2,8 @@
 
 import funcx
 import time
-from container_lib.xtract_matio import serialize_fx_inputs
-from container_lib.xtract_bert import bert_extract
+from extractors.xtract_matio import serialize_fx_inputs
+from extractors.xtract_bert import bert_extract
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
 from queue import Queue
