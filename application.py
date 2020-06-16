@@ -1,7 +1,6 @@
 
-from flask import Flask, request, jsonify
+from flask import jsonify
 from enum import Enum
-import time
 from datetime import datetime, timedelta, timezone
 
 # from globus_action_provider_tools.authentication import TokenChecker
@@ -16,31 +15,14 @@ import pickle
 from uuid import uuid4
 get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
-import requests
-
-import json
-import os
-
 # Python standard libraries
 import json
 import os
-import sqlite3
 
 # Third-party libraries
 from flask import Flask, redirect, request, url_for
-from flask_login import (
-    LoginManager,
-    current_user,
-    login_required,
-    login_user,
-    logout_user,
-)
-from oauthlib.oauth2 import WebApplicationClient
 import requests
 
-# Internal imports
-# from db import init_db_command
-# from user import User
 
 application = Flask(__name__)
 
@@ -147,7 +129,7 @@ def extract_mdata():
     mdata_store_path = data["mdata_store_path"]
     gdrive_token = data["gdrive_pkl"]
 
-    # TODO: Have multiple send_files and
+    # TODO: Can have parallel orchestrators, esp now that we're using queues.
     orch = Orchestrator(crawl_id=crawl_id,
                         headers=headers,
                         funcx_eid=funcx_eid,
@@ -243,11 +225,11 @@ def automate_run():
     print(f"Crawl Req: {crawl_req}")
 
     crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
-    x = requests.post(crawl_url, json=crawl_req)
-    print(x.content)
+    # x = requests.post(crawl_url, json=crawl_req)
+    # print(x.content)
 
-    crawl_id = json.loads(x.content)["crawl_id"]
-    print(f"Crawl ID: {crawl_id}")
+    # crawl_id = json.loads(x.content)["crawl_id"]
+    # print(f"Crawl ID: {crawl_id}")
 
     import time
     time.sleep(3)
@@ -261,7 +243,7 @@ def automate_run():
     # TODO: Make action_id the regular task_id (I think we'd want it to technically be the crawl_id.
     # Now to create the thing we return.
     ret_data = {
-        "action_id": crawl_id,
+        "action_id": "THIS IS A MUGGAMUGGIN CRAWL",
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
@@ -273,7 +255,7 @@ def automate_run():
     }
 
     # NOTE: Actually launching the crawl right here.
-    active_ids[crawl_id] = ret_data
+    # active_ids[crawl_id] = ret_data
 
     resp = jsonify(ret_data)
     resp.status_code = 202

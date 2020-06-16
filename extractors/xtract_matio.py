@@ -33,7 +33,6 @@ class MatioExtractor(Extractor):
             no_local_server=True,
             no_browser=True)
 
-        auth_token = tokens["petrel_https_server"]['access_token']
         transfer_token = tokens['transfer.api.globus.org']['access_token']
         mdf_token = tokens["data.materialsdatafacility.org"]['access_token']
         funcx_token = tokens['funcx_service']['access_token']
@@ -61,8 +60,6 @@ class MatioExtractor(Extractor):
                 print(f"Exception: {fx_ser.deserialize(status_thing['exception'])}")
                 break
             time.sleep(1)
-
-
 
 
 def matio_extract(event):
