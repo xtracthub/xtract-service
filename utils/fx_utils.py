@@ -14,7 +14,7 @@ def serialize_fx_inputs(*args, **kwargs):
 
 
 def invoke_solo_function(event, fx_eid, headers, func_id):
-    print(headers)
+    # print(headers)
     res = requests.post(url=post_url,
                         headers=headers,
                         json={'endpoint': fx_eid,
@@ -22,12 +22,18 @@ def invoke_solo_function(event, fx_eid, headers, func_id):
                               'payload': serialize_fx_inputs(
                                   event=event)})
     if res.status_code == 200:
-        task_uuid = json.loads(res.content)['task_uuid']
+        content = json.loads(res.content)
+        if "task_uuid" in content:
+            task_uuid = content['task_uuid']
+            return task_uuid
+        else:
+            print("NO TASK UUID INSIDE!!!")
+            print(content)
     else:
         print("ERROR???")
         print(res.content)
         return res.content
-    return task_uuid
+    # return task_uuid
 
 def run_batch_function(func_id, data_ls):
     pass
