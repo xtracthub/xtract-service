@@ -118,33 +118,47 @@ def callback():
 @application.route('/extract', methods=['POST'])
 def extract_mdata():
 
-    # data = request.data
-    # data = pickle.loads(r)  # Bring this back from GDrive vs Globus unpacking.
+    gdrive_token = None
+    source_eid = None
+    dest_eid = None
+    mdata_store_path = None
 
-    data = request.json
+    try:
+        r = pickle.loads(request.data)
+        print(f"Data: {request.data}")
+        gdrive_token = r["gdrive_pkl"]
+        print(f"Received Google Drive token: {gdrive_token}")
+    except pickle.UnpicklingError as e:
+        print("Unable to pickle-load for Google Drive! Trying to JSON load for Globus/HTTPS.")
 
-    crawl_id = data["crawl_id"]
-    headers = json.loads(data["headers"])
-    funcx_eid = data["funcx_eid"]
-    source_eid = data["source_eid"]
-    dest_eid = data["dest_eid"]
-    mdata_store_path = data["mdata_store_path"]
-    # gdrive_token = data["gdrive_pkl"]
+        r = request.json
+
+        if r["repo_type"] in ["GLOBUS", "HTTPS"]:
+            source_eid = r["source_eid"]
+            dest_eid = r["dest_eid"]
+            mdata_store_path = r["mdata_store_path"]
+            print(f"Received {r['repo_type']} data!")
+
+    crawl_id = r["crawl_id"]
+    headers = json.loads(r["headers"])
+    funcx_eid = r["funcx_eid"]
+
+    print("Successfully unpacked data! Initializing orchestrator...")
 
     # TODO: Can have parallel orchestrators, esp now that we're using queues.
     orch = Orchestrator(crawl_id=crawl_id,
                         headers=headers,
                         funcx_eid=funcx_eid,
                         source_eid=source_eid,
-                        dest_eid =dest_eid,
+                        dest_eid=dest_eid,
                         mdata_store_path=mdata_store_path,
-                        gdrive_token=None # TODO: pass in if GDrive.
+                        gdrive_token=gdrive_token
                         )
 
-    print("POLLING RESPONSES...")
+    print("Launching response poller...")
     orch.launch_poll()
 
-    print("SENDING FILES...")
+    print("Launching metadata extractors...")
     orch.launch_extract()
 
     # TODO: Shouldn't this extract_id be stored somewhere? 
