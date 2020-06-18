@@ -240,12 +240,12 @@ def automate_run():
 
     print(f"Crawl Req: {crawl_req}")
 
-    crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
-    # x = requests.post(crawl_url, json=crawl_req)
-    # print(x.content)
+    crawl_url = 'http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/crawl'
+    x = requests.post(crawl_url, json=crawl_req)
+    print(x.content)
 
-    # crawl_id = json.loads(x.content)["crawl_id"]
-    # print(f"Crawl ID: {crawl_id}")
+    crawl_id = json.loads(x.content)["crawl_id"]
+    print(f"Crawl ID: {crawl_id}")
 
     import time
     time.sleep(3)
@@ -259,7 +259,7 @@ def automate_run():
     # TODO: Make action_id the regular task_id (I think we'd want it to technically be the crawl_id.
     # Now to create the thing we return.
     ret_data = {
-        "action_id": "THIS IS A MUGGAMUGGIN CRAWL",
+        "action_id": crawl_id,
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
@@ -272,7 +272,7 @@ def automate_run():
 
     # NOTE: Actually launching the crawl right here.
     # active_ids[crawl_id] = ret_data
-    active_ids["THIS IS A MUGGAMUGGIN CRAWL"] = ret_data
+    active_ids[crawl_id] = ret_data
 
     resp = jsonify(ret_data)
     resp.status_code = 202
