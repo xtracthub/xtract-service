@@ -1,22 +1,30 @@
 
+
 import funcx
 import time
-import json
-import os
-import requests
-from container_lib.xtract_matio import serialize_fx_inputs, matio_test, hello_world
+from extractors.xtract_matio import serialize_fx_inputs
+from extractors.xtract_bert import bert_extract
 from fair_research_login import NativeClient
 from funcx.serialize import FuncXSerializer
 from queue import Queue
 from mdf_matio.validator import MDFValidator
-from materials_io.utils.interface import ParseResult
-from typing import Iterable, Set, List
 from functools import reduce, partial
-from mdf_matio.grouping import groupby_file, groupby_directory
 
 
 from mdf_toolbox import dict_merge
 
+
+# Standard Py Imports
+import os
+import json
+import pickle
+import os.path
+import requests
+
+# Google Imports
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 _merge_func = partial(dict_merge, append_lists=True)
 
 
@@ -37,11 +45,11 @@ burst_size = 5
 
 batch_size = 5
 
-container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest',
+container_id = fxc.register_container(location='039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-bert:latest',
                                       container_type='docker',
-                                      name='kube-matio5',
+                                      name='kube-bert',
                                       description='I don\'t think so!')
-fn_id = fxc.register_function(matio_test,
+fn_id = fxc.register_function(images_extract,
                               container_uuid=container_id,
                               description="A sum function")
 
@@ -77,6 +85,39 @@ old_mdata = {"files": ["/mdf_open/kearns_biofilm_rupture_location_v1.1/Biofilm I
 data = {"inputs": [], "transfer_token": transfer_token, "source_endpoint": 'e38ee745-6d04-11e5-ba46-22000b92c6ec',
         "dest_endpoint": globus_ep}
 
+
+SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly', 'https://www.googleapis.com/auth/drive']
+
+# Stolen from Google Quickstart docs
+# https://developers.google.com/drive/api/v3/quickstart/python
+def do_login_flow():
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+
+    return creds, None  # Returning None because Tyler can't figure out how he wants to structure this yet.
+
+# THIS should force-open a Google Auth window in your local browser. If not, you can manually copy-paste it.
+auth_creds = do_login_flow()
+data["gdrive_pkl"] = pickle.dumps(auth_creds)
+data["file_id"] = "1zAJJy4bFQ2ZANV7W3iv7WdpZWRBp8iEN"
+
 id_count = 0
 group_count = 0
 groups_in_family = 1
@@ -109,7 +150,7 @@ data["inputs"].append(family)
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 t_launch_times = {}
 
-assert(n_tasks%burst_size == 0)
+assert(n_tasks % burst_size == 0)
 
 for n in range(int(n_tasks/burst_size)):
     print(f"Processing burst: {n}")
