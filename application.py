@@ -332,7 +332,7 @@ def automate_status(action_id):
 
     print(f"CRAWL CONTENT: {crawl_content}")
 
-    if crawl_content
+    # if crawl_content
 
     job_info["status"] = Status.SUCCEEDED.value
     return jsonify(job_info)
