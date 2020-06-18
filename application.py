@@ -274,7 +274,6 @@ def automate_run():
     }
 
     # NOTE: Actually launching the crawl right here.
-    # active_ids[crawl_id] = ret_data
     active_ids[crawl_id] = ret_data
 
     resp = jsonify(ret_data)
@@ -307,8 +306,10 @@ def automate_status(action_id):
     print("IN GET STATUS")
     job_info = active_ids[action_id]
 
+    print(f"Job info: {job_info}")
+
     crawl_status = requests.get(f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/get_crawl_status', json={'crawl_id': action_id})
-    print(crawl_status)
+    print(f"Crawl status: {crawl_status}")
     crawl_content = json.loads(crawl_status.content)
 
     print(f"CRAWL CONTENT: {crawl_content}")
