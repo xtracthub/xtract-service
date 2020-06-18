@@ -232,7 +232,10 @@ def automate_run():
     # manage_by = req['manage_by']
     # monitor_by = req['monitor_by']
 
-    crawl_req = {'eid': req['body']['eid'],
+    # TODO: fix this to match actual crawl requests.
+    crawl_req = {'https_info': {'base_url': "https://data.materialsdatafacility.org"},  # TODO: unhardcode
+                 'repo_type': "HTTPS",  # TODO: bounce this out (i.e., make Drive / Globus-friendly)
+                 'eid': req['body']['eid'],
                  'dir_path': req['body']['dir_path'],
                  'grouper': req['body']['grouper'],
                  'Transfer': user_transfer_token,
