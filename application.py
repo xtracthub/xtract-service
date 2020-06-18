@@ -272,6 +272,7 @@ def automate_run():
 
     # NOTE: Actually launching the crawl right here.
     # active_ids[crawl_id] = ret_data
+    active_ids["THIS IS A MUGGAMUGGIN CRAWL"] = ret_data
 
     resp = jsonify(ret_data)
     resp.status_code = 202
