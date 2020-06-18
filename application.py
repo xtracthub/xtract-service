@@ -1,7 +1,6 @@
 
-from flask import Flask, request, jsonify
+from flask import jsonify
 from enum import Enum
-
 from datetime import datetime, timedelta, timezone
 
 # from globus_action_provider_tools.authentication import TokenChecker
@@ -10,14 +9,20 @@ from datetime import datetime, timedelta, timezone
 from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
-from container_lib.xtract_matio import MatioExtractor
+from orchestrator import Orchestrator
 
-
+import pickle
 from uuid import uuid4
-import requests
+get_url = 'https://dev.funcx.org/api/v1/{}/status'
 
+# Python standard libraries
 import json
 import os
+
+# Third-party libraries
+from flask import Flask, redirect, request, url_for
+import requests
+
 
 application = Flask(__name__)
 
@@ -105,31 +110,56 @@ def get_cr_status():
     return resp
 
 
+@application.route('/login/callback', methods=['GET', 'POST'])
+def callback():
+    return "Hello"
+
+
 @application.route('/extract', methods=['POST'])
 def extract_mdata():
 
-    r = request.json
+    gdrive_token = None
+    source_eid = None
+    dest_eid = None
+    mdata_store_path = None
+
+    try:
+        r = pickle.loads(request.data)
+        print(f"Data: {request.data}")
+        gdrive_token = r["gdrive_pkl"]
+        print(f"Received Google Drive token: {gdrive_token}")
+    except pickle.UnpicklingError as e:
+        print("Unable to pickle-load for Google Drive! Trying to JSON load for Globus/HTTPS.")
+
+        r = request.json
+
+        if r["repo_type"] in ["GLOBUS", "HTTPS"]:
+            source_eid = r["source_eid"]
+            dest_eid = r["dest_eid"]
+            mdata_store_path = r["mdata_store_path"]
+            print(f"Received {r['repo_type']} data!")
+
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
     funcx_eid = r["funcx_eid"]
-    source_eid = r["source_eid"]
-    dest_eid = r["dest_eid"]
-    mdata_store_path = r["mdata_store_path"]
 
-    # TODO: Have multiple send_files and
-    mex = MatioExtractor(crawl_id=crawl_id,
-                         headers=headers,
-                         funcx_eid=funcx_eid,
-                         source_eid=source_eid,
-                         dest_eid =dest_eid,
-                         mdata_store_path=mdata_store_path,
-                         )
+    print("Successfully unpacked data! Initializing orchestrator...")
 
-    print("SENDING FILES...")
-    mex.launch_extract()
+    # TODO: Can have parallel orchestrators, esp now that we're using queues.
+    orch = Orchestrator(crawl_id=crawl_id,
+                        headers=headers,
+                        funcx_eid=funcx_eid,
+                        source_eid=source_eid,
+                        dest_eid=dest_eid,
+                        mdata_store_path=mdata_store_path,
+                        gdrive_token=gdrive_token
+                        )
 
-    print("POLLING RESPONSES...")
-    mex.launch_poll()
+    print("Launching response poller...")
+    orch.launch_poll()
+
+    print("Launching metadata extractors...")
+    orch.launch_extract()
 
     # TODO: Shouldn't this extract_id be stored somewhere? 
     extract_id = str(uuid4())
@@ -211,11 +241,11 @@ def automate_run():
     print(f"Crawl Req: {crawl_req}")
 
     crawl_url = 'http://xtract-crawler-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/crawl'
-    x = requests.post(crawl_url, json=crawl_req)
-    print(x.content)
+    # x = requests.post(crawl_url, json=crawl_req)
+    # print(x.content)
 
-    crawl_id = json.loads(x.content)["crawl_id"]
-    print(f"Crawl ID: {crawl_id}")
+    # crawl_id = json.loads(x.content)["crawl_id"]
+    # print(f"Crawl ID: {crawl_id}")
 
     import time
     time.sleep(3)
@@ -229,7 +259,7 @@ def automate_run():
     # TODO: Make action_id the regular task_id (I think we'd want it to technically be the crawl_id.
     # Now to create the thing we return.
     ret_data = {
-        "action_id": crawl_id,
+        "action_id": "THIS IS A MUGGAMUGGIN CRAWL",
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
         "details": "the weasel runs at midnight",
@@ -241,7 +271,7 @@ def automate_run():
     }
 
     # NOTE: Actually launching the crawl right here.
-    active_ids[crawl_id] = ret_data
+    # active_ids[crawl_id] = ret_data
 
     resp = jsonify(ret_data)
     resp.status_code = 202
@@ -288,4 +318,4 @@ def automate_release(action_id):
 
 
 if __name__ == '__main__':
-    application.run(debug=True, threaded=True)
+    application.run(debug=True, threaded=True, ssl_context="adhoc")
