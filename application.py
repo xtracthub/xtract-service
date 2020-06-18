@@ -306,7 +306,13 @@ def automate_status(action_id):
 
     print("IN GET STATUS")
     job_info = active_ids[action_id]
-    print("I should actually do some work here!")
+
+    crawl_status = requests.get(f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/get_crawl_status', json={'crawl_id': action_id})
+    print(crawl_status)
+    crawl_content = json.loads(crawl_status.content)
+
+    print(f"CRAWL CONTENT: {crawl_content}")
+
     job_info["status"] = Status.SUCCEEDED.value
     return jsonify(job_info)
 
