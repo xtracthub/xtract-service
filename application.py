@@ -1,4 +1,6 @@
 
+
+import time
 from flask import jsonify
 from enum import Enum
 from datetime import datetime, timedelta, timezone
@@ -251,8 +253,23 @@ def automate_run():
     print(f"Crawl ID: {crawl_id}")
 
     import time
-    time.sleep(3)
-    # TODO: LAUNCH THE XTRACTION HERE.
+    while True:
+        try:
+            # Try to get crawl_url
+            crawl_status = requests.get(
+                f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/get_crawl_status',
+                json={'crawl_id': crawl_id})
+            print(f"Crawl status: {crawl_status}")
+            crawl_content = json.loads(crawl_status.content)
+
+            # If we're now successfully crawling, then BREAK, if not, there won't be a crawl_status (so loop again)
+            if crawl_content['crawl_status'] == "crawling":
+                break
+        except json.JSONDecodeError:
+            print("Crawl not yet started! Trying again...")
+            time.sleep(1)
+
+    # TODO: Launch the actual extraction right here.
 
     thawed_idents = []
     for identity in identities:
@@ -314,6 +331,8 @@ def automate_status(action_id):
     crawl_content = json.loads(crawl_status.content)
 
     print(f"CRAWL CONTENT: {crawl_content}")
+
+    if crawl_content
 
     job_info["status"] = Status.SUCCEEDED.value
     return jsonify(job_info)
