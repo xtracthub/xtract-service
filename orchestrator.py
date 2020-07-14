@@ -9,6 +9,7 @@ import threading
 
 from queue import Queue
 from funcx.serialize import FuncXSerializer
+from xtract_sdk.packagers.family import Family
 
 from utils.pg_utils import pg_conn
 from utils.fx_utils import serialize_fx_inputs
@@ -49,8 +50,8 @@ class Orchestrator:
         if 'Petrel' in self.headers:
             self.fx_headers['Petrel'] = self.headers['Petrel']
 
-        self.get_url = 'https://dev.funcx.org/api/v1/{}/status'
-        self.post_url = 'https://dev.funcx.org/api/v1/submit'
+        self.get_url = 'https://funcx.org/api/v1/{}/status'
+        self.post_url = 'https://funcx.org/api/v1/submit'
 
         self.logging_level = logging_level
 
@@ -102,20 +103,50 @@ class Orchestrator:
             family_list = self.get_next_families()
 
             for family in family_list:
+                # print("This is the raw family")
                 family = json.loads(family)
+                # TODO: Stretch this out for beyond GDrive (shouldn't just look at 1)
+                # extractor_name = family['groups'][0]["parser"]
 
-                extractor_name = family["extractor"]
+
                 family["headers"] = self.headers
-                extractor = self.func_dict[extractor_name]
+
+                d_type = family["download_type"]
+                xtr_fam_obj = Family(download_type=d_type)
+                # xtr_fam_obj = Family(download_type="gdrive")
 
                 print(family)
-                task_id = extractor.remote_extract_solo({"families": [family]}, fx_ep, headers=self.fx_headers)
+                # exit()
+
+                xtr_fam_obj.from_dict(family)
+                print(f"Files: {xtr_fam_obj.files}")
+                print(f"Groups: {xtr_fam_obj.groups}")
+                # print(xtr_fam_obj.groups)
+                # exit()
+                # print(family)
+
+                # exit()
+                # TODO: fix. Maybe two level ('family' extractor trumps individual.)
+
+                if d_type == "gdrive":
+                    extr_code = xtr_fam_obj.groups[list(xtr_fam_obj.groups.keys())[0]].parser
+                    # extractor = self.func_dict[extr_code]
+                    extractor = self.func_dict['image']
+
+                print("SENDING OFF TASK!!!")
+                task_id = extractor.remote_extract_solo({"families": [xtr_fam_obj], "gdrive": self.gdrive_token[0]}, fx_ep,
+                                                        headers=self.fx_headers)
+
 
                 # TODO: Bring back for Google Drive.
                 # data = {'gdrive': self.gdrive_token[0], 'file_id': file_id, 'is_gdoc': is_gdoc, 'extension': family["extension"]}
 
                 self.task_dict["active"].put(task_id)
+
                 print(f"Queue size: {self.task_dict['active'].qsize()}")
+                print(task_id)
+                # print("Exiting main loop...")
+                # exit()
 
             failed_counter = 0
             break
@@ -145,6 +176,9 @@ class Orchestrator:
 
                     del_list.append({'ReceiptHandle': message["ReceiptHandle"],
                                      'Id': message["MessageId"]})
+
+                # print(family_list)
+                # exit()
 
                 # Step 2. Delete the messages from SQS.
                 if len(del_list) > 0:
@@ -201,6 +235,19 @@ class Orchestrator:
                 if "result" in status_thing:
                     try:
                         res = self.fx_ser.deserialize(status_thing['result'])
+                        print("RESULT! ")
+                        print(res)
+
+                        # TODO: Uncomment to test validation
+                        # import pickle
+                        # with open("example_mdata.pkl", "wb") as f:
+                        #     pickle.dump(res, f)
+                        #
+                        # print("WE DUMPED THE PICKLE!")
+                        # exit()
+
+                        # TODO: Take out only the 'valid' metadata.
+
                     except ModuleNotFoundError as e:
                         mod_not_found += 1
                         print(e)
@@ -223,6 +270,7 @@ class Orchestrator:
 
                 elif "exception" in status_thing:
                     exc = self.fx_ser.deserialize(status_thing['exception'])
+                    # TODO: bring back.
                     exc.reraise()
 
                     print(f"Exception caught: {exc}")

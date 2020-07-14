@@ -1,33 +1,32 @@
 
-import time
-from fair_research_login import NativeClient
-from funcx.serialize import FuncXSerializer
-from queue import Queue
-from functools import partial
-
-fx_ser = FuncXSerializer()
-from mdf_toolbox import dict_merge
-
-
-# Standard Py Imports
-import os
+from extractors.xtract_images import ImageExtractor
+from xtract_sdk.packagers.family import Family
+from xtract_sdk.packagers.family_batch import FamilyBatch
 import pickle
-import os.path
-import requests
-
-# Google Imports
+from fair_research_login import NativeClient
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-_merge_func = partial(dict_merge, append_lists=True)
+import os
+from queue import Queue
 
-post_url = 'https://dev.funcx.org/api/v1/submit'
-get_url = 'https://dev.funcx.org/api/v1/{}/status'
-# globus_ep = "1adf6602-3e50-11ea-b965-0e16720bb42f"
-globus_ep = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"
+img_extractor = ImageExtractor()
 
-fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
-n_tasks = 5000
+img_funcid = img_extractor.register_function()
 
+# Image collection
+img_1 = "1RbSdH_nI0EHvxFswpl1Qss7CyWXBHo-o"  # SC19 SCC photo
+img_2 = "0B5nDSpS9a_3kQ0VaUFU4cGhZa3lnTWZoV2NLclVSejRaQVRV"  # clock photo
+
+fam_1 = Family()
+fam_2 = Family()
+fam_1.add_group(files=[{"path": img_1, "is_gdoc": False, "mimeType": "image/jpg", "metadata": {}}], parser='image')
+fam_2.add_group(files=[{"path": img_2, "is_gdoc": False, "mimeType": "image/jpg", "metadata": {}}], parser='image')
+
+fam_batch = FamilyBatch()
+fam_batch.add_family(fam_1)
+fam_batch.add_family(fam_2)
+
+# TODO: Get creds for both Globus and Google here.
 # Get the Headers....
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
 tokens = client.login(
@@ -72,35 +71,21 @@ def do_login_flow():
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
 
-    return creds, None  # Returning None because Tyler can't figure out how he wants to structure this yet.
+    return creds
 
-# THIS should force-open a Google Auth window in your local browser. If not, you can manually copy-paste it.
-auth_creds = do_login_flow()
-
-# data["gdrive_pkl"] = pickle.dumps(auth_creds)
-file_id = "1zAJJy4bFQ2ZANV7W3iv7WdpZWRBp8iEN"
-
-from xtract_sdk.packagers.family import Family
-
-fam = Family(download_type="gdrive", headers=headers)
-fam.add_group(files=[{'path': file_id, 'metadata': {}}], parser="image")
-
-# data["inputs"].append(family)
 
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
-t_launch_times = {}
+task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch, 'creds': do_login_flow()}, fx_eid="82ceed9f-dce1-4dd1-9c45-6768cf202be8", headers=headers)
 
-from extractors.xtract_images import ImageExtractor
-imgx = ImageExtractor()
-imgx.register_function()
-
-task_id = imgx.remote_extract_solo(event={"families": [fam], "gdrive": auth_creds[0]}, fx_eid=fx_ep, headers=headers)
-print(f"Task ID: {task_id}")
 task_dict["active"].put(task_id)
 
-timeout = 120
-failed_counter = 0
+import time
+import requests
+from funcx.serialize import FuncXSerializer
+fx_ser = FuncXSerializer()
 while True:
+
+    get_url = 'https://funcx.org/api/v1/{}/status'
 
     if task_dict["active"].empty():
         print("Active task queue empty... sleeping... ")
@@ -113,10 +98,12 @@ while True:
 
     if 'result' in status_thing:
         result = fx_ser.deserialize(status_thing['result'])
+
+        print(result['family_batch'].families[0].metadata)
+
         print(f"Result: {result}")
 
     elif 'exception' in status_thing:
         print(f"Exception: {fx_ser.deserialize(status_thing['exception'])}")
-        # break
     else:
         task_dict["active"].put(cur_tid)

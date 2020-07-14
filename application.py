@@ -5,7 +5,7 @@ from flask import jsonify
 from enum import Enum
 from datetime import datetime, timedelta, timezone
 
-from globus_action_provider_tools.authentication import TokenChecker
+# from globus_action_provider_tools.authentication import TokenChecker
 # from globus_action_provider_tools.validation import request_validator, response_validator
 
 from globus_sdk import ConfidentialAppAuthClient
@@ -270,6 +270,28 @@ def automate_run():
             time.sleep(1)
 
     # TODO: Launch the actual extraction right here.
+    funcx_ep_id = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
+    source_ep_id = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"
+    dest_ep_id = "1adf6602-3e50-11ea-b965-0e16720bb42f"
+
+    mdata_path = "UNKNOWN"
+
+    # headers = {'Authorization': f"Bearer {auth_token}", 'Transfer': transfer_token, 'FuncX': funcx_token,
+    #            'Petrel': auth_token}
+
+    headers = {'Authorization': f"Bearer {user_petrel_token}", 'Transfer': user_transfer_token, 'FuncX': user_funcx_token,
+               'Petrel': user_petrel_token}
+
+    extract_req = requests.post(f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/extract',
+                                json={'crawl_id': crawl_id,
+                                      'repo_type': "HTTPS",
+                                      'headers': json.dumps(headers),  # TODO: How to pack these damn headers.
+                                      'funcx_eid': funcx_ep_id,  # TODO: hardcoded to River.
+                                      'source_eid': source_ep_id,
+                                      'dest_eid': dest_ep_id,
+                                      'mdata_store_path': mdata_path})
+
+    print(f"Xtract status: {extract_req.content}")
 
     thawed_idents = []
     for identity in identities:
