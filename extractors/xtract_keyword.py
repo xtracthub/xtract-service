@@ -28,10 +28,6 @@ def keyword_extract(event):
     sys.path.insert(1, '/')
 
     import xtract_keyword_main
-    # except Exception as e:
-    #     return e
-    # print("BUT NO HERE?")
-
 
     new_mdata = None
 

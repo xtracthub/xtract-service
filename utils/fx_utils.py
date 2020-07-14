@@ -2,7 +2,7 @@
 import json
 import requests
 
-post_url = 'https://dev.funcx.org/api/v1/submit'
+post_url = 'https://funcx.org/api/v1/submit'
 
 def serialize_fx_inputs(*args, **kwargs):
     from funcx.serialize import FuncXSerializer

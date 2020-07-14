@@ -19,7 +19,6 @@ def tabular_extract(event):
     import sys
     import time
 
-    from xtract_sdk.downloaders.globus_https import GlobusHttpsDownloader
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
     t0 = time.time()
@@ -30,26 +29,35 @@ def tabular_extract(event):
 
     new_mdata = None
 
-    creds = event["gdrive"]
-    file_id = event["file_id"]
-    is_gdoc = event["is_gdoc"]
-    mimeType = "text/csv"
+    creds = event["creds"]
+    family_batch = event["family_batch"]
 
-    ta = time.time()
     downloader = GoogleDriveDownloader(auth_creds=creds)
-    if is_gdoc:
-        downloader.fetch(fid=file_id, download_type="export", mimeType=mimeType)
-    else:
-        downloader.fetch(fid=file_id, download_type="media")
+
+    # return "HERE"
+
+    # return "ALL OF IT HERE"
+    # return "POO"  # TH
+    ta = time.time()
+    downloader.batch_fetch(family_batch=family_batch)
     tb = time.time()
 
     file_paths = downloader.success_files
+    # return file_paths
 
-    for path in file_paths:
-        try:
-            new_mdata = xtract_tabular_main.extract_columnar_metadata(path)
-        except Exception as e:
-            return e
+    if len(file_paths) == 0:
+        return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
+                'err_msg': "unable to download files"}
+
+    for family in family_batch.families:
+        img_path = family.files[0]['path']
+        # return img_path
+        new_mdata = xtract_tabular_main.extract_columnar_metadata(img_path)
+        family.metadata = new_mdata
 
     t1 = time.time()
-    return {'metadata': new_mdata, 'tot_time': t1 - t0, 'trans_time': tb - ta}
+    # Return batch
+    return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
+
+
+
