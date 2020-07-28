@@ -7,7 +7,7 @@ class TabularExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="7ce87fc6-d4bb-4cd5-be01-4ac1ddbd5ba8",
+                         func_id="3359db0f-762a-414d-943d-1dd518beff00",
                          extr_name="xtract-tabular",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
@@ -34,11 +34,8 @@ def tabular_extract(event):
 
     downloader = GoogleDriveDownloader(auth_creds=creds)
 
-    # return "HERE"
-
-    # return "ALL OF IT HERE"
-    # return "POO"  # TH
     ta = time.time()
+    # return family_batch.file_ls
     downloader.batch_fetch(family_batch=family_batch)
     tb = time.time()
 

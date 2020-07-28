@@ -9,9 +9,10 @@ import threading
 
 from queue import Queue
 from funcx.serialize import FuncXSerializer
-from xtract_sdk.packagers.family import Family
+from xtract_sdk.packagers import Family, FamilyBatch
 
 from utils.pg_utils import pg_conn
+from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
 from utils.fx_utils import serialize_fx_inputs
 
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
@@ -20,13 +21,17 @@ from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keywo
 class Orchestrator:
     # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
     def __init__(self, crawl_id, headers, funcx_eid,
-                 mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None, logging_level='debug', instance_id=None):
+                 mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
+                 logging_level='debug', instance_id=None, extractor_finder='gdrive'):
+
+        self.extractor_finder = extractor_finder
 
         self.funcx_eid = funcx_eid
         self.func_dict = {"image": xtract_images.ImageExtractor(),
+                          "images": xtract_images.ImageExtractor(),
                           "tabular": xtract_tabular.TabularExtractor(),
                           "text": xtract_keyword.KeywordExtractor(),
-                          "matio": xtract_matio.MatioExtractor()}
+                          "matio": xtract_matio.MatioExtractor()}  # TODO: cleanup extra imgs
 
         # self.image_func_id = "8274fe2f-a132-4a9e-b8e2-9ad891e997a1"
         self.fx_ser = FuncXSerializer()
@@ -37,9 +42,17 @@ class Orchestrator:
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
-        self.max_active_families = 100
+        self.max_active_batches = 100
+
         self.families_limit = 2
         self.crawl_id = crawl_id
+        self.batch_size = 10
+
+        self.failures = 0
+
+        self.current_batch = []
+
+        # self.batches_to_process = {"image": [], "tabular": [], "text": [], "will": [], "images": [], None: []}  # TODO: cleanup extra imgs
 
         self.mdata_store_path = mdata_store_path
 
@@ -97,59 +110,73 @@ class Orchestrator:
 
             # task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 
-            # TODO: fixed at 0.
-            # TODO: Remove GDrive cred from token.
-
             family_list = self.get_next_families()
-
+            # Cast list to FamilyBatch
             for family in family_list:
-                # print("This is the raw family")
-                family = json.loads(family)
-                # TODO: Stretch this out for beyond GDrive (shouldn't just look at 1)
-                # extractor_name = family['groups'][0]["parser"]
+                # Get extractor out of each group
+                if self.extractor_finder == 'matio':
+                    extr_code = 'matio'
 
+                # TODO: kick this logic for finding extractor into sdk/crawler.
+                elif self.extractor_finder == 'gdrive':
+                    d_type = 'gdrive'
+                    xtr_fam_obj = Family(download_type=d_type)
 
-                family["headers"] = self.headers
-
-                d_type = family["download_type"]
-                xtr_fam_obj = Family(download_type=d_type)
-                # xtr_fam_obj = Family(download_type="gdrive")
-
-                print(family)
-                # exit()
-
-                xtr_fam_obj.from_dict(family)
-                print(f"Files: {xtr_fam_obj.files}")
-                print(f"Groups: {xtr_fam_obj.groups}")
-                # print(xtr_fam_obj.groups)
-                # exit()
-                # print(family)
-
-                # exit()
-                # TODO: fix. Maybe two level ('family' extractor trumps individual.)
-
-                if d_type == "gdrive":
+                    # print(family)
+                    xtr_fam_obj.from_dict(json.loads(family))
+                    xtr_fam_obj.headers = self.headers
                     extr_code = xtr_fam_obj.groups[list(xtr_fam_obj.groups.keys())[0]].parser
+                    print(f"Extractor code: {extr_code}")
+
+                    if extr_code is None:  # TODO: Any bookkeeping we need to do here?
+                        continue
+
+                    extractor = self.func_dict[extr_code]
+                    ex_func_id = extractor.func_id
+
+                    print(f"Extractor function ID: {ex_func_id}")
+
+                    # Putting into family batch -- we use funcX batching now, but no use rewriting...
+                    family_batch = FamilyBatch()
+                    family_batch.add_family(xtr_fam_obj)
+
+                    self.current_batch.append({"event": {"family_batch": family_batch,
+                                               "creds": self.gdrive_token[0]},
+                                               "func_id": ex_func_id})
+
+                else:
+                    raise ValueError("Incorrect extractor_finder arg.")
+
+                # TODO: move batch submit to another function.
+                if len(self.current_batch) >= self.batch_size:
+                    #
+                    # family_batch = FamilyBatch()
+                    # for fam_obj in self.batches_to_process[extr_code]:
+                    #     # print(fam_obj)
+                    #     family_batch.add_family(fam_obj)
+                    #
                     # extractor = self.func_dict[extr_code]
-                    extractor = self.func_dict['image']
 
-                print("SENDING OFF TASK!!!")
-                task_id = extractor.remote_extract_solo({"families": [xtr_fam_obj], "gdrive": self.gdrive_token[0]}, fx_ep,
-                                                        headers=self.fx_headers)
+                    # task_id = extractor.remote_extract_solo({"family_batch": family_batch,
+                    #                                          "creds": self.gdrive_token[0]},
+                    #                                         fx_ep,
+                    #                                         headers=self.fx_headers)
 
+                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep)
+                    for task_id in task_ids:
+                        self.task_dict["active"].put(task_id)
 
-                # TODO: Bring back for Google Drive.
-                # data = {'gdrive': self.gdrive_token[0], 'file_id': file_id, 'is_gdoc': is_gdoc, 'extension': family["extension"]}
+                    #self.task_dict["active"].put(task_id)
 
-                self.task_dict["active"].put(task_id)
+                    print(f"Queue size: {self.task_dict['active'].qsize()}")
 
-                print(f"Queue size: {self.task_dict['active'].qsize()}")
-                print(task_id)
-                # print("Exiting main loop...")
-                # exit()
+                    # Empty the batch! Everything in here has been sent :)
+                    self.current_batch = []
 
-            failed_counter = 0
-            break
+            # failed_counter = 0
+            print("***** CONTINUING (NOT BREAKING) *****")
+            # time.sleep(5)
+            # break
 
     def launch_poll(self):
         print("POLLER IS STARTING!!!!")
@@ -177,9 +204,6 @@ class Orchestrator:
                     del_list.append({'ReceiptHandle': message["ReceiptHandle"],
                                      'Id': message["MessageId"]})
 
-                # print(family_list)
-                # exit()
-
                 # Step 2. Delete the messages from SQS.
                 if len(del_list) > 0:
                     response = self.client.delete_message_batch(
@@ -188,8 +212,7 @@ class Orchestrator:
                     # TODO: Do the 200 check. WEird data format.
                     # if response["HTTPStatusCode"] is not 200:
                     #     raise ConnectionError("Could not delete messages from queue!")
-                # continue
-                time.sleep(0.5)
+                time.sleep(0.5)  # TODO: remove.
                 return family_list
             except:
                 ConnectionError("Could not get new families! ")
@@ -201,6 +224,18 @@ class Orchestrator:
         for i in range(0, max_threads):
             ex_thr = threading.Thread(target=self.pack_and_submit_map(), args=())
             ex_thr.start()
+
+    def unpack_returned_family_batch(self, family_batch):
+
+        for family in family_batch.families:
+            # print(f"Family Metadata: {family.metadata}")
+            if len(family.metadata) > 0:
+                print(f"Nonempty family metadata: {family.metadata}")
+            else:
+                print(f"Empty Family Metadata: {family.metadata}")
+
+            for group in family.groups:
+                print(f"Group Metadata: {family.groups[group].metadata}")
 
     def poll_responses(self):
         success_returns = 0
@@ -235,18 +270,14 @@ class Orchestrator:
                 if "result" in status_thing:
                     try:
                         res = self.fx_ser.deserialize(status_thing['result'])
-                        print("RESULT! ")
-                        print(res)
 
-                        # TODO: Uncomment to test validation
-                        # import pickle
-                        # with open("example_mdata.pkl", "wb") as f:
-                        #     pickle.dump(res, f)
-                        #
-                        # print("WE DUMPED THE PICKLE!")
-                        # exit()
+                        if "family_batch" in res:
+                            family_batch = res["family_batch"]
+                            unpacked_metadata = self.unpack_returned_family_batch(family_batch)
 
-                        # TODO: Take out only the 'valid' metadata.
+                        else:
+                            print(f"[Poller]:O family_batch not in res!")
+                            # print(res)
 
                     except ModuleNotFoundError as e:
                         mod_not_found += 1
@@ -262,17 +293,11 @@ class Orchestrator:
                     if type(res) is not dict:
                         continue
 
-                    print("Do we ever make it down here???")
-
-                    print("metadata" in res)
-                    if "metadata" in res:
-                        print("WAHOOOOOOOOOOOOO")
-
                 elif "exception" in status_thing:
                     exc = self.fx_ser.deserialize(status_thing['exception'])
                     # TODO: bring back.
-                    exc.reraise()
-
+                    # exc.reraise()
+                    failed_returns += 1
                     print(f"Exception caught: {exc}")
 
                 else:

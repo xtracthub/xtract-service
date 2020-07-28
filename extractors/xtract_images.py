@@ -7,7 +7,7 @@ class ImageExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="2c697742-c8e1-446a-9c1e-a0338d018687",
+                         func_id="aceb61b1-ba41-4557-b53b-1d4fd331c1d1",
                          extr_name="xtract-image",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
@@ -43,6 +43,7 @@ def images_extract(event):
     # TODO: Put time info into the downloader/extractor objects.
     ta = time.time()
     # TODO needs to implement as batch.
+    # return family_batch.file_ls
     downloader.batch_fetch(family_batch=family_batch)
     tb = time.time()
 

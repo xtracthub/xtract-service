@@ -11,4 +11,5 @@ flask_wtf
 requests
 globus-action-provider-tools
 boto3
+xtract_sdk
 
