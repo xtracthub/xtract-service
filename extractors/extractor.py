@@ -4,6 +4,7 @@ from queue import Queue
 from utils.fx_utils import invoke_solo_function
 from funcx import FuncXClient
 
+
 class Extractor(metaclass=ABCMeta):
 
     def __init__(self, extr_id, extr_name, func_id, store_type, store_url):
@@ -40,6 +41,8 @@ class Extractor(metaclass=ABCMeta):
         assert(self.extr_func is not None, "Extractor function must first be registered!")
 
         fxc = FuncXClient()
+
+        print(f"BASE URL: {fxc.base_url}")
 
         container_id = fxc.register_container(
             location=self.store_url,

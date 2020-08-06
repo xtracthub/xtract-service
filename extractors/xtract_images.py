@@ -20,7 +20,7 @@ def images_extract(event):
     import sys
     import time
 
-    from shutil import copyfile
+    from shutil import copyfile, rmtree
 
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
@@ -59,5 +59,9 @@ def images_extract(event):
         family.metadata = new_mdata
 
     t1 = time.time()
+
+    # for file_path in downloader.success_files:
+    #     shutil.rmtree
+
     # Return batch
     return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
