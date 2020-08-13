@@ -42,8 +42,6 @@ class Extractor(metaclass=ABCMeta):
 
         fxc = FuncXClient()
 
-        print(f"BASE URL: {fxc.base_url}")
-
         container_id = fxc.register_container(
             location=self.store_url,
             container_type='docker',

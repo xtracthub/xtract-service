@@ -16,11 +16,13 @@ class ImageExtractor(Extractor):
 
 def images_extract(event):
 
+    # return "hey, bud"
+
     import os
     import sys
     import time
 
-    from shutil import copyfile, rmtree
+    from shutil import copyfile
 
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
@@ -35,6 +37,9 @@ def images_extract(event):
         copyfile('/app/pca_model.sav', f'pca_model.sav')
         copyfile('/app/clf_model.sav', f'clf_model.sav')
 
+
+    # return "we coo? "
+
     family_batch = event["family_batch"]
     creds = event["creds"]
 
@@ -44,7 +49,11 @@ def images_extract(event):
     ta = time.time()
     # TODO needs to implement as batch.
     # return family_batch.file_ls
-    downloader.batch_fetch(family_batch=family_batch)
+    try:
+        downloader.batch_fetch(family_batch=family_batch)
+    except Exception as e:
+        return e
+    # return "well we're here..."
     tb = time.time()
 
     file_paths = downloader.success_files
@@ -52,6 +61,7 @@ def images_extract(event):
         return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
                 'err_msg': "unable to download files"}
 
+    # return file_paths
     for family in family_batch.families:
 
         img_path = family.files[0]['path']
@@ -60,8 +70,7 @@ def images_extract(event):
 
     t1 = time.time()
 
-    # for file_path in downloader.success_files:
-    #     shutil.rmtree
+    [os.remove(file_path) for file_path in downloader.success_files]
 
     # Return batch
     return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
