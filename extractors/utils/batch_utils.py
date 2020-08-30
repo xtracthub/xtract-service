@@ -1,7 +1,8 @@
 
 from funcx import FuncXClient
+import os
 
-fxc = FuncXClient()
+fxc = FuncXClient(funcx_home=os.path.join('~', '.funcx'))
 
 
 # TODO: Batching happens external to the extractors
