@@ -14,7 +14,7 @@ def serialize_fx_inputs(*args, **kwargs):
 
 
 def invoke_solo_function(event, fx_eid, headers, func_id):
-    # print(headers)
+
     res = requests.post(url=post_url,
                         headers=headers,
                         json={'endpoint': fx_eid,
