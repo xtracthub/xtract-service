@@ -1,29 +1,33 @@
 
-from funcx import FuncXClient
-import os
+from funcx.sdk.utils.batch import Batch
+import json
+import requests
 
-fxc = FuncXClient(funcx_home=os.path.join('~', '.funcx'))
+from utils.routes import fx_submit_url, fx_batch_poll_url
 
 
-# TODO: Batching happens external to the extractors
-def remote_extract_batch(items_to_batch, ep_id):
-    batch = fxc.create_batch()
+def remote_extract_batch(items_to_batch, ep_id, headers):
+    batch = Batch()
 
     for item in items_to_batch:
         func_id = item["func_id"]
         event = item["event"]
-
-        print(func_id)
-        print(event)
-
         batch.add(event, endpoint_id=ep_id, function_id=func_id)
-    task_ids = fxc.batch_run(batch)
-    return task_ids
+
+    data = batch.prepare()
+    resp = requests.post(fx_submit_url, json=data, headers=headers)
+
+    try:
+        resp_dict = json.loads(resp.content)
+    except json.JSONDecodeError:
+        error_str =  f"Batch response is not valid JSON: {resp.content}"
+        print(error_str)
+        return error_str
+
+    if resp_dict["status"] == "Success":
+        return resp_dict["task_uuids"]
 
 
-def remote_poll_batch(task_ids):
-    statuses = fxc.get_batch_status(task_ids)
-    return statuses
-
-
-# TODO: Add util somewhere for creating a funcX batch.
+def remote_poll_batch(task_ids, headers):
+    statuses = requests.post(url=fx_batch_poll_url, json={"task_ids": task_ids}, headers=headers)
+    return json.loads(statuses.content)["results"]

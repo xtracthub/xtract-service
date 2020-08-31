@@ -2,7 +2,8 @@
 import json
 import requests
 
-post_url = 'https://funcx.org/api/v1/submit'
+post_url = 'https://api.funcx.org/v1/submit'
+
 
 def serialize_fx_inputs(*args, **kwargs):
     from funcx.serialize import FuncXSerializer
@@ -34,6 +35,7 @@ def invoke_solo_function(event, fx_eid, headers, func_id):
         print(res.content)
         return res.content
     # return task_uuid
+
 
 def run_batch_function(func_id, data_ls):
     pass
