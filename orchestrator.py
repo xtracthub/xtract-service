@@ -228,29 +228,24 @@ class Orchestrator:
                 ex_id = self.task_dict["active"].get()
                 tids_to_poll.append(ex_id)
 
+            # Send off task_ids to poll, retrieve a bunch of statuses.
             status_thing = remote_poll_batch(task_ids=tids_to_poll, headers=self.fx_headers)
 
             for tid in status_thing:
 
                 if "result" in status_thing[tid]:
-                    try:
-                        res = self.fx_ser.deserialize(status_thing[tid]['result'])
 
-                        if "family_batch" in res:
-                            family_batch = res["family_batch"]
-                            unpacked_metadata = self.unpack_returned_family_batch(family_batch)
-                            print(unpacked_metadata)
-                            # TODO: put on validation queue?
+                    res = self.fx_ser.deserialize(status_thing[tid]['result'])
 
-                        else:
-                            print(f"[Poller]: \"family_batch\" not in res!")
-                            # print(res)
+                    if "family_batch" in res:
+                        family_batch = res["family_batch"]
+                        unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+                        print(unpacked_metadata)
+                        # TODO: put on validation queue?
 
-                    except ModuleNotFoundError as e:
-                        mod_not_found += 1
-                        print(e)
-                        print(f"NUM MOD NOT FOUND: {mod_not_found}")
-                        continue
+                    else:
+                        print(f"[Poller]: \"family_batch\" not in res!")
+
                     success_returns += 1
                     self.logger.debug(f"Success Counter: {success_returns}")
                     self.logger.debug(f"Failure Counter: {failed_returns}")
@@ -258,12 +253,13 @@ class Orchestrator:
 
                     # TODO: Still need to return group_ids so we can mark accordingly...
                     if type(res) is not dict:
+                        print(f"Res is not dict: {res}")
                         continue
 
                 elif "exception" in status_thing[tid]:
                     exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
                     # TODO: bring back.
-                    # exc.reraise()
+                    exc.reraise()
                     failed_returns += 1
                     print(f"Exception caught: {exc}")
                     exc.reraise()
