@@ -35,12 +35,10 @@ def tabular_extract(event):
     downloader = GoogleDriveDownloader(auth_creds=creds)
 
     ta = time.time()
-    # return family_batch.file_ls
     downloader.batch_fetch(family_batch=family_batch)
     tb = time.time()
 
     file_paths = downloader.success_files
-    # return file_paths
 
     if len(file_paths) == 0:
         return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
@@ -51,6 +49,8 @@ def tabular_extract(event):
         # return img_path
         new_mdata = xtract_tabular_main.extract_columnar_metadata(img_path)
         family.metadata = new_mdata
+
+    # TODO: delete files when done.
 
     t1 = time.time()
     # Return batch
