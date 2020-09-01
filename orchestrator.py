@@ -4,17 +4,13 @@ import json
 import time
 import boto3
 import logging
-import requests
 import threading
 
 from queue import Queue
+from utils.pg_utils import pg_conn
 from funcx.serialize import FuncXSerializer
 from xtract_sdk.packagers import Family, FamilyBatch
-
-from utils.pg_utils import pg_conn
 from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
-from utils.fx_utils import serialize_fx_inputs
-
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
 
 
@@ -22,7 +18,7 @@ class Orchestrator:
     # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
-                 logging_level='debug', instance_id=None, extractor_finder='gdrive'):
+                 logging_level='debug', instance_id=None, extractor_finder='gdrive', fx_ep_list=None):
 
         self.extractor_finder = extractor_finder
 
@@ -39,20 +35,17 @@ class Orchestrator:
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
         self.gdrive_token = gdrive_token
+        self.fx_ep_list = fx_ep_list
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
-
-        self.max_active_batches = 100
-
-        self.families_limit = 2
+        self.max_active_batches = 1
+        self.batch_size = 1
+        self.families_limit = 1
         self.crawl_id = crawl_id
-        self.batch_size = 10
 
         self.failures = 0
 
         self.current_batch = []
-
-        # self.batches_to_process = {"image": [], "tabular": [], "text": [], "will": [], "images": [], None: []}  # TODO: cleanup extra imgs
 
         self.mdata_store_path = mdata_store_path
 
@@ -62,9 +55,6 @@ class Orchestrator:
 
         if 'Petrel' in self.headers:
             self.fx_headers['Petrel'] = self.headers['Petrel']
-
-        self.get_url = 'https://funcx.org/api/v1/{}/status'
-        self.post_url = 'https://funcx.org/api/v1/submit'
 
         self.logging_level = logging_level
 
@@ -94,35 +84,34 @@ class Orchestrator:
 
         response = self.client.get_queue_url(
             QueueName=f'crawl_{self.crawl_id}',
-            # TODO: env variable
-            QueueOwnerAWSAccountId='576668000072'
+            QueueOwnerAWSAccountId=os.environ["aws_account"]
         )
 
         self.crawl_queue = response["QueueUrl"]
 
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
-        # TODO: And do it here in the init.
+        # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
 
-    def pack_and_submit_map(self):
+    def send_families_loop(self):
 
         while True:
-            fx_ep = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
-
-            # task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
+            fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
 
             family_list = self.get_next_families()
+            print(f"Family list: {family_list}")
+
             # Cast list to FamilyBatch
             for family in family_list:
                 # Get extractor out of each group
                 if self.extractor_finder == 'matio':
                     extr_code = 'matio'
+                    # TODO: Create xtract_fam_obj here!
 
                 # TODO: kick this logic for finding extractor into sdk/crawler.
                 elif self.extractor_finder == 'gdrive':
                     d_type = 'gdrive'
                     xtr_fam_obj = Family(download_type=d_type)
 
-                    # print(family)
                     xtr_fam_obj.from_dict(json.loads(family))
                     xtr_fam_obj.headers = self.headers
                     extr_code = xtr_fam_obj.groups[list(xtr_fam_obj.groups.keys())[0]].parser
@@ -131,52 +120,34 @@ class Orchestrator:
                     if extr_code is None:  # TODO: Any bookkeeping we need to do here?
                         continue
 
-                    extractor = self.func_dict[extr_code]
-                    ex_func_id = extractor.func_id
-
-                    print(f"Extractor function ID: {ex_func_id}")
-
-                    # Putting into family batch -- we use funcX batching now, but no use rewriting...
-                    family_batch = FamilyBatch()
-                    family_batch.add_family(xtr_fam_obj)
-
-                    self.current_batch.append({"event": {"family_batch": family_batch,
-                                               "creds": self.gdrive_token[0]},
-                                               "func_id": ex_func_id})
-
                 else:
                     raise ValueError("Incorrect extractor_finder arg.")
 
-                # TODO: move batch submit to another function.
+                extractor = self.func_dict[extr_code]
+                ex_func_id = extractor.func_id
+
+                print(f"Extractor function ID: {ex_func_id}")
+
+                # Putting into family batch -- we use funcX batching now, but no use rewriting...
+                family_batch = FamilyBatch()
+                family_batch.add_family(xtr_fam_obj)  # TODO: issue with matio here.
+
+                self.current_batch.append({"event": {"family_batch": family_batch,
+                                                     "creds": self.gdrive_token[0]},
+                                           "func_id": ex_func_id})
+
                 if len(self.current_batch) >= self.batch_size:
-                    #
-                    # family_batch = FamilyBatch()
-                    # for fam_obj in self.batches_to_process[extr_code]:
-                    #     # print(fam_obj)
-                    #     family_batch.add_family(fam_obj)
-                    #
-                    # extractor = self.func_dict[extr_code]
 
-                    # task_id = extractor.remote_extract_solo({"family_batch": family_batch,
-                    #                                          "creds": self.gdrive_token[0]},
-                    #                                         fx_ep,
-                    #                                         headers=self.fx_headers)
-
-                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep)
+                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
                     for task_id in task_ids:
                         self.task_dict["active"].put(task_id)
-
-                    #self.task_dict["active"].put(task_id)
 
                     print(f"Queue size: {self.task_dict['active'].qsize()}")
 
                     # Empty the batch! Everything in here has been sent :)
                     self.current_batch = []
 
-            # failed_counter = 0
-            print("***** CONTINUING (NOT BREAKING) *****")
-            # time.sleep(5)
-            # break
+            time.sleep(2)
 
     def launch_poll(self):
         print("POLLER IS STARTING!!!!")
@@ -191,7 +162,7 @@ class Orchestrator:
                 t_families_get_start = time.time()
                 sqs_response = self.client.receive_message(
                     QueueUrl=self.crawl_queue,
-                    MaxNumberOfMessages=10,  # TODO: Change back to 10.
+                    MaxNumberOfMessages=10,
                     WaitTimeSeconds=20)
 
                 family_list = []
@@ -209,7 +180,7 @@ class Orchestrator:
                     response = self.client.delete_message_batch(
                         QueueUrl=self.crawl_queue,
                         Entries=del_list)
-                    # TODO: Do the 200 check. WEird data format.
+                    # TODO: Do the 200 check. Weird data format.
                     # if response["HTTPStatusCode"] is not 200:
                     #     raise ConnectionError("Could not delete messages from queue!")
                 time.sleep(0.5)  # TODO: remove.
@@ -222,7 +193,7 @@ class Orchestrator:
         max_threads = 1
 
         for i in range(0, max_threads):
-            ex_thr = threading.Thread(target=self.pack_and_submit_map(), args=())
+            ex_thr = threading.Thread(target=self.send_families_loop(), args=())
             ex_thr.start()
 
     def unpack_returned_family_batch(self, family_batch):
@@ -241,7 +212,7 @@ class Orchestrator:
         success_returns = 0
         mod_not_found = 0
         failed_returns = 0
-        poll_start = time.time()
+
         while True:
             if self.task_dict["active"].empty():
                 self.logger.debug("No live IDs... sleeping...")
@@ -250,33 +221,29 @@ class Orchestrator:
                 time.sleep(2.5)
                 continue
 
+            # Here we pull all values from active task queue to create a batch of them!
             num_elem = self.task_dict["active"].qsize()
+            tids_to_poll = []  # the batch
             for _ in range(0, num_elem):
                 ex_id = self.task_dict["active"].get()
+                tids_to_poll.append(ex_id)
 
-                # TODO: Switch this to batch gets.
-                status_thing = requests.get(self.get_url.format(ex_id), headers=self.fx_headers)
+            status_thing = remote_poll_batch(task_ids=tids_to_poll, headers=self.fx_headers)
 
-                try:
-                    status_thing = json.loads(status_thing.content)
-                except json.decoder.JSONDecodeError as e:
-                    self.logger.error(e)
-                    self.logger.error("Status unloadable. Marking as failed.")
-                    continue
-                    # TODO. What exactly SHOULD I do?
+            for tid in status_thing:
 
-                self.logger.debug(f"Status: {status_thing}")
-
-                if "result" in status_thing:
+                if "result" in status_thing[tid]:
                     try:
-                        res = self.fx_ser.deserialize(status_thing['result'])
+                        res = self.fx_ser.deserialize(status_thing[tid]['result'])
 
                         if "family_batch" in res:
                             family_batch = res["family_batch"]
                             unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+                            print(unpacked_metadata)
+                            # TODO: put on validation queue?
 
                         else:
-                            print(f"[Poller]:O family_batch not in res!")
+                            print(f"[Poller]: \"family_batch\" not in res!")
                             # print(res)
 
                     except ModuleNotFoundError as e:
@@ -293,12 +260,13 @@ class Orchestrator:
                     if type(res) is not dict:
                         continue
 
-                elif "exception" in status_thing:
-                    exc = self.fx_ser.deserialize(status_thing['exception'])
+                elif "exception" in status_thing[tid]:
+                    exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
                     # TODO: bring back.
                     # exc.reraise()
                     failed_returns += 1
                     print(f"Exception caught: {exc}")
+                    exc.reraise()
 
                 else:
-                    self.task_dict["active"].put(ex_id)
+                    self.task_dict["active"].put(tid)
