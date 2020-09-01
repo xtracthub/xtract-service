@@ -1,5 +1,4 @@
 
-
 import time
 from flask import jsonify
 from enum import Enum
@@ -15,7 +14,7 @@ from orchestrator import Orchestrator
 
 import pickle
 from uuid import uuid4
-get_url = 'https://dev.funcx.org/api/v1/{}/status'
+
 
 # Python standard libraries
 import json
@@ -95,8 +94,8 @@ def crawl_repo():
 
     crawl_url = 'http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/crawl'
 
-    x = requests.post(crawl_url, json=request.json)
-    print(x.content)
+    x = requests.post(url=crawl_url, json=request.json, data=request.data)
+    print(f"CRAWL RESPONSE: {x.content}")
     return x.content
 
 
