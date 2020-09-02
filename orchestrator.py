@@ -5,13 +5,20 @@ import time
 import boto3
 import logging
 import threading
+import numpy as np
 
 from queue import Queue
-from utils.pg_utils import pg_conn
 from funcx.serialize import FuncXSerializer
 from xtract_sdk.packagers import Family, FamilyBatch
 from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 
 class Orchestrator:
@@ -29,7 +36,6 @@ class Orchestrator:
                           "text": xtract_keyword.KeywordExtractor(),
                           "matio": xtract_matio.MatioExtractor()}  # TODO: cleanup extra imgs
 
-        # self.image_func_id = "8274fe2f-a132-4a9e-b8e2-9ad891e997a1"
         self.fx_ser = FuncXSerializer()
 
         self.source_endpoint = source_eid
@@ -85,6 +91,14 @@ class Orchestrator:
 
         self.crawl_queue = response["QueueUrl"]
 
+        self.families_to_process = Queue()
+        self.to_validate_q = Queue()
+
+
+        self.will_file = open("will.mdata", "w")
+
+
+
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
 
@@ -114,8 +128,12 @@ class Orchestrator:
                     extr_code = xtr_fam_obj.groups[list(xtr_fam_obj.groups.keys())[0]].parser
                     # print(f"Extractor code: {extr_code}")
 
-                    if extr_code is None:  # TODO: Any bookkeeping we need to do here?
+                    if extr_code is None or extr_code == 'hierarch' or extr_code == 'compressed':  # TODO: Any bookkeeping we need to do here?
                         continue
+
+                    if extr_code is not "tabular":
+                        #continue
+                        pass
 
                 else:
                     raise ValueError("Incorrect extractor_finder arg.")
@@ -123,7 +141,7 @@ class Orchestrator:
                 extractor = self.func_dict[extr_code]
                 ex_func_id = extractor.func_id
 
-                print(f"Extractor function ID: {ex_func_id}")
+                # print(f"Extractor function ID: {ex_func_id}")
 
                 # Putting into family batch -- we use funcX batching now, but no use rewriting...
                 family_batch = FamilyBatch()
@@ -139,7 +157,7 @@ class Orchestrator:
                     for task_id in task_ids:
                         self.task_dict["active"].put(task_id)
 
-                    print(f"Queue size: {self.task_dict['active'].qsize()}")
+                    print(f"Active task queue (local) size: {self.task_dict['active'].qsize()}")
 
                     # Empty the batch! Everything in here has been sent :)
                     self.current_batch = []
@@ -176,7 +194,7 @@ class Orchestrator:
                         QueueUrl=self.crawl_queue,
                         Entries=del_list)
                     # TODO: Do the 200 check. Weird data format.
-                    print(f"Delete response: {response}")
+                    # print(f"Delete response: {response}")
                 #     if response["HTTPStatusCode"] is not 200:
                 #         raise ConnectionError("Could not delete messages from queue!")
                 return family_list
@@ -193,17 +211,8 @@ class Orchestrator:
 
     def unpack_returned_family_batch(self, family_batch):
 
-        for family in family_batch.families:
-            # print(f"Family Metadata: {family.metadata}")
-            if len(family.metadata) > 0:
-                print(f"Nonempty family metadata: {family.metadata}")
-            else:
-                print(f"Empty Family Metadata: {family.metadata}")
-
-            for group in family.groups:
-                # TODO: use for debugging matio.
-                # print(f"Group Metadata: {family.groups[group].metadata}")
-                pass
+        fam_batch_dict = family_batch.to_dict()
+        return fam_batch_dict
 
     def poll_responses(self):
         success_returns = 0
@@ -225,12 +234,14 @@ class Orchestrator:
 
             for i in range(0, num_elem):
 
-                # print(f"[POLLER]: Pulled {i} items!")
                 ex_id = self.task_dict["active"].get()
                 tids_to_poll.append(ex_id)
 
             # Send off task_ids to poll, retrieve a bunch of statuses.
             status_thing = remote_poll_batch(task_ids=tids_to_poll, headers=self.fx_headers)
+
+            if status_thing is None:
+                continue
 
             for tid in status_thing:
 
@@ -241,6 +252,14 @@ class Orchestrator:
                     if "family_batch" in res:
                         family_batch = res["family_batch"]
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+                        print(f"UNPACKED METADATA: {unpacked_metadata}")
+
+                        try:
+                            self.will_file.write(f"{json.dumps(unpacked_metadata, cls=NumpyEncoder)}\n")
+                        except Exception as e:
+                            print(f"Skipping line! Caught error: {e}")
+
+                        # TODO: Let's put these on the validation queue.
 
                     else:
                         print(f"[Poller]: \"family_batch\" not in res!")
@@ -257,12 +276,16 @@ class Orchestrator:
 
                 elif "exception" in status_thing[tid]:
                     exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
-                    # TODO: bring back.
                     try:
                         exc.reraise()
                     except ModuleNotFoundError as e:
                         mod_not_found += 1
                         print(f"Num. ModuleNotFound: {mod_not_found}")
+
+                    except Exception as e:
+                        print(f"Caught exception: {e}")
+                        print("Continuing!")
+                        pass
 
                     failed_returns += 1
                     print(f"Exception caught: {exc}")
