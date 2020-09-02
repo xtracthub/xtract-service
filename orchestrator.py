@@ -38,18 +38,14 @@ class Orchestrator:
         self.fx_ep_list = fx_ep_list
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
-        self.max_active_batches = 1
-        self.batch_size = 1
-        self.families_limit = 1
-        self.crawl_id = crawl_id
 
-        self.failures = 0
+        self.batch_size = 10
+        self.crawl_id = crawl_id
 
         self.current_batch = []
 
         self.mdata_store_path = mdata_store_path
 
-        self.conn = pg_conn()
         self.headers = headers
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
 
@@ -67,7 +63,7 @@ class Orchestrator:
         self.logger.setLevel(logging.DEBUG)
         self.instance_id = instance_id
 
-        self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"
+        self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"  # TODO: env var.
         self.client = boto3.client('sqs',
                                    aws_access_key_id=os.environ["aws_access"],
                                    aws_secret_access_key=os.environ["aws_secret"], region_name='us-east-1')
@@ -97,8 +93,9 @@ class Orchestrator:
         while True:
             fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
 
+            print("Communicating with SQS to pull down new_files")
             family_list = self.get_next_families()
-            print(f"Family list: {family_list}")
+            print(f"Family: {family_list}")
 
             # Cast list to FamilyBatch
             for family in family_list:
@@ -115,7 +112,7 @@ class Orchestrator:
                     xtr_fam_obj.from_dict(json.loads(family))
                     xtr_fam_obj.headers = self.headers
                     extr_code = xtr_fam_obj.groups[list(xtr_fam_obj.groups.keys())[0]].parser
-                    print(f"Extractor code: {extr_code}")
+                    # print(f"Extractor code: {extr_code}")
 
                     if extr_code is None:  # TODO: Any bookkeeping we need to do here?
                         continue
@@ -146,8 +143,7 @@ class Orchestrator:
 
                     # Empty the batch! Everything in here has been sent :)
                     self.current_batch = []
-
-            time.sleep(2)
+            time.sleep(1)
 
     def launch_poll(self):
         print("POLLER IS STARTING!!!!")
@@ -159,7 +155,6 @@ class Orchestrator:
         while True:
             try:
                 # Step 1. Get ceiling(batch_size/10) messages down from queue.
-                t_families_get_start = time.time()
                 sqs_response = self.client.receive_message(
                     QueueUrl=self.crawl_queue,
                     MaxNumberOfMessages=10,
@@ -181,9 +176,9 @@ class Orchestrator:
                         QueueUrl=self.crawl_queue,
                         Entries=del_list)
                     # TODO: Do the 200 check. Weird data format.
-                    # if response["HTTPStatusCode"] is not 200:
-                    #     raise ConnectionError("Could not delete messages from queue!")
-                time.sleep(0.5)  # TODO: remove.
+                    print(f"Delete response: {response}")
+                #     if response["HTTPStatusCode"] is not 200:
+                #         raise ConnectionError("Could not delete messages from queue!")
                 return family_list
             except:
                 ConnectionError("Could not get new families! ")
@@ -206,7 +201,9 @@ class Orchestrator:
                 print(f"Empty Family Metadata: {family.metadata}")
 
             for group in family.groups:
-                print(f"Group Metadata: {family.groups[group].metadata}")
+                # TODO: use for debugging matio.
+                # print(f"Group Metadata: {family.groups[group].metadata}")
+                pass
 
     def poll_responses(self):
         success_returns = 0
@@ -214,6 +211,7 @@ class Orchestrator:
         failed_returns = 0
 
         while True:
+
             if self.task_dict["active"].empty():
                 self.logger.debug("No live IDs... sleeping...")
                 p_empty = time.time()
@@ -224,7 +222,10 @@ class Orchestrator:
             # Here we pull all values from active task queue to create a batch of them!
             num_elem = self.task_dict["active"].qsize()
             tids_to_poll = []  # the batch
-            for _ in range(0, num_elem):
+
+            for i in range(0, num_elem):
+
+                # print(f"[POLLER]: Pulled {i} items!")
                 ex_id = self.task_dict["active"].get()
                 tids_to_poll.append(ex_id)
 
@@ -240,8 +241,6 @@ class Orchestrator:
                     if "family_batch" in res:
                         family_batch = res["family_batch"]
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
-                        print(unpacked_metadata)
-                        # TODO: put on validation queue?
 
                     else:
                         print(f"[Poller]: \"family_batch\" not in res!")
@@ -259,10 +258,14 @@ class Orchestrator:
                 elif "exception" in status_thing[tid]:
                     exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
                     # TODO: bring back.
-                    exc.reraise()
+                    try:
+                        exc.reraise()
+                    except ModuleNotFoundError as e:
+                        mod_not_found += 1
+                        print(f"Num. ModuleNotFound: {mod_not_found}")
+
                     failed_returns += 1
                     print(f"Exception caught: {exc}")
-                    exc.reraise()
 
                 else:
                     self.task_dict["active"].put(tid)
