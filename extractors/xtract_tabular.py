@@ -1,4 +1,3 @@
-
 from extractors.extractor import Extractor
 
 
@@ -12,6 +11,28 @@ class TabularExtractor(Extractor):
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
         super().set_extr_func(tabular_extract)
+
+def min_hash(fpath):
+
+    """
+    Extracts MinHash digest of a file's bytes
+
+    fpath (str): path to file to extract MinHash of
+    """
+
+    from datasketch import MinHash
+
+    NUM_PERMS = 128
+    CHUNK_SZ = 64
+
+    mh = MinHash(num_perm=NUM_PERM)
+
+    with open(fpath, 'rb') as of:
+        by = of.read(CHUNK_SZ)
+        while by != b"":
+            mh.update(b)
+
+    return mh
 
 
 def tabular_extract(event):
@@ -47,7 +68,9 @@ def tabular_extract(event):
     for family in family_batch.families:
         img_path = family.files[0]['path']
         # return img_path
+
         new_mdata = xtract_tabular_main.extract_columnar_metadata(img_path)
+        new_mdata["min_hash"] = min_hash(img_path)
         family.metadata = new_mdata
 
     # TODO: delete files when done.
