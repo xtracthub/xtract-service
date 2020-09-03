@@ -12,44 +12,40 @@ def get_crawl_status(crawl_id):
     t0 = time.time()
     conn = pg_conn()
     cur2 = conn.cursor()
-    status_query = f"SELECT status, started_on, ended_on FROM crawls WHERE crawl_id='{crawl_id}';"
+    # status_query = f"SELECT status, started_on, ended_on FROM crawls WHERE crawl_id='{crawl_id}';"
 
-    cur2.execute(status_query)
+    # cur2.execute(status_query)
 
     r = requests.get("http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/get_crawl_status", json={'crawl_id': crawl_id})
 
     vals = json.loads(r.content)
 
-    print(vals)
+    print("HERE IS VALS")
 
-    bytes_processed = vals['bytes_crawled']
-    files_processed = vals['files_crawled']
-    groups_crawled = vals['group_crawled']
-    crawl_id = vals['crawl_id']
-
-    status, started_at, ended_at = cur2.fetchall()[0]
-
-    if bytes_processed is None:
-        files_processed = 0
-        bytes_processed = 0
-
-    if status == "complete":
-        elapsed_time = ended_at - started_at
-    else:
-        elapsed_time = datetime.utcnow() - started_at
-
-    total_seconds = elapsed_time.total_seconds()
-
+    # print(vals)
+    #
+    # bytes_processed = vals['bytes_crawled']
+    # files_processed = vals['files_crawled']
+    # groups_crawled = vals['group_crawled']
+    # crawl_id = vals['crawl_id']
+    #
+    # status, started_at, ended_at = cur2.fetchall()[0]
+    #
+    # if bytes_processed is None:
+    #     files_processed = 0
+    #     bytes_processed = 0
+    #
+    # if status == "complete":
+    #     elapsed_time = ended_at - started_at
+    # else:
+    #     elapsed_time = datetime.utcnow() - started_at
+    #
+    # total_seconds = elapsed_time.total_seconds()
+    #
     t1 = time.time()
 
     print(f"Total time to get crawl status: {t1-t0}")
-    return {"crawl_id": crawl_id,
-            "groups_crawled": groups_crawled,
-            "crawl_status": status,
-            "elapsed_time": total_seconds,
-            "files_processed": files_processed,
-            "bytes_processed": int(bytes_processed)
-            }
+    return vals
 
 
 def get_extract_status(crawl_id):

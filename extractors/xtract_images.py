@@ -16,6 +16,7 @@ class ImageExtractor(Extractor):
 
 def images_extract(event):
 
+
     import os
     import sys
     import time
@@ -25,8 +26,8 @@ def images_extract(event):
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
     t0 = time.time()
-
     sys.path.insert(1, '/app')
+
     import xtract_images_main
 
     cur_ls = os.listdir('.')
@@ -42,12 +43,14 @@ def images_extract(event):
 
     # TODO: Put time info into the downloader/extractor objects.
     ta = time.time()
-    # TODO needs to implement as batch.
-    # return family_batch.file_ls
-    downloader.batch_fetch(family_batch=family_batch)
+    try:
+        downloader.batch_fetch(family_batch=family_batch)
+    except Exception as e:
+        return e
     tb = time.time()
 
     file_paths = downloader.success_files
+
     if len(file_paths) == 0:
         return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
                 'err_msg': "unable to download files"}
@@ -59,5 +62,7 @@ def images_extract(event):
         family.metadata = new_mdata
 
     t1 = time.time()
-    # Return batch
+
+    [os.remove(file_path) for file_path in downloader.success_files]
+
     return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
