@@ -38,6 +38,10 @@ class Orchestrator:
 
         self.fx_ser = FuncXSerializer()
 
+        self.send_status = "STARTING"
+        self.poll_status = "STARTING"
+        self.commit_completed = False
+
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
         self.gdrive_token = gdrive_token
@@ -47,6 +51,8 @@ class Orchestrator:
 
         self.batch_size = 10
         self.crawl_id = crawl_id
+
+        self.file_count = 0
 
         self.current_batch = []
 
@@ -94,13 +100,64 @@ class Orchestrator:
         self.families_to_process = Queue()
         self.to_validate_q = Queue()
 
-
         self.will_file = open("will.mdata", "w")
 
-
+        self.sqs_push_threads = {}
+        self.thr_ls = []
+        self.commit_threads = 1
+        for i in range(0, self.commit_threads):
+            thr = threading.Thread(target=self.enqueue_loop, args=(i,))
+            self.thr_ls.append(thr)
+            thr.start()
+            self.sqs_push_threads[i] = True
+        print(f"Successfully started {len(self.sqs_push_threads)} SQS push threads!")
 
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
+    def enqueue_loop(self, thr_id):
+
+        print("In enqueue loop!")
+        while True:
+            insertables = []
+
+            print("******* ENQUEUE LOOP ************")
+
+            # If empty, then we want to return.
+            if self.to_validate_q.empty():
+                # If ingest queue empty, we can demote to "idle"
+                if self.poll_status == "COMMITTING":
+                    self.sqs_push_threads[thr_id] = "IDLE"
+                    print(f"Thread {thr_id} is committing and idle!")
+                    time.sleep(0.25)
+
+                    # NOW if all threads idle, then return!
+                    if all(value == "IDLE" for value in self.sqs_push_threads.values()):
+                        self.commit_completed = True
+                        self.poll_status = "COMPLETED"
+                        self.extract_end = time.time()
+                        print(f"Thread {thr_id} is terminating!")
+                        return 0
+
+                print("[Val Push]: sleeping for 5 seconds... ")
+                time.sleep(5)
+                continue
+
+            self.sqs_push_threads[thr_id] = "ACTIVE"
+
+            # Remove up to n elements from queue, where n is current_batch.
+            current_batch = 1
+            while not self.to_validate_q.empty() and current_batch < 10:
+                insertables.append(self.to_validate_q.get())
+                # self.active_commits -= 1  # TODO: do something with this.
+                current_batch += 1
+            print(f"Current batch: {current_batch}")
+
+            # try:
+            response = self.client.send_message_batch(QueueUrl=self.validation_queue_url,
+                                                          Entries=insertables)
+            print(f"SQS response on insert: {response}")
+            # except Exception as e:  # TODO: too vague
+            #     print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
     def send_families_loop(self):
 
@@ -218,6 +275,7 @@ class Orchestrator:
         success_returns = 0
         mod_not_found = 0
         failed_returns = 0
+        type_errors = 0
 
         while True:
 
@@ -254,13 +312,20 @@ class Orchestrator:
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
                         print(f"UNPACKED METADATA: {unpacked_metadata}")
 
+                        # try:
+                        #     self.will_file.write(f"{json.dumps(unpacked_metadata, cls=NumpyEncoder)}\n")
+                        # except Exception as e:
+                        #     print(f"Skipping line! Caught error: {e}")
+
+                        # TODO: FIX THE FORMAT SO SQS CAN ACTUALLY ABSORB THEM.
                         try:
-                            self.will_file.write(f"{json.dumps(unpacked_metadata, cls=NumpyEncoder)}\n")
-                        except Exception as e:
-                            print(f"Skipping line! Caught error: {e}")
-
-                        # TODO: Let's put these on the validation queue.
-
+                            self.to_validate_q.put({"Id": str(self.file_count),
+                                                    "MessageBody": json.dumps(unpacked_metadata, cls=NumpyEncoder)})
+                            self.file_count += 1
+                        except TypeError as e1:
+                            print(f"Type error: {e1}")
+                            type_errors += 1
+                            print(f"Total type errors: {type_errors}")
                     else:
                         print(f"[Poller]: \"family_batch\" not in res!")
 
