@@ -14,3 +14,4 @@ boto3
 xtract_sdk
 datasketch
 google-api-python-client
+google-auth-oauthlib
