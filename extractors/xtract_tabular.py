@@ -7,7 +7,7 @@ class TabularExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="3359db0f-762a-414d-943d-1dd518beff00",
+                         func_id="aaa9bf93-c13b-4553-b16e-e2a67d0c23f5",
                          extr_name="xtract-tabular",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
@@ -55,6 +55,3 @@ def tabular_extract(event):
     t1 = time.time()
     # Return batch
     return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
-
-
-
