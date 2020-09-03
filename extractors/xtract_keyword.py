@@ -7,7 +7,7 @@ class KeywordExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="e0d94df2-dc09-4124-adb1-c6228bf94367",
+                         func_id="d5a09aee-927f-4d6e-9ee4-5ad461d9148b",
                          extr_name="xtract-keyword",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-keyword:latest")
@@ -33,7 +33,6 @@ def keyword_extract(event):
     downloader = GoogleDriveDownloader(auth_creds=creds)
 
     ta = time.time()
-    # return family_batch.file_ls
     try:
         downloader.batch_fetch(family_batch=family_batch)
     except Exception as e:
@@ -49,8 +48,8 @@ def keyword_extract(event):
     for family in family_batch.families:
         keyword_mimetype = family.files[0]['mimeType']
         is_pdf = True if 'pdf' in keyword_mimetype.lower() else False
-        # return keyword_mimetype
         file_path = family.files[0]['path']
+
         new_mdata = xtract_keyword_main.extract_keyword(file_path, pdf=is_pdf)
 
         # TODO: move this sort of thing
@@ -62,6 +61,8 @@ def keyword_extract(event):
             new_mdata = {}
 
         family.metadata = new_mdata
+
+    # TODO: obliterate downloaded files here.
 
     t1 = time.time()
     return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}

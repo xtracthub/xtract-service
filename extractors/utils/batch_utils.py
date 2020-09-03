@@ -30,4 +30,11 @@ def remote_extract_batch(items_to_batch, ep_id, headers):
 
 def remote_poll_batch(task_ids, headers):
     statuses = requests.post(url=fx_batch_poll_url, json={"task_ids": task_ids}, headers=headers)
-    return json.loads(statuses.content)["results"]
+
+    try:
+        return json.loads(statuses.content)["results"]
+    except json.JSONDecodeError as e:
+        print(f"[POLL BATCH] Unable to load content from funcX poll. Caught: {e}")
+        print(f"[POLL BATCH] Response received from funcX: {statuses.content}")
+        return None
+
