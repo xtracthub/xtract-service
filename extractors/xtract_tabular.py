@@ -15,9 +15,20 @@ class TabularExtractor(Extractor):
 
 
 def tabular_extract(event):
+    """Extract metadata from tabular data.
+    
+    Parameters
+    ----------
+    event : dict
+        A dict describing the data and credentials to act on
 
+    Returns
+    -------
+    dict : The resulting metadata and timers
+    """
     import sys
     import time
+    import shutil
 
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
@@ -50,7 +61,7 @@ def tabular_extract(event):
         new_mdata = xtract_tabular_main.extract_columnar_metadata(img_path)
         family.metadata = new_mdata
 
-    # TODO: delete files when done.
+    shutil.rmtree(file_paths)
 
     t1 = time.time()
     # Return batch
