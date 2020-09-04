@@ -2,7 +2,6 @@
 from abc import ABCMeta
 from queue import Queue
 from utils.fx_utils import invoke_solo_function
-from funcx import FuncXClient
 
 
 class Extractor(metaclass=ABCMeta):
@@ -16,8 +15,6 @@ class Extractor(metaclass=ABCMeta):
         self.extr_func = None
         self.debug = False  # TODO: if debug=True, reregister function each time.
         self.active_funcx_ids = Queue()
-        # self.fxc = FuncXClient()
-        # self.fxc.throttling_enabled = False  # We want to shut off throttling.
 
     def set_extr_func(self, func):
         self.extr_func = func
