@@ -16,8 +16,8 @@ class Extractor(metaclass=ABCMeta):
         self.extr_func = None
         self.debug = False  # TODO: if debug=True, reregister function each time.
         self.active_funcx_ids = Queue()
-        self.fxc = FuncXClient()
-        self.fxc.throttling_enabled = False  # We want to shut off throttling.
+        # self.fxc = FuncXClient()
+        # self.fxc.throttling_enabled = False  # We want to shut off throttling.
 
     def set_extr_func(self, func):
         self.extr_func = func
