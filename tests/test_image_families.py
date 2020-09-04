@@ -56,11 +56,11 @@ while True:
 
     if 'result' in status_thing:
         result = fx_ser.deserialize(status_thing['result'])
-        # print(result)
+        print(f"Result: {result}")
+
 
         print(result['family_batch'].families[0].metadata)
 
-        print(f"Result: {result}")
 
     elif 'exception' in status_thing:
         exception = fx_ser.deserialize(status_thing['exception'])
