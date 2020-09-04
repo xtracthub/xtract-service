@@ -14,6 +14,7 @@ from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
 
 
+# TODO: Put this dang numpy encoder in 1 place and import it everywhere it's needed.
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):

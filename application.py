@@ -363,7 +363,6 @@ def automate_status(action_id):
     return jsonify(job_info)
 
 
-# TODO: break off into a separate repo.
 def fetch_crawl_messages(crawl_id):
 
     print("IN thread! ")
@@ -373,7 +372,7 @@ def fetch_crawl_messages(crawl_id):
                           aws_secret_access_key=os.environ["aws_secret"], region_name='us-east-1')
 
     response = client.get_queue_url(
-        QueueName=f'crawl_{crawl_id}',
+        QueueName=f'validate_{crawl_id}',
         QueueOwnerAWSAccountId='576668000072')  # TODO: env variable
 
     crawl_queue = response["QueueUrl"]
@@ -442,7 +441,7 @@ def fetch_mdata():
     plucked_files = 0
     file_list = []
     while plucked_files < n:
-        if active_ids[crawl_id].empty():
+        if active_orchestrators[crawl_id].empty():
             queue_empty = True
             break
         file_path = active_orchestrators[crawl_id].get()
