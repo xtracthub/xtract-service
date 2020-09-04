@@ -12,27 +12,7 @@ class TabularExtractor(Extractor):
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
         super().set_extr_func(tabular_extract)
 
-def min_hash(fpath):
 
-    """
-    Extracts MinHash digest of a file's bytes
-
-    fpath (str): path to file to extract MinHash of
-    """
-
-    from datasketch import MinHash
-
-    NUM_PERMS = 128
-    CHUNK_SZ = 64
-
-    mh = MinHash(num_perm=NUM_PERM)
-
-    with open(fpath, 'rb') as of:
-        by = of.read(CHUNK_SZ)
-        while by != b"":
-            mh.update(b)
-
-    return mh
 
 
 def tabular_extract(event):
@@ -59,6 +39,31 @@ def tabular_extract(event):
     import xtract_tabular_main
     # from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
 
+    def min_hash(fpath):
+        """
+        Extracts MinHash digest of a file's bytes
+
+        fpath (str): path to file to extract MinHash of
+        """
+
+        from datasketch import MinHash
+
+        NUM_PERMS = 128
+        CHUNK_SZ = 64
+
+        mh = MinHash(num_perm=NUM_PERMS)
+
+        with open(fpath, 'rb') as of:
+            print("File is open")
+            count = 0
+            by = of.read(CHUNK_SZ)
+            while by != b"":
+                by = of.read(CHUNK_SZ)
+                count += 1
+                mh.update(by)
+
+        return mh
+
     new_mdata = None
 
     creds = event["creds"]
@@ -84,7 +89,7 @@ def tabular_extract(event):
         new_mdata["min_hash"] = min_hash(img_path)
         family.metadata = new_mdata
 
-    shutil.rmtree(file_paths)
+    # shutil.rmtree(file_paths)  # TODO: Bring back proper way of doing this.
 
     t1 = time.time()
     # Return batch
