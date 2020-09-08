@@ -15,14 +15,17 @@ img_funcid = img_extractor.register_function()
 
 fam_1 = Family()
 # fam_2 = Family()
-base_url = "https://data.materialsdatafacility.org"
-base_path = "/thurston_selfassembled_peptide_spectra_v1.1/DFT/MoleculeConfigs/di_30_-10.xyz/"
+
+# NCSA test
+# base_url = "https://data.materialsdatafacility.org"
+# base_path = "/thurston_selfassembled_peptide_spectra_v1.1/DFT/MoleculeConfigs/di_30_-10.xyz/"
+
+# Petrel test
+base_url = 'https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org'
+base_path = "/MDF/mdf_connect/prod/data/foo_v1/Ag2Al.hP2/"
 
 # TODO: Need 2 level xtract-matio.
-fam_1.add_group(files=[{"path": f"{base_path}INCAR", "metadata": {}, "base_url": base_url}, {"path": f"{base_path}OUTCAR", "metadata": {}, "base_url": base_url}, {"path": f"{base_path}POSCAR", "metadata": {}, "base_url": base_url}], parser='dft')
 
-fam_batch = FamilyBatch()
-fam_batch.add_family(fam_1)
 # fam_batch.add_family(fam_2)
 
 # TODO: Get creds for both Globus and Google here.
@@ -44,20 +47,29 @@ transfer_token = tokens['transfer.api.globus.org']['access_token']
 mdf_token = tokens["data.materialsdatafacility.org"]['access_token']
 funcx_token = tokens['funcx_service']['access_token']
 
-headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token, 'Petrel': mdf_token}
-print(f"Headers: {headers}")
+full_headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token, 'Petrel': auth_token}
+#print(f"Headers: {headers}")
+file_headers = {'Authorization': f"Bearer {auth_token}", 'Transfer': transfer_token, 'FuncX': funcx_token, 'Petrel': auth_token}
 
+
+fam_1.add_group(files=[{"path": f"{base_path}INCAR", "metadata": {}, "base_url": base_url}, {"path": f"{base_path}OUTCAR", "metadata": {}, "base_url": base_url}, {"path": f"{base_path}POSCAR", "metadata": {}, "base_url": base_url}], parser='dft')
+fam_1.headers = file_headers
+
+fam_batch = FamilyBatch()
+fam_batch.add_family(fam_1)
 
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 
 print("submitting task")
 task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch},
-                                            fx_eid="82ceed9f-dce1-4dd1-9c45-6768cf202be8",
-                                            headers=headers)
+                                            fx_eid="68bade94-bf58-4a7a-bfeb-9c6a61fa5443",
+                                            headers=full_headers)
 
+print(task_id)
 task_dict["active"].put(task_id)
 
 print(f"Task ID: {task_id}")
+
 
 import time
 import requests
@@ -65,7 +77,7 @@ from funcx.serialize import FuncXSerializer
 fx_ser = FuncXSerializer()
 while True:
 
-    get_url = 'https://funcx.org/api/v1/{}/status'
+    get_url = 'https://api.funcx.org/v1/{}/status'
 
     if task_dict["active"].empty():
         print("Active task queue empty... sleeping... ")
@@ -74,15 +86,12 @@ while True:
 
     cur_tid = task_dict["active"].get()
     print(cur_tid)
-    status_thing = requests.get(get_url.format(cur_tid), headers=headers).json()
+    status_thing = requests.get(get_url.format(cur_tid), headers=full_headers).json()
 
     if 'result' in status_thing:
         result = fx_ser.deserialize(status_thing['result'])
-        import pickle
-        with open("matio_dft.pkl", 'wb') as f:
-            pickle.dump(result, f)
 
-        print(f"Result: {result} written to matio_dft.pkl")
+        print(f"Result: {result}")
 
         for family in result["family_batch"].families:
             print(family)
