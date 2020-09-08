@@ -50,7 +50,7 @@ class Orchestrator:
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
-        self.batch_size = 10
+        self.batch_size = 1
         self.crawl_id = crawl_id
 
         self.file_count = 0
@@ -64,6 +64,7 @@ class Orchestrator:
 
         if 'Petrel' in self.headers:
             self.fx_headers['Petrel'] = self.headers['Petrel']
+            self.family_headers = {'Authorization': f"Bearer {self.headers['Petrel']}"}
 
         self.logging_level = logging_level
 
@@ -147,7 +148,7 @@ class Orchestrator:
 
             # Remove up to n elements from queue, where n is current_batch.
             current_batch = 1
-            while not self.to_validate_q.empty() and current_batch < 10:
+            while not self.to_validate_q.empty() and current_batch < 1:
                 insertables.append(self.to_validate_q.get())
                 # self.active_commits -= 1  # TODO: do something with this.
                 current_batch += 1
@@ -171,9 +172,15 @@ class Orchestrator:
 
             # Cast list to FamilyBatch
             for family in family_list:
+
                 # Get extractor out of each group
                 if self.extractor_finder == 'matio':
+                    d_type = "HTTPS"
                     extr_code = 'matio'
+                    xtr_fam_obj = Family(download_type=d_type)
+
+                    xtr_fam_obj.from_dict(json.loads(family))
+                    xtr_fam_obj.headers = self.headers
                     # TODO: Create xtract_fam_obj here!
 
                 # TODO: kick this logic for finding extractor into sdk/crawler.
@@ -183,18 +190,15 @@ class Orchestrator:
 
                     xtr_fam_obj.from_dict(json.loads(family))
                     xtr_fam_obj.headers = self.headers
+
                     extr_code = xtr_fam_obj.groups[list(xtr_fam_obj.groups.keys())[0]].parser
-                    # print(f"Extractor code: {extr_code}")
-
-                    if extr_code is None or extr_code == 'hierarch' or extr_code == 'compressed':  # TODO: Any bookkeeping we need to do here?
-                        continue
-
-                    if extr_code is not "tabular":
-                        #continue
-                        pass
 
                 else:
                     raise ValueError("Incorrect extractor_finder arg.")
+
+                # TODO: add the decompression work and the hdf5/netcdf extractors!
+                if extr_code is None or extr_code == 'hierarch' or extr_code == 'compressed':  # TODO: Any bookkeeping we need to do here?
+                    continue
 
                 extractor = self.func_dict[extr_code]
                 ex_func_id = extractor.func_id
@@ -205,10 +209,16 @@ class Orchestrator:
                 family_batch = FamilyBatch()
                 family_batch.add_family(xtr_fam_obj)  # TODO: issue with matio here.
 
-                self.current_batch.append({"event": {"family_batch": family_batch,
-                                                     "creds": self.gdrive_token[0]},
-                                           "func_id": ex_func_id})
+                if d_type == "gdrive":
+                    self.current_batch.append({"event": {"family_batch": family_batch,
+                                                         "creds": self.gdrive_token[0]},
+                                               "func_id": ex_func_id})
+                elif d_type == "HTTPS":
+                    self.current_batch.append({"event": {"family_batch": family_batch},
+                                               "func_id": ex_func_id})
 
+                print(f"Current batch: {self.current_batch}")
+                print(f"Batch size: {self.batch_size}")
                 if len(self.current_batch) >= self.batch_size:
 
                     task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
@@ -313,12 +323,6 @@ class Orchestrator:
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
                         print(f"UNPACKED METADATA: {unpacked_metadata}")
 
-                        # try:
-                        #     self.will_file.write(f"{json.dumps(unpacked_metadata, cls=NumpyEncoder)}\n")
-                        # except Exception as e:
-                        #     print(f"Skipping line! Caught error: {e}")
-
-                        # TODO: FIX THE FORMAT SO SQS CAN ACTUALLY ABSORB THEM.
                         try:
                             self.to_validate_q.put({"Id": str(self.file_count),
                                                     "MessageBody": json.dumps(unpacked_metadata, cls=NumpyEncoder)})
