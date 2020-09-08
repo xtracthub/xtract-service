@@ -12,8 +12,9 @@ class ImageExtractor(Extractor):
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
         super().set_extr_func(images_extract)
 
-
 def images_extract(event):
+    # import platform
+    # print(platform.python_version())
 
     import os
     import sys
@@ -22,7 +23,6 @@ def images_extract(event):
 
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
-    ####################################################################
     def min_hash(fpath):
 
         """
@@ -113,13 +113,15 @@ def images_extract(event):
 
     def get_im_model():
 
+        import os
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
         import tensorflow as tf
 
         resnet = tf.keras.applications.resnet50.ResNet50(weights='imagenet')
 
-        out_layer = resnet.get_layer('avg_pool')
+        out_layer = resnet.layers[-2]
         identity = tf.keras.layers.Lambda(lambda x: x)(out_layer.output)
-        pred_layer = resnet.get_layer('probs')(out_layer.output)
+        pred_layer = resnet.layers[-1](out_layer.output)
 
         model = tf.keras.models.Model(inputs=resnet.input,
                                       outputs=[identity, pred_layer])
@@ -137,26 +139,38 @@ def images_extract(event):
 
     def finalize_im_rep(fname):
 
-        import logging
-
         fb = get_fb(fname)
         model = get_im_model()
 
-        try:
-            im = imbytes_to_imformat(fb)
-            im_rep, label_preds = model.predict(im)
-            full_labels = conv_resnet_labels(label_preds)
-            return im_rep[0], full_labels
 
-        except Exception as e:
-            logging.error(e)
-            return None, None
+        im = imbytes_to_imformat(fb)
+        im_rep, label_preds = model.predict(im)
+        full_labels = conv_resnet_labels(label_preds)
+        return im_rep[0], full_labels
+
+        # except Exception as e:
+        #     print(e)
+        #     return None, None
+
+
+    import logging
+    import sys
+
+    # logging.error("Testing")
+    # return "Made it here!"
 
 
     t0 = time.time()
     sys.path.insert(1, '/app')
 
+    # return "Made it here 2"
+
     import xtract_images_main
+
+    try:
+        import cv2
+    except Exception as e:
+        return e
 
     cur_ls = os.listdir('.')
     if 'pca_model.sav' not in cur_ls or 'clf_model.sav' not in cur_ls:
@@ -166,6 +180,8 @@ def images_extract(event):
 
     family_batch = event["family_batch"]
     creds = event["creds"]
+
+
 
     downloader = GoogleDriveDownloader(auth_creds=creds)
 
@@ -178,6 +194,7 @@ def images_extract(event):
     tb = time.time()
 
     file_paths = downloader.success_files
+    # return file_paths
 
     if len(file_paths) == 0:
         return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
@@ -186,9 +203,15 @@ def images_extract(event):
     for family in family_batch.families:
 
         img_path = family.files[0]['path']
+
         new_mdata = xtract_images_main.extract_image('predict', img_path)
+
+        # return new_mdata
+
         new_mdata["min_hash"] = min_hash(img_path)
         vec_rep, labels = finalize_im_rep(img_path)  # TODO: was fname
+        #return labels
+
         new_mdata['image_vector'] = vec_rep
         new_mdata['image_objects'] = labels
         family.metadata = new_mdata
