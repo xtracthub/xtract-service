@@ -9,9 +9,6 @@ img_extractor = MatioExtractor()
 
 img_funcid = img_extractor.register_function()
 
-# Image collection
-# img_1 = "1RbSdH_nI0EHvxFswpl1Qss7CyWXBHo-o"  # SC19 SCC photo
-# img_2 = "0B5nDSpS9a_3kQ0VaUFU4cGhZa3lnTWZoV2NLclVSejRaQVRV"  # clock photo
 
 fam_1 = Family()
 # fam_2 = Family()
