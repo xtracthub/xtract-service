@@ -8,6 +8,7 @@ import threading
 import numpy as np
 
 from queue import Queue
+from status_checks import get_crawl_status
 from funcx.serialize import FuncXSerializer
 from xtract_sdk.packagers import Family, FamilyBatch
 from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
@@ -54,7 +55,6 @@ class Orchestrator:
         self.crawl_id = crawl_id
 
         self.file_count = 0
-
         self.current_batch = []
 
         self.mdata_store_path = mdata_store_path
@@ -127,8 +127,6 @@ class Orchestrator:
         while True:
             insertables = []
 
-            print("******* ENQUEUE LOOP ************")
-
             # If empty, then we want to return.
             if self.to_validate_q.empty():
                 # If ingest queue empty, we can demote to "idle"
@@ -145,7 +143,7 @@ class Orchestrator:
                         print(f"Thread {thr_id} is terminating!")
                         return 0
 
-                print("[Val Push]: sleeping for 5 seconds... ")
+                # print("[Val Push]: sleeping for 5 seconds... ")
                 time.sleep(5)
                 continue
 
@@ -168,12 +166,30 @@ class Orchestrator:
 
     def send_families_loop(self):
 
+        self.send_status = "RUNNING"
+
         while True:
+            # TODO: Make sure this comes in via the notebook.
             fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
 
             print("Communicating with SQS to pull down new_files")
             family_list = self.get_next_families()
             print(f"Family: {family_list}")
+
+            if len(family_list) == 0:
+                print("Length of new families is 0!")
+                # Here we check if the crawl is complete. If so, then we can start the teardown checks.
+                status_dict = get_crawl_status(self.crawl_id)
+
+                print(f"Checking if crawl_status is SUCCEEDED or FAILED!: {status_dict['crawl_status']}")
+                if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
+                    family_list = self.get_next_families()
+                    if len(family_list) == 0:  # Checking second time due to narrow race condition.
+                        self.send_status = "SUCCEEDED"
+                        print("Queue still empty -- terminating!")
+                        return  # this should terminate thread, because there is nothing to process and queue empty
+                    else:  # Something snuck in during the race condition... process it!
+                        print("Discovered final output despite crawl termination. Processing...")
 
             # Cast list to FamilyBatch
             for family in family_list:
@@ -186,9 +202,6 @@ class Orchestrator:
 
                     xtr_fam_obj.from_dict(json.loads(family))
                     xtr_fam_obj.headers = self.family_headers
-
-                    # print(xtr_fam_obj.files)
-                    # exit()
 
                 # TODO: kick this logic for finding extractor into sdk/crawler.
                 elif self.extractor_finder == 'gdrive':
@@ -236,7 +249,7 @@ class Orchestrator:
 
                     # Empty the batch! Everything in here has been sent :)
                     self.current_batch = []
-            time.sleep(1)
+            time.sleep(1)  # TODO: no.
 
     def launch_poll(self):
         print("POLLER IS STARTING!!!!")
@@ -244,17 +257,23 @@ class Orchestrator:
         po_thr.start()
 
     # TODO: Smarter batching that takes into account file size.
+    # TODO: consider busting this off into its own queue?
     def get_next_families(self):
-        while True:
-            try:
-                # Step 1. Get ceiling(batch_size/10) messages down from queue.
-                sqs_response = self.client.receive_message(
-                    QueueUrl=self.crawl_queue,
-                    MaxNumberOfMessages=10,
-                    WaitTimeSeconds=20)
+        # while True:
+        family_list = []
+        try:
+            print("ATTEMPT GET_NEXT_FAMILIES ")
+            # Step 1. Get ceiling(batch_size/10) messages down from queue.
+            sqs_response = self.client.receive_message(
+                QueueUrl=self.crawl_queue,
+                MaxNumberOfMessages=10,
+                WaitTimeSeconds=5)
 
-                family_list = []
-                del_list = []
+            print("RECEIVED A RESPONSE!")
+
+            del_list = []
+
+            if len(sqs_response["Messages"]) > 0:
                 for message in sqs_response["Messages"]:
                     message_body = message["Body"]
 
@@ -263,26 +282,25 @@ class Orchestrator:
                     del_list.append({'ReceiptHandle': message["ReceiptHandle"],
                                      'Id': message["MessageId"]})
 
-                # Step 2. Delete the messages from SQS.
-                if len(del_list) > 0:
-                    response = self.client.delete_message_batch(
-                        QueueUrl=self.crawl_queue,
-                        Entries=del_list)
-                    # TODO: Do the 200 check. Weird data format.
-                    # print(f"Delete response: {response}")
-                #     if response["HTTPStatusCode"] is not 200:
-                #         raise ConnectionError("Could not delete messages from queue!")
-                return family_list
-            except:
-                ConnectionError("Could not get new families! ")
+            # Step 2. Delete the messages from SQS.
+            if len(del_list) > 0:
+                response = self.client.delete_message_batch(
+                    QueueUrl=self.crawl_queue,
+                    Entries=del_list)
+                # TODO: Do the 200 check. Weird data format.
+                print(f"Delete response: {response}")
+                if response["HTTPStatusCode"] is not 200:
+                    raise ConnectionError("Could not delete messages from queue!")
+
+        except:
+            ConnectionError("Could not get new families! ")
+        print("RETURNING!")
+        return family_list
 
     def launch_extract(self):
-
-        max_threads = 1
-
-        for i in range(0, max_threads):
-            ex_thr = threading.Thread(target=self.send_families_loop(), args=())
-            ex_thr.start()
+        # TODO: will soon need more than just 1 thread here.
+        ex_thr = threading.Thread(target=self.send_families_loop, args=())
+        ex_thr.start()
 
     def unpack_returned_family_batch(self, family_batch):
 
@@ -295,9 +313,17 @@ class Orchestrator:
         failed_returns = 0
         type_errors = 0
 
-        while True:
+        self.poll_status = "RUNNING"
 
+        while True:
             if self.task_dict["active"].empty():
+
+                if self.send_status == "SUCCEEDED":
+                    if self.task_dict["active"].empty():  # check second time b/c of rare r.c.
+                        print("Extraction completed. Upgrading status to COMMITTING.")
+                        self.poll_status = "COMMITTING"
+                        return
+
                 self.logger.debug("No live IDs... sleeping...")
                 p_empty = time.time()
                 print(p_empty)
@@ -306,6 +332,7 @@ class Orchestrator:
 
             # Here we pull all values from active task queue to create a batch of them!
             num_elem = self.task_dict["active"].qsize()
+            print(f"Size active queue: {num_elem}")
             tids_to_poll = []  # the batch
 
             for i in range(0, num_elem):
@@ -322,7 +349,6 @@ class Orchestrator:
             for tid in status_thing:
 
                 if "result" in status_thing[tid]:
-
                     res = self.fx_ser.deserialize(status_thing[tid]['result'])
 
                     if "family_batch" in res:

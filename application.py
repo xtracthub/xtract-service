@@ -15,8 +15,6 @@ from status_checks import get_crawl_status, get_extract_status
 from orchestrator import Orchestrator
 
 import pickle
-from uuid import uuid4
-
 
 # Python standard libraries
 import threading
@@ -128,10 +126,12 @@ def extract_mdata():
     dest_eid = None
     mdata_store_path = None
 
+
     try:
         r = pickle.loads(request.data)
         print(f"Data: {request.data}")
         gdrive_token = r["gdrive_pkl"]
+        extractor_finder = "gdrive"
         print(f"Received Google Drive token: {gdrive_token}")
     except pickle.UnpicklingError as e:
         print("Unable to pickle-load for Google Drive! Trying to JSON load for Globus/HTTPS.")
@@ -143,10 +143,14 @@ def extract_mdata():
             dest_eid = r["dest_eid"]
             mdata_store_path = r["mdata_store_path"]
             print(f"Received {r['repo_type']} data!")
+            extractor_finder = "matio"
 
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
     funcx_eid = r["funcx_eid"]
+
+    if crawl_id in active_orchestrators:  # TODO: improved error-handling.
+        return "ERROR -- crawl_id already has an associated orchestrator!"
 
     print("Successfully unpacked data! Initializing orchestrator...")
 
@@ -157,7 +161,8 @@ def extract_mdata():
                         source_eid=source_eid,
                         dest_eid=dest_eid,
                         mdata_store_path=mdata_store_path,
-                        gdrive_token=gdrive_token
+                        gdrive_token=gdrive_token,
+                        extractor_finder=extractor_finder
                         )
 
     print("Launching response poller...")
@@ -166,9 +171,10 @@ def extract_mdata():
     print("Launching metadata extractors...")
     orch.launch_extract()
 
-    # TODO: Shouldn't this extract_id be stored somewhere? 
-    extract_id = str(uuid4())
-    return extract_id
+    active_orchestrators[crawl_id] = orch
+
+    extract_id = crawl_id
+    return extract_id  # TODO: return actual response object.
 
 
 @application.route('/get_extract_status', methods=['GET'])
@@ -177,7 +183,9 @@ def get_extr_status():
     r = request.json
 
     extract_id = r["crawl_id"]
-    resp = get_extract_status(extract_id)
+
+    orch = active_orchestrators[extract_id]
+    resp = get_extract_status(orch)
 
     return resp
 
@@ -364,8 +372,6 @@ def automate_status(action_id):
 
 
 def fetch_crawl_messages(crawl_id):
-
-    print("IN thread! ")
 
     client = boto3.client('sqs',
                           aws_access_key_id=os.environ["aws_access"],
