@@ -1,21 +1,17 @@
 
 from extractors.extractor import Extractor
 
-import requests
-import time
-
 
 class MatioExtractor(Extractor):
 
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="6b6f6fa6-72eb-49b5-a90c-97e4532a6178",
+                         func_id="94a973c7-717a-4068-97d6-8b5f42fdc034",
                          extr_name="xtract-matio",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest")
         super().set_extr_func(matio_extract)
-
 
 
 def matio_extract(event):
@@ -68,13 +64,23 @@ def matio_extract(event):
             batch_thruple_ls.append(batch_thruple)
             file_counter += 1
 
+    # return batch_thruple_ls
     down_start_t = time.time()
     downloader = GlobusHttpsDownloader()
     downloader.batch_fetch(batch_thruple_ls)
     down_end_t = time.time()
 
+    #eturn batch_thruple_ls
+
+    # return downloader.success_files
+
+
+    #
+
     if len(downloader.fail_files) > 0:
-        raise ValueError("TODO BETTER ERROR HANDLING -- was unable to fetch files from Google Drive")
+        raise ValueError("TODO BETTER ERROR HANDLING -- was unable to fetch files from Globus")
+
+    # return {'success': downloader.success_files, 'failure': downloader.fail_files}
 
     # This extracts the metadata for each group in each family.
     for family in all_families.families:
@@ -84,7 +90,17 @@ def matio_extract(event):
             for file_obj in family.groups[gid].files:
                 filename = file_obj["base_url"] + file_obj["path"]
                 actual_group_paths.append(filename_to_path_map[filename])
+
+        # for path in actual_group_paths:
+        #     if "INCAR" in path:
+        #         lines = ""
+        #         with open(path, 'r') as f:
+        #             for line in f:
+        #                 lines += line
+        #         return lines
+
             extraction_start_t = time.time()
+
             new_mdata = extract_matio(paths=actual_group_paths, parser=parser)
             extraction_end_t = time.time()
 

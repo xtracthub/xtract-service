@@ -62,9 +62,14 @@ class Orchestrator:
         self.headers = headers
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
 
+        self.family_headers = None
         if 'Petrel' in self.headers:
             self.fx_headers['Petrel'] = self.headers['Petrel']
-            self.family_headers = {'Authorization': f"Bearer {self.headers['Petrel']}"}
+            self.family_headers = {'Authorization': f"Bearer {self.headers['Petrel']}",
+                                   'Transfer': self.headers['Transfer'],
+                                   'FuncX': self.headers['FuncX'],
+                                   'Petrel': self.headers['Petrel']
+                                   }
 
         self.logging_level = logging_level
 
@@ -180,8 +185,10 @@ class Orchestrator:
                     xtr_fam_obj = Family(download_type=d_type)
 
                     xtr_fam_obj.from_dict(json.loads(family))
-                    xtr_fam_obj.headers = self.headers
-                    # TODO: Create xtract_fam_obj here!
+                    xtr_fam_obj.headers = self.family_headers
+
+                    # print(xtr_fam_obj.files)
+                    # exit()
 
                 # TODO: kick this logic for finding extractor into sdk/crawler.
                 elif self.extractor_finder == 'gdrive':
@@ -203,11 +210,11 @@ class Orchestrator:
                 extractor = self.func_dict[extr_code]
                 ex_func_id = extractor.func_id
 
-                # print(f"Extractor function ID: {ex_func_id}")
-
                 # Putting into family batch -- we use funcX batching now, but no use rewriting...
                 family_batch = FamilyBatch()
-                family_batch.add_family(xtr_fam_obj)  # TODO: issue with matio here.
+                family_batch.add_family(xtr_fam_obj)
+
+                print(f"Headers: {self.family_headers} \nPetrel Header: {self.headers['Petrel']}")
 
                 if d_type == "gdrive":
                     self.current_batch.append({"event": {"family_batch": family_batch,
