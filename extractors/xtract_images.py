@@ -181,8 +181,6 @@ def images_extract(event):
     family_batch = event["family_batch"]
     creds = event["creds"]
 
-
-
     downloader = GoogleDriveDownloader(auth_creds=creds)
 
     # TODO: Put time info into the downloader/extractor objects.
@@ -206,11 +204,8 @@ def images_extract(event):
 
         new_mdata = xtract_images_main.extract_image('predict', img_path)
 
-        # return new_mdata
-
         new_mdata["min_hash"] = min_hash(img_path)
         vec_rep, labels = finalize_im_rep(img_path)  # TODO: was fname
-        #return labels
 
         new_mdata['image_vector'] = vec_rep
         new_mdata['image_objects'] = labels
