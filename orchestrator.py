@@ -23,11 +23,16 @@ class NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
+# TODO: get rid of clutter: nondescriptive print statements, unused variables, unused functions.
+#  TODO: Copied and pasted bits of code.
+
 class Orchestrator:
+    """ ADD HIGH OVERVIEW COMMENT HERE. """
+
     # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
-                 logging_level='debug', instance_id=None, extractor_finder='gdrive', fx_ep_list=None):
+                 logging_level='debug', instance_id=None, extractor_finder='gdrive'):
 
         self.extractor_finder = extractor_finder
 
@@ -47,7 +52,6 @@ class Orchestrator:
         self.source_endpoint = source_eid
         self.dest_endpoint = dest_eid
         self.gdrive_token = gdrive_token
-        self.fx_ep_list = fx_ep_list
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
@@ -82,6 +86,7 @@ class Orchestrator:
         self.logger.setLevel(logging.DEBUG)
         self.instance_id = instance_id
 
+        # This creates the extraction and validation queues on the Simple Queue Service.
         self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"  # TODO: env var.
         self.client = boto3.client('sqs',
                                    aws_access_key_id=os.environ["aws_access"],
@@ -92,8 +97,10 @@ class Orchestrator:
 
         if xtract_queue["ResponseMetadata"]["HTTPStatusCode"] == 200 and \
                 validation_queue["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            self.xtract_queue_url = xtract_queue["QueueUrl"]
-            self.validation_queue_url = validation_queue["QueueUrl"]
+            self.xtract_queue_url = xtract_queue["QueueUrl"]  # TODO: ZOA -- this does nothing currently(but keep it in)
+            self.validation_queue_url = validation_queue["QueueUrl"]  # TODO: sends finished metadata to validation service.
+                                                                    # TODO: have third 'crawl' queue (elsewhere) that just holds all metadata from before this point
+                                                                    # TODO:   aka the files/metadata we want to pull down and process.
         else:
             raise ConnectionError("Received non-200 status from SQS!")
 
@@ -107,6 +114,7 @@ class Orchestrator:
         self.families_to_process = Queue()
         self.to_validate_q = Queue()
 
+        # TODO: file left here for someone named Will. Remove it.
         self.will_file = open("will.mdata", "w")
 
         self.sqs_push_threads = {}
@@ -165,6 +173,7 @@ class Orchestrator:
             #     print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
     def send_families_loop(self):
+        # TODO: Zoa -- 'families' are collections of files and metadata.
 
         self.send_status = "RUNNING"
 
