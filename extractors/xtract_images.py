@@ -6,7 +6,7 @@ class ImageExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="aceb61b1-ba41-4557-b53b-1d4fd331c1d1",
+                         func_id="637dc072-c341-4f5e-95e0-6890a1e58159",
                          extr_name="xtract-image",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
