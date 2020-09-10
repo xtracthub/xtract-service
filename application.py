@@ -1,11 +1,12 @@
 
 import time
 import boto3
-from flask import jsonify
 from enum import Enum
 from queue import Queue
 from datetime import datetime, timedelta, timezone
 
+
+# TODO: keep these here.
 # from globus_action_provider_tools.authentication import TokenChecker
 # from globus_action_provider_tools.validation import request_validator, response_validator
 
@@ -22,7 +23,7 @@ import json
 import os
 
 # Third-party libraries
-from flask import Flask, redirect, request, url_for
+from flask import Flask, redirect, request, url_for, jsonify
 import requests
 
 
@@ -103,6 +104,7 @@ def crawl_repo():
 
 @application.route('/get_crawl_status', methods=['GET'])
 def get_cr_status():
+    """ Returns the status of a crawl. """
 
     r = request.json
 
@@ -112,7 +114,7 @@ def get_cr_status():
 
     return resp
 
-
+# TODO: delete this.
 @application.route('/login/callback', methods=['GET', 'POST'])
 def callback():
     return "Hello"
@@ -188,14 +190,6 @@ def get_extr_status():
     resp = get_extract_status(orch)
 
     return resp
-
-
-# TODO: We need to index the database before doing this.
-# TODO:   Otherwise such a query could take hours.
-@application.route('/get_mdata', methods=['POST'])
-def get_mdata():
-    r = request
-    return r
 
 
 @application.route('/run', methods=['POST'])
