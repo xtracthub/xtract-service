@@ -10,12 +10,13 @@ tokens = client.login(
                      "https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all",
                      'email', 'openid'],
     no_local_server=True,
-    no_browser=True, force=True)
+    no_browser=True)
 
 auth_token = tokens["petrel_https_server"]['access_token']
 headers = {'Authorization': f"Bearer {auth_token}"}
 
-file_url = "https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/_test_einstein_9vpflvd_v1.1/INCAR"
+
+file_url = "https://e38ee745-6d04-11e5-ba46-22000b92c6ec.e.globus.org/MDF/mdf_connect/prod/data/foo_v1/Ag2Al.hP2/INCAR"
 
 print(f"File URL: {file_url}")
 print(f"Headers: {headers}")

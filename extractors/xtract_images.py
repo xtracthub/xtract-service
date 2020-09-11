@@ -12,6 +12,7 @@ class ImageExtractor(Extractor):
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
         super().set_extr_func(images_extract)
 
+
 def images_extract(event):
     # import platform
     # print(platform.python_version())

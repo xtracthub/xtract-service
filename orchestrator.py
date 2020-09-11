@@ -131,9 +131,10 @@ class Orchestrator:
         # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def enqueue_loop(self, thr_id):
 
-        print("In enqueue loop!")
+        print("[VALIDATE] In validation enqueue loop!")
         while True:
             insertables = []
+            print(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
 
             # If empty, then we want to return.
             if self.to_validate_q.empty():
@@ -151,7 +152,7 @@ class Orchestrator:
                         print(f"Thread {thr_id} is terminating!")
                         return 0
 
-                # print("[Val Push]: sleeping for 5 seconds... ")
+                print("[Validate]: sleeping for 5 seconds... ")
                 time.sleep(5)
                 continue
 
@@ -159,16 +160,19 @@ class Orchestrator:
 
             # Remove up to n elements from queue, where n is current_batch.
             current_batch = 1
-            while not self.to_validate_q.empty() and current_batch < 1:
-                insertables.append(self.to_validate_q.get())
+            while not self.to_validate_q.empty() and current_batch < 5:  # TODO: TYLER, be smarter about this.
+                item_to_add = self.to_validate_q.get()
+                print(f"[VALIDATE] Item to add: {item_to_add}")
+                # exit()
+                insertables.append(item_to_add)
                 # self.active_commits -= 1  # TODO: do something with this.
                 current_batch += 1
-            print(f"Current batch: {current_batch}")
+            print(f"[VALIDATE] Current insertables: {insertables}")
 
             # try:
             response = self.client.send_message_batch(QueueUrl=self.validation_queue_url,
                                                           Entries=insertables)
-            print(f"SQS response on insert: {response}")
+            print(f"[VALIDATE] SQS response on insert: {response}")
             # except Exception as e:  # TODO: too vague
             #     print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
@@ -246,7 +250,7 @@ class Orchestrator:
                     self.current_batch.append({"event": {"family_batch": family_batch},
                                                "func_id": ex_func_id})
 
-                print(f"Current batch: {self.current_batch}")
+                # print(f"Current batch: {self.current_batch}")
                 print(f"Batch size: {self.batch_size}")
                 if len(self.current_batch) >= self.batch_size:
 
@@ -363,6 +367,13 @@ class Orchestrator:
                     if "family_batch" in res:
                         family_batch = res["family_batch"]
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+
+                        # TODO: make this a regular feature for matio
+                        print(f"[CHECK HERE] {unpacked_metadata}")
+                        if 'event' in unpacked_metadata:
+                            family_batch = unpacked_metadata['event']['family_batch']
+                            unpacked_metadata = family_batch.to_dict()
+
                         print(f"UNPACKED METADATA: {unpacked_metadata}")
 
                         try:
