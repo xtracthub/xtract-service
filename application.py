@@ -60,18 +60,21 @@ def crawl_launch(crawler, tc):
 @application.route('/', methods=['GET', 'POST'])
 def hello():
 
-    # token = request.headers.get("Authorization", "").replace("Bearer ", "")
-    # auth_state = token_checker.check_token(token)
-    # identities = auth_state.identities
-    #
-    # print(f"Identities: {identities}")
-    #
-    # conf_app = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"])
-    # print(os.environ["GL_CLIENT_ID"])
-    # print(os.environ["GL_CLIENT_SECRET"])
-    #
-    # intro_obj = conf_app.oauth2_token_introspect(token)
-    # print(f"Auth Token Introspection: {intro_obj}")
+    # TODO: bring this back. Broken because breaks local.
+
+    if "Authorization" in request.headers:
+        token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        auth_state = token_checker.check_token(token)
+        identities = auth_state.identities
+
+        print(f"Identities: {identities}")
+
+        conf_app = ConfidentialAppAuthClient(os.environ["GL_CLIENT_ID"], os.environ["GL_CLIENT_SECRET"])
+        print(os.environ["GL_CLIENT_ID"])
+        print(os.environ["GL_CLIENT_SECRET"])
+
+        intro_obj = conf_app.oauth2_token_introspect(token)
+        print(f"Auth Token Introspection: {intro_obj}")
 
     resp = {
         "types": ["Action"],
@@ -274,7 +277,7 @@ def automate_run():
             time.sleep(1)
 
     # TODO: Launch the actual extraction right here.
-    funcx_ep_id = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
+    #funcx_ep_id = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
     source_ep_id = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"
     dest_ep_id = "1adf6602-3e50-11ea-b965-0e16720bb42f"
 
@@ -289,7 +292,7 @@ def automate_run():
     extract_req = requests.post(f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/extract',
                                 json={'crawl_id': crawl_id,
                                       'repo_type': "HTTPS",
-                                      'headers': json.dumps(headers),  # TODO: How to pack these damn headers.
+                                      'headers': json.dumps(headers),  # TODO: How to pack these headers?
                                       'funcx_eid': funcx_ep_id,  # TODO: hardcoded to River.
                                       'source_eid': source_ep_id,
                                       'dest_eid': dest_ep_id,
