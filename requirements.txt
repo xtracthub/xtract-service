@@ -16,3 +16,4 @@ datasketch
 google-api-python-client
 google-auth-oauthlib
 numpy
+globus-action-provider-tools
