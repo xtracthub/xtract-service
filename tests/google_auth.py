@@ -9,4 +9,5 @@ with open('../examples/token.pickle', 'rb') as token:
 
 
 if creds and creds.expired and creds.refresh_token:
+    print("in here")
     creds.refresh(Request())
