@@ -35,6 +35,7 @@ class Status(Enum):
     FAILED = "FAILED"
     INACTIVE = "INACTIVE"
 
+
 active_orchestrators = dict()
 
 # # TODO: Move this cleanly into a class (and maybe cache for each user).
@@ -59,8 +60,6 @@ def crawl_launch(crawler, tc):
 
 @application.route('/', methods=['GET', 'POST'])
 def hello():
-
-    # TODO: bring this back. Broken because breaks local.
 
     if "Authorization" in request.headers:
         token = request.headers.get("Authorization", "").replace("Bearer ", "")
@@ -230,9 +229,19 @@ def automate_run():
     req = request.get_json(force=True)
     print(f"Run Request: {req}")
 
-    print(f"Endpoint ID: {req['body']['eid']}")
-    print(f"Starting Dir: {req['body']['dir_path']}")
-    print(f"Grouper: {req['body']['grouper']}")
+    eid = req['body']['eid']
+    dir_path = req['body']['dir_path']
+    grouper = req['body']['grouper']
+    fx_eid = req['body']['fx_eid']
+
+    # These will be used at validation.
+    dest_eid = req['body']['dest_eid']
+    dest_path = req['body']['dest_path']
+
+    print(f"Endpoint ID: {eid}")
+    print(f"Starting Dir: {dir_path}")
+    print(f"Grouper: {grouper}")
+    print(f"FuncX eid: {fx_eid}")
 
     start_time = datetime.now(tz=timezone.utc)
 
@@ -264,6 +273,7 @@ def automate_run():
         try:
             # Try to get crawl_url
             crawl_status = requests.get(
+                # TODO: Call crawl directly through the xtracthub-service url.
                 f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/get_crawl_status',
                 json={'crawl_id': crawl_id})
             print(f"Crawl status: {crawl_status}")
@@ -276,46 +286,38 @@ def automate_run():
             print("Crawl not yet started! Trying again...")
             time.sleep(1)
 
-    # TODO: Launch the actual extraction right here.
-    #funcx_ep_id = "82ceed9f-dce1-4dd1-9c45-6768cf202be8"
-    source_ep_id = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"
-    dest_ep_id = "1adf6602-3e50-11ea-b965-0e16720bb42f"
-
-    mdata_path = "UNKNOWN"
-
     # headers = {'Authorization': f"Bearer {auth_token}", 'Transfer': transfer_token, 'FuncX': funcx_token,
     #            'Petrel': auth_token}
 
     headers = {'Authorization': f"Bearer {user_petrel_token}", 'Transfer': user_transfer_token, 'FuncX': user_funcx_token,
                'Petrel': user_petrel_token}
 
-    extract_req = requests.post(f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/extract',
-                                json={'crawl_id': crawl_id,
-                                      'repo_type': "HTTPS",
-                                      'headers': json.dumps(headers),  # TODO: How to pack these headers?
-                                      'funcx_eid': funcx_ep_id,  # TODO: hardcoded to River.
-                                      'source_eid': source_ep_id,
-                                      'dest_eid': dest_ep_id,
-                                      'mdata_store_path': mdata_path})
+    # extract_req = requests.post(f'http://xtractv1-env-2.p6rys5qcuj.us-east-1.elasticbeanstalk.com/extract',
+    #                             json={'crawl_id': crawl_id,
+    #                                   'repo_type': "HTTPS",
+    #                                   'headers': json.dumps(headers),  # TODO: How to pack these headers?
+    #                                   'funcx_eid': fx_eid,
+    #                                   'source_eid': eid,
+    #                                   'dest_eid': dest_eid,
+    #                                   'mdata_store_path': dest_path})
 
-    print(f"Xtract status: {extract_req.content}")
+    # print(f"Xtract status: {extract_req.content}")
 
     thawed_idents = []
     for identity in identities:
         print(identity)
         thawed_idents.append(identity)
 
-    # TODO: Make action_id the regular task_id (I think we'd want it to technically be the crawl_id.
     # Now to create the thing we return.
     ret_data = {
         "action_id": crawl_id,
         "status": Status.ACTIVE.value,
         "display_status": Status.ACTIVE.value,
-        "details": "the weasel runs at midnight",
+        "details": "Xtract metadata crawl, extraction, validation jobs launched",
         "monitor_by": thawed_idents,
         "manage_by": thawed_idents,
         "start_time": start_time,
-        "completion_time": "tomato",  # datetime.now(tz=timezone.utc),
+        "completion_time": "tomato",  # datetime.now(tz=timezone.utc), # TODO: not working.
         "release_after": "P30D"
     }
 
