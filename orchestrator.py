@@ -55,7 +55,7 @@ class Orchestrator:
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
-        self.batch_size = 1
+        self.batch_size = 100
         self.crawl_id = crawl_id
 
         self.file_count = 0
@@ -127,6 +127,11 @@ class Orchestrator:
             self.sqs_push_threads[i] = True
         print(f"Successfully started {len(self.sqs_push_threads)} SQS push threads!")
 
+        print(f"Attempting to start get_next_families() as its own thread... ")
+        consumer_thr = threading.Thread(target=self.get_next_families_loop, args=())
+        consumer_thr.start()
+        print("Successfully started the get_next_families() thread! ")
+
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def enqueue_loop(self, thr_id):
@@ -160,7 +165,7 @@ class Orchestrator:
 
             # Remove up to n elements from queue, where n is current_batch.
             current_batch = 1
-            while not self.to_validate_q.empty() and current_batch < 5:  # TODO: TYLER, be smarter about this.
+            while not self.to_validate_q.empty() and current_batch < 100:  # TODO: TYLER, be smarter about this.
                 item_to_add = self.to_validate_q.get()
                 print(f"[VALIDATE] Item to add: {item_to_add}")
                 # exit()
@@ -186,8 +191,12 @@ class Orchestrator:
             fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
 
             print("Communicating with SQS to pull down new_files")
-            family_list = self.get_next_families()
-            print(f"Family: {family_list}")
+            family_list = []
+            # Now keeping filling our list of families until it is empty.
+            while len(family_list) < self.batch_size or not self.families_to_process.empty():
+                family_list.append(self.families_to_process.get())
+            print("Exited family loop!")
+            print(f"Length of family_list: {len(family_list)}")
 
             if len(family_list) == 0:
                 print("Length of new families is 0!")
@@ -196,8 +205,8 @@ class Orchestrator:
 
                 print(f"Checking if crawl_status is SUCCEEDED or FAILED!: {status_dict['crawl_status']}")
                 if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
-                    family_list = self.get_next_families()
-                    if len(family_list) == 0:  # Checking second time due to narrow race condition.
+                    # family_list = self.get_next_families()
+                    if self.families_to_process.empty():  # Checking second time due to narrow race condition.
                         self.send_status = "SUCCEEDED"
                         print("Queue still empty -- terminating!")
                         return  # this should terminate thread, because there is nothing to process and queue empty
@@ -240,7 +249,7 @@ class Orchestrator:
                 family_batch = FamilyBatch()
                 family_batch.add_family(xtr_fam_obj)
 
-                print(f"Headers: {self.family_headers} \nPetrel Header: {self.headers['Petrel']}")
+                # print(f"Headers: {self.family_headers} \nPetrel Header: {self.headers['Petrel']}")
 
                 if d_type == "gdrive":
                     self.current_batch.append({"event": {"family_batch": family_batch,
@@ -262,7 +271,7 @@ class Orchestrator:
 
                     # Empty the batch! Everything in here has been sent :)
                     self.current_batch = []
-            time.sleep(1)  # TODO: no.
+            # time.sleep(1)  # TODO: no.
 
     def launch_poll(self):
         print("POLLER IS STARTING!!!!")
@@ -271,44 +280,43 @@ class Orchestrator:
 
     # TODO: Smarter batching that takes into account file size.
     # TODO: consider busting this off into its own queue?
-    def get_next_families(self):
-        # while True:
-        family_list = []
-        try:
-            print("ATTEMPT GET_NEXT_FAMILIES ")
-            # Step 1. Get ceiling(batch_size/10) messages down from queue.
-            sqs_response = self.client.receive_message(
-                QueueUrl=self.crawl_queue,
-                MaxNumberOfMessages=10,
-                WaitTimeSeconds=5)
-
-            print("RECEIVED A RESPONSE!")
-
-            del_list = []
-
-            if len(sqs_response["Messages"]) > 0:
-                for message in sqs_response["Messages"]:
-                    message_body = message["Body"]
-
-                    family_list.append(message_body)
-
-                    del_list.append({'ReceiptHandle': message["ReceiptHandle"],
-                                     'Id': message["MessageId"]})
-
-            # Step 2. Delete the messages from SQS.
-            if len(del_list) > 0:
-                response = self.client.delete_message_batch(
+    def get_next_families_loop(self):
+        while True:
+            family_list = []
+            try:
+                print("ATTEMPT GET_NEXT_FAMILIES ")
+                # Step 1. Get ceiling(batch_size/10) messages down from queue.
+                sqs_response = self.client.receive_message(
                     QueueUrl=self.crawl_queue,
-                    Entries=del_list)
-                # TODO: Do the 200 check. Weird data format.
-                print(f"Delete response: {response}")
-                if response["HTTPStatusCode"] is not 200:
-                    raise ConnectionError("Could not delete messages from queue!")
+                    MaxNumberOfMessages=10,
+                    WaitTimeSeconds=5)
 
-        except:
-            ConnectionError("Could not get new families! ")
-        print("RETURNING!")
-        return family_list
+                del_list = []
+
+                if len(sqs_response["Messages"]) > 0:
+                    for message in sqs_response["Messages"]:
+                        message_body = message["Body"]
+
+                        #family_list.append(message_body)
+                        self.families_to_process.put(message_body)
+
+                        del_list.append({'ReceiptHandle': message["ReceiptHandle"],
+                                         'Id': message["MessageId"]})
+
+                # Step 2. Delete the messages from SQS.
+                if len(del_list) > 0:
+                    response = self.client.delete_message_batch(
+                        QueueUrl=self.crawl_queue,
+                        Entries=del_list)
+                    # TODO: Do the 200 check. Weird data format.
+                    # print(f"Delete response: {response}")
+                    if response["HTTPStatusCode"] is not 200:
+                        raise ConnectionError("Could not delete messages from queue!")
+
+            except:
+                ConnectionError("Could not get new families! ")
+            print("RETURNING!")
+        # return family_list
 
     def launch_extract(self):
         # TODO: will soon need more than just 1 thread here.
@@ -316,7 +324,7 @@ class Orchestrator:
         ex_thr.start()
 
     def unpack_returned_family_batch(self, family_batch):
-
+        # assert(self.batch_size==1 or self.batch_size%10==0)
         fam_batch_dict = family_batch.to_dict()
         return fam_batch_dict
 
@@ -340,7 +348,7 @@ class Orchestrator:
                 self.logger.debug("No live IDs... sleeping...")
                 p_empty = time.time()
                 print(p_empty)
-                time.sleep(2.5)
+                time.sleep(0.25)
                 continue
 
             # Here we pull all values from active task queue to create a batch of them!
