@@ -7,7 +7,7 @@ class MatioExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="94a973c7-717a-4068-97d6-8b5f42fdc034",
+                         func_id="9944ab30-9ae1-414c-9a3f-0a30f83cb99a",
                          extr_name="xtract-matio",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest")
@@ -41,6 +41,20 @@ def matio_extract(event):
     # A list of file paths
     all_families = event['family_batch']
 
+    # return all_families
+
+    # TODO: This is ugly. Clean up!
+    # return "hi"
+    family_batch = FamilyBatch()
+    for family in all_families["families"]:
+        # return family
+        fam = Family()
+        fam.from_dict(family)
+        family_batch.add_family(fam)
+    all_families = family_batch
+
+    # return {'family_batch': family_batch}
+
     # This collects all of the files for all of the families.
     file_counter = 0
     filename_to_path_map = dict()
@@ -69,13 +83,6 @@ def matio_extract(event):
     downloader = GlobusHttpsDownloader()
     downloader.batch_fetch(batch_thruple_ls)
     down_end_t = time.time()
-
-    #eturn batch_thruple_ls
-
-    # return downloader.success_files
-
-
-    #
 
     if len(downloader.fail_files) > 0:
         raise ValueError("TODO BETTER ERROR HANDLING -- was unable to fetch files from Globus")
