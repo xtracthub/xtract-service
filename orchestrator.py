@@ -57,6 +57,8 @@ class Orchestrator:
         self.dest_endpoint = dest_eid
         self.gdrive_token = gdrive_token
 
+        self.poll_gap_s = 5
+
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         self.batch_size = 100
@@ -125,7 +127,7 @@ class Orchestrator:
         self.thr_ls = []
         self.commit_threads = 1
         for i in range(0, self.commit_threads):
-            thr = threading.Thread(target=self.enqueue_loop, args=(i,))
+            thr = threading.Thread(target=self.validate_enqueue_loop, args=(i,))
             self.thr_ls.append(thr)
             thr.start()
             self.sqs_push_threads[i] = True
@@ -136,11 +138,9 @@ class Orchestrator:
         consumer_thr.start()
         print("Successfully started the get_next_families() thread! ")
 
-
-
-        # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
-        # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
-    def enqueue_loop(self, thr_id):
+    # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
+    # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
+    def validate_enqueue_loop(self, thr_id):
 
         print(f"Elapsed Send Batch time: {self.t_send_batch}")
         print(f"Elapsed Extract time: {time.time() - self.t_crawl_start}")
@@ -174,12 +174,9 @@ class Orchestrator:
 
             # Remove up to n elements from queue, where n is current_batch.
             current_batch = 1
-            while not self.to_validate_q.empty() and current_batch < 100:  # TODO: TYLER, be smarter about this.
+            while (not self.to_validate_q.empty() and current_batch < 100):
                 item_to_add = self.to_validate_q.get()
-                # print(f"[VALIDATE] Item to add: {item_to_add}")
-                # exit()
                 insertables.append(item_to_add)
-                # self.active_commits -= 1  # TODO: do something with this.
                 current_batch += 1
             print(f"[VALIDATE] Current insertables: {insertables}")
 
@@ -187,7 +184,8 @@ class Orchestrator:
             ta = time.time()
             response = self.client.send_message_batch(QueueUrl=self.validation_queue_url,
                                                           Entries=insertables)
-            print(f"[VALIDATE] SQS response on insert: {response}")
+
+            # print(f"[VALIDATE] SQS response on insert: {response}")
             tb = time.time()
 
             self.t_send_batch += tb-ta
@@ -207,8 +205,9 @@ class Orchestrator:
             print("Communicating with SQS to pull down new_files")
             family_list = []
             # Now keeping filling our list of families until it is empty.
-            while len(family_list) < self.batch_size or not self.families_to_process.empty():
+            while len(family_list) < self.batch_size and not self.families_to_process.empty():
                 family_list.append(self.families_to_process.get())
+
             print("Exited family loop!")
             print(f"Length of family_list: {len(family_list)}")
 
@@ -263,8 +262,6 @@ class Orchestrator:
                 family_batch = FamilyBatch()
                 family_batch.add_family(xtr_fam_obj)
 
-                # print(f"Headers: {self.family_headers} \nPetrel Header: {self.headers['Petrel']}")
-
                 if d_type == "gdrive":
                     self.current_batch.append({"event": {"family_batch": family_batch,
                                                          "creds": self.gdrive_token[0]},
@@ -273,18 +270,14 @@ class Orchestrator:
                     self.current_batch.append({"event": {"family_batch": family_batch},
                                                "func_id": ex_func_id})
 
-                # print(f"Current batch: {self.current_batch}")
-                #print(f"Batch size: {self.batch_size}")
-                if len(self.current_batch) >= self.batch_size:
+                task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
+                for task_id in task_ids:
+                    self.task_dict["active"].put(task_id)
 
-                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
-                    for task_id in task_ids:
-                        self.task_dict["active"].put(task_id)
+                print(f"Active task queue (local) size: {self.task_dict['active'].qsize()}")
 
-                    print(f"Active task queue (local) size: {self.task_dict['active'].qsize()}")
-
-                    # Empty the batch! Everything in here has been sent :)
-                    self.current_batch = []
+                # Empty the batch! Everything in here has been sent :)
+                self.current_batch = []
             # time.sleep(1)  # TODO: no.
 
     def launch_poll(self):
@@ -293,12 +286,9 @@ class Orchestrator:
         po_thr.start()
 
     # TODO: Smarter batching that takes into account file size.
-    # TODO: consider busting this off into its own queue?
     def get_next_families_loop(self):
         while True:
-            family_list = []
             try:
-                # print("ATTEMPT GET_NEXT_FAMILIES ")
                 # Step 1. Get ceiling(batch_size/10) messages down from queue.
                 sqs_response = self.client.receive_message(
                     QueueUrl=self.crawl_queue,
@@ -311,7 +301,6 @@ class Orchestrator:
                     for message in sqs_response["Messages"]:
                         message_body = message["Body"]
 
-                        #family_list.append(message_body)
                         self.families_to_process.put(message_body)
 
                         del_list.append({'ReceiptHandle': message["ReceiptHandle"],
@@ -327,10 +316,14 @@ class Orchestrator:
                     if response["HTTPStatusCode"] is not 200:
                         raise ConnectionError("Could not delete messages from queue!")
 
+                # Simple because if the poller is done, then there's no point pulling down any work.
+                if self.poll_status == "COMPLETED":
+                    print(f"[GET] Terminating thread to get more work.")
+                    return  # terminate the thread.
+
             except:
                 ConnectionError("Could not get new families! ")
-            #print("RETURNING!")
-        # return family_list
+
 
     def launch_extract(self):
         # TODO: will soon need more than just 1 thread here.
@@ -354,20 +347,22 @@ class Orchestrator:
             if self.task_dict["active"].empty():
 
                 if self.send_status == "SUCCEEDED":
+                    print("[POLL] Send status is SUCCEEDED... ")
+                    print(f"[POLL] Active tasks: {self.task_dict['active'].empty()}")
                     if self.task_dict["active"].empty():  # check second time b/c of rare r.c.
                         print("Extraction completed. Upgrading status to COMMITTING.")
                         self.poll_status = "COMMITTING"
                         return
 
                 self.logger.debug("No live IDs... sleeping...")
-                p_empty = time.time()
-                print(p_empty)
+                # p_empty = time.time()
+                # print(p_empty)
                 time.sleep(0.25)
                 continue
 
             # Here we pull all values from active task queue to create a batch of them!
             num_elem = self.task_dict["active"].qsize()
-            print(f"Size active queue: {num_elem}")
+            print(f"[POLL] Size active queue: {num_elem}")
             tids_to_poll = []  # the batch
 
             for i in range(0, num_elem):
@@ -375,9 +370,11 @@ class Orchestrator:
                 ex_id = self.task_dict["active"].get()
                 tids_to_poll.append(ex_id)
 
+            t_last_poll = time.time()
             # Send off task_ids to poll, retrieve a bunch of statuses.
             status_thing = remote_poll_batch(task_ids=tids_to_poll, headers=self.fx_headers)
 
+            # TODO: why is this necessary?
             if status_thing is None:
                 continue
 
@@ -414,7 +411,7 @@ class Orchestrator:
                     self.logger.debug(f"Failure Counter: {failed_returns}")
                     self.logger.debug(f"Received response: {res}")
 
-                    # TODO: Still need to return group_ids so we can mark accordingly...
+                    # TODO: return group_ids so that we may mark accordingly.
                     if type(res) is not dict:
                         print(f"Res is not dict: {res}")
                         continue
@@ -437,3 +434,9 @@ class Orchestrator:
 
                 else:
                     self.task_dict["active"].put(tid)
+
+            t_since_last_poll = time.time() - t_last_poll
+            t_poll_gap = self.poll_gap_s - t_since_last_poll
+
+            if t_poll_gap > 0:
+                time.sleep(t_poll_gap)
