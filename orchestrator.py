@@ -58,6 +58,7 @@ class Orchestrator:
         self.gdrive_token = gdrive_token
 
         self.poll_gap_s = 5
+        self.get_families_status = "STARTING"
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
@@ -216,7 +217,9 @@ class Orchestrator:
                 print(f"Checking if crawl_status is SUCCEEDED or FAILED!: {status_dict['crawl_status']}")
                 if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
                     # family_list = self.get_next_families()
-                    if self.families_to_process.empty():  # Checking second time due to narrow race condition.
+                    print(f"[SEND] Is idle?: {self.get_families_status}")
+                    print(f"[SEND] Empty families to process?: {self.families_to_process.empty()}")
+                    if self.families_to_process.empty() and self.get_families_status == "IDLE":  # Checking second time due to narrow race condition.
                         self.send_status = "SUCCEEDED"
                         print("Queue still empty -- terminating!")
                         return  # this should terminate thread, because there is nothing to process and queue empty
@@ -287,45 +290,56 @@ class Orchestrator:
 
     # TODO: Smarter batching that takes into account file size.
     def get_next_families_loop(self):
+
         while True:
-            try:
-                # Step 1. Get ceiling(batch_size/10) messages down from queue.
-                sqs_response = self.client.receive_message(
+            # Step 1. Get ceiling(batch_size/10) messages down from queue.
+            sqs_response = self.client.receive_message(  # TODO: properly try/except this block. 
+                QueueUrl=self.crawl_queue,
+                MaxNumberOfMessages=10,
+                WaitTimeSeconds=1)
+
+            del_list = []
+            found_messages = False
+            deleted_messages = False
+
+            if ("Messages" in sqs_response) and (len(sqs_response["Messages"]) > 0):
+                self.get_families_status = "ACTIVE"
+                for message in sqs_response["Messages"]:
+                    message_body = message["Body"]
+
+                    print(f"Messages in message body: {message_body}")
+
+                    self.families_to_process.put(message_body)
+
+                    del_list.append({'ReceiptHandle': message["ReceiptHandle"],
+                                     'Id': message["MessageId"]})
+                found_messages = True
+
+            # Step 2. Delete the messages from SQS.
+            if len(del_list) > 0:
+                response = self.client.delete_message_batch(
                     QueueUrl=self.crawl_queue,
-                    MaxNumberOfMessages=10,
-                    WaitTimeSeconds=5)
+                    Entries=del_list)
+                # TODO: Do the 200 check. Weird data format.
+                # print(f"Delete response: {response}")
+                # if response["HTTPStatusCode"] is not 200:
+                #     raise ConnectionError("Could not delete messages from queue!")
+                delete_messages = True
 
-                del_list = []
+            # Simple because if the poller is done, then there's no point pulling down any work.
+            if self.poll_status == "COMPLETED":
+                print(f"[GET] Terminating thread to get more work.")
+                print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
+                print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
 
-                if len(sqs_response["Messages"]) > 0:
-                    for message in sqs_response["Messages"]:
-                        message_body = message["Body"]
+                return  # terminate the thread.
 
-                        self.families_to_process.put(message_body)
+            # print("ARE WE HERE????")
+            if not deleted_messages and not found_messages:
+                print("FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
+                self.get_families_status = "IDLE"
 
-                        del_list.append({'ReceiptHandle': message["ReceiptHandle"],
-                                         'Id': message["MessageId"]})
-
-                # Step 2. Delete the messages from SQS.
-                if len(del_list) > 0:
-                    response = self.client.delete_message_batch(
-                        QueueUrl=self.crawl_queue,
-                        Entries=del_list)
-                    # TODO: Do the 200 check. Weird data format.
-                    # print(f"Delete response: {response}")
-                    if response["HTTPStatusCode"] is not 200:
-                        raise ConnectionError("Could not delete messages from queue!")
-
-                # Simple because if the poller is done, then there's no point pulling down any work.
-                if self.poll_status == "COMPLETED":
-                    print(f"[GET] Terminating thread to get more work.")
-                    print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
-                    print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
-
-                    return  # terminate the thread.
-
-            except:
-                ConnectionError("Could not get new families! ")
+            time.sleep(2)
 
 
     def launch_extract(self):
