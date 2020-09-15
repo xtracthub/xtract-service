@@ -34,6 +34,10 @@ class Orchestrator:
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
                  logging_level='debug', instance_id=None, extractor_finder='gdrive'):
 
+        self.t_crawl_start = time.time()
+        self.t_get_families = 0
+        self.t_send_batch = 0
+
         self.extractor_finder = extractor_finder
 
         self.funcx_eid = funcx_eid
@@ -132,9 +136,14 @@ class Orchestrator:
         consumer_thr.start()
         print("Successfully started the get_next_families() thread! ")
 
+
+
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def enqueue_loop(self, thr_id):
+
+        print(f"Elapsed Send Batch time: {self.t_send_batch}")
+        print(f"Elapsed Extract time: {time.time() - self.t_crawl_start}")
 
         print("[VALIDATE] In validation enqueue loop!")
         while True:
@@ -175,9 +184,14 @@ class Orchestrator:
             print(f"[VALIDATE] Current insertables: {insertables}")
 
             # try:
+            ta = time.time()
             response = self.client.send_message_batch(QueueUrl=self.validation_queue_url,
                                                           Entries=insertables)
             print(f"[VALIDATE] SQS response on insert: {response}")
+            tb = time.time()
+
+            self.t_send_batch += tb-ta
+
             # except Exception as e:  # TODO: too vague
             #     print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
@@ -260,7 +274,7 @@ class Orchestrator:
                                                "func_id": ex_func_id})
 
                 # print(f"Current batch: {self.current_batch}")
-                print(f"Batch size: {self.batch_size}")
+                #print(f"Batch size: {self.batch_size}")
                 if len(self.current_batch) >= self.batch_size:
 
                     task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
@@ -315,7 +329,7 @@ class Orchestrator:
 
             except:
                 ConnectionError("Could not get new families! ")
-            print("RETURNING!")
+            #print("RETURNING!")
         # return family_list
 
     def launch_extract(self):
