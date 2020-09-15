@@ -260,7 +260,7 @@ class Orchestrator:
                 family_batch.add_family(xtr_fam_obj)
 
                 if d_type == "gdrive":
-                    self.current_batch.append({"event": {"family_batch": family_batch,
+                    self.current_batch.append({"event": {"family_batch": family_batch.to_dict(),  #TODO: TYLER RIGHT HERE.
                                                          "creds": self.gdrive_token[0]},
                                                "func_id": ex_func_id})
                 elif d_type == "HTTPS":
@@ -386,6 +386,7 @@ class Orchestrator:
                     if "family_batch" in res:
                         family_batch = res["family_batch"]
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+                        # print(type(unpacked_mdata))
 
                         # TODO: make this a regular feature for matio
                         # print(f"[CHECK HERE] {unpacked_metadata}")
