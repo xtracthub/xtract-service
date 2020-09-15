@@ -11,9 +11,9 @@ flask_wtf
 requests
 # globus-action-provider-tools
 boto3
-xtract_sdk
 datasketch
 google-api-python-client
 google-auth-oauthlib
 numpy
 globus-action-provider-tools
+xtract_sdk==0.0.5
