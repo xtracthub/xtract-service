@@ -142,9 +142,6 @@ class Orchestrator:
     # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def validate_enqueue_loop(self, thr_id):
 
-        print(f"Elapsed Send Batch time: {self.t_send_batch}")
-        print(f"Elapsed Extract time: {time.time() - self.t_crawl_start}")
-
         print("[VALIDATE] In validation enqueue loop!")
         while True:
             insertables = []
@@ -319,6 +316,9 @@ class Orchestrator:
                 # Simple because if the poller is done, then there's no point pulling down any work.
                 if self.poll_status == "COMPLETED":
                     print(f"[GET] Terminating thread to get more work.")
+                    print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
+                    print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
+
                     return  # terminate the thread.
 
             except:
