@@ -169,6 +169,7 @@ class Orchestrator:
 
             self.sqs_push_threads[thr_id] = "ACTIVE"
 
+
             # Remove up to n elements from queue, where n is current_batch.
             current_batch = 1
             while (not self.to_validate_q.empty() and current_batch < 100):
