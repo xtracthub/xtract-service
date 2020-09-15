@@ -267,7 +267,10 @@ class Orchestrator:
                     self.current_batch.append({"event": {"family_batch": family_batch},
                                                "func_id": ex_func_id})
 
-                task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
+                try:
+                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
+                except Exception as e:
+                    print(f"[SEND] Caught exception here: {e}")
                 for task_id in task_ids:
                     self.task_dict["active"].put(task_id)
 
