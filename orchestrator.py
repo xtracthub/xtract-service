@@ -263,11 +263,11 @@ class Orchestrator:
                 family_batch.add_family(xtr_fam_obj)
 
                 if d_type == "gdrive":
-                    self.current_batch.append({"event": {"family_batch": family_batch.to_dict(),  #TODO: TYLER RIGHT HERE.
+                    self.current_batch.append({"event": {"family_batch": family_batch,   # TODO: TYLER RIGHT HERE.
                                                          "creds": self.gdrive_token[0]},
                                                "func_id": ex_func_id})
                 elif d_type == "HTTPS":
-                    self.current_batch.append({"event": {"family_batch": family_batch},
+                    self.current_batch.append({"event": {"family_batch": family_batch.to_dict()},
                                                "func_id": ex_func_id})
 
                 try:
@@ -293,7 +293,7 @@ class Orchestrator:
 
         while True:
             # Step 1. Get ceiling(batch_size/10) messages down from queue.
-            sqs_response = self.client.receive_message(  # TODO: properly try/except this block. 
+            sqs_response = self.client.receive_message(  # TODO: properly try/except this block.
                 QueueUrl=self.crawl_queue,
                 MaxNumberOfMessages=10,
                 WaitTimeSeconds=1)
@@ -307,7 +307,7 @@ class Orchestrator:
                 for message in sqs_response["Messages"]:
                     message_body = message["Body"]
 
-                    print(f"Messages in message body: {message_body}")
+                    # print(f"Messages in message body: {message_body}")
 
                     self.families_to_process.put(message_body)
 

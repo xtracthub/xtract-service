@@ -7,13 +7,13 @@ from utils.routes import fx_submit_url, fx_batch_poll_url
 
 
 def remote_extract_batch(items_to_batch, ep_id, headers):
-    print("IN REMOTE EXTRACT BATCH")
+    # print("IN REMOTE EXTRACT BATCH")
     batch = Batch()
 
     for item in items_to_batch:
         func_id = item["func_id"]
         event = item["event"]
-        print(f"HERE IS OUR EVENT: {event}")
+        # print(f"HERE IS OUR EVENT: {event}")
         batch.add(event, endpoint_id=ep_id, function_id=func_id)
 
     data = batch.prepare()
