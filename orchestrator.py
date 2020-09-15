@@ -176,7 +176,7 @@ class Orchestrator:
             current_batch = 1
             while not self.to_validate_q.empty() and current_batch < 100:  # TODO: TYLER, be smarter about this.
                 item_to_add = self.to_validate_q.get()
-                print(f"[VALIDATE] Item to add: {item_to_add}")
+                # print(f"[VALIDATE] Item to add: {item_to_add}")
                 # exit()
                 insertables.append(item_to_add)
                 # self.active_commits -= 1  # TODO: do something with this.
@@ -298,7 +298,7 @@ class Orchestrator:
         while True:
             family_list = []
             try:
-                print("ATTEMPT GET_NEXT_FAMILIES ")
+                # print("ATTEMPT GET_NEXT_FAMILIES ")
                 # Step 1. Get ceiling(batch_size/10) messages down from queue.
                 sqs_response = self.client.receive_message(
                     QueueUrl=self.crawl_queue,
@@ -391,7 +391,7 @@ class Orchestrator:
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
 
                         # TODO: make this a regular feature for matio
-                        print(f"[CHECK HERE] {unpacked_metadata}")
+                        # print(f"[CHECK HERE] {unpacked_metadata}")
                         if 'event' in unpacked_metadata:
                             family_batch = unpacked_metadata['event']['family_batch']
                             unpacked_metadata = family_batch.to_dict()
