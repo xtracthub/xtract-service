@@ -37,6 +37,8 @@ class Orchestrator:
         self.t_crawl_start = time.time()
         self.t_get_families = 0
         self.t_send_batch = 0
+        self.t_transfer = 0
+        self.n_fams_transferred = 0
 
         self.extractor_finder = extractor_finder
 
@@ -428,7 +430,8 @@ class Orchestrator:
                             family_batch = unpacked_metadata['event']['family_batch']
                             unpacked_metadata = family_batch.to_dict()
 
-                        print(f"UNPACKED METADATA: {str(unpacked_metadata)[0:50]} . . .")
+                        # print(f"UNPACKED METADATA: {str(unpacked_metadata)[0:50]} . . .")
+                        print(unpacked_metadata)
 
                         try:
                             self.to_validate_q.put({"Id": str(self.file_count),
@@ -450,6 +453,12 @@ class Orchestrator:
                     if type(res) is not dict:
                         print(f"Res is not dict: {res}")
                         continue
+
+                    elif 'transfer_time' in res:
+                        if res['transfer_time'] > 0:
+                            self.t_transfer += res['transfer_time']
+                            self.n_fams_transferred += 1
+                            print(f"Avg. Transfer time: {self.t_transfer/self.n_fams_transferred}")
 
                 elif "exception" in status_thing[tid]:
                     exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
