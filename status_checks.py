@@ -21,7 +21,7 @@ def get_crawl_status(crawl_id):
     vals = json.loads(r.content)
 
     # print("HERE IS VALS")
-    print(f"{vals}")
+    # print(f"{vals}")
 
     # print(vals)
     #
