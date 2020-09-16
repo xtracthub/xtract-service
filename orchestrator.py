@@ -460,6 +460,13 @@ class Orchestrator:
                             self.n_fams_transferred += 1
                             print(f"Avg. Transfer time: {self.t_transfer/self.n_fams_transferred}")
 
+                    # This just means fixing Google Drive extractors...
+                    elif 'trans_time' in res:
+                        if res['trans_time'] > 0:
+                            self.t_transfer += res['trans_time']
+                            self.n_fams_transferred += 1
+                            print(f"Avg. Transfer time: {self.t_transfer/self.n_fams_transferred}")
+
                 elif "exception" in status_thing[tid]:
                     exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
                     try:

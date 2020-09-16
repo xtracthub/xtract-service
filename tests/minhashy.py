@@ -1,4 +1,8 @@
 
+import pickle as pkl
+import json
+import base64
+
 def min_hash(fpath):
     """
     Extracts MinHash digest of a file's bytes
@@ -26,4 +30,20 @@ def min_hash(fpath):
 
 
 x = min_hash('/Users/tylerskluzacek/Desktop/github_avatar.jpg')
-print(x)
+x_pkl = pkl.dumps(x)
+
+# to_json = {'min_hash': x_pkl}
+# print(x_pkl)
+
+y = base64.b64encode(x_pkl)
+y2 = y.decode('ascii')
+
+to_json = {'min_hash': y2}
+
+z = json.dumps(to_json)
+
+### Now show that we can open it in minhash form.
+a = json.loads(z)
+b = base64.b64decode(a['min_hash'])
+c = pkl.loads(b)
+print(c)
