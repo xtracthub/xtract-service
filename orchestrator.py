@@ -205,25 +205,22 @@ class Orchestrator:
             while len(family_list) < self.batch_size and not self.families_to_process.empty():
                 family_list.append(self.families_to_process.get())
 
-            # print("Exited family loop!")
-            # print(f"Length of family_list: {len(family_list)}")
-
             if len(family_list) == 0:
-                print("Length of new families is 0!")
+                # print("Length of new families is 0!")
                 # Here we check if the crawl is complete. If so, then we can start the teardown checks.
                 status_dict = get_crawl_status(self.crawl_id)
 
-                print(f"Checking if crawl_status is SUCCEEDED or FAILED!: {status_dict['crawl_status']}")
+                # print(f"Checking if crawl_status is SUCCEEDED or FAILED!: {status_dict['crawl_status']}")
                 if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
                     # family_list = self.get_next_families()
-                    print(f"[SEND] Is idle?: {self.get_families_status}")
-                    print(f"[SEND] Empty families to process?: {self.families_to_process.empty()}")
+                    # print(f"[SEND] Is idle?: {self.get_families_status}")
+                    # print(f"[SEND] Empty families to process?: {self.families_to_process.empty()}")
                     if self.families_to_process.empty() and self.get_families_status == "IDLE":  # Checking second time due to narrow race condition.
                         self.send_status = "SUCCEEDED"
-                        print("Queue still empty -- terminating!")
+                        print("[SEND] Queue still empty -- terminating!")
                         return  # this should terminate thread, because there is nothing to process and queue empty
                     else:  # Something snuck in during the race condition... process it!
-                        print("Discovered final output despite crawl termination. Processing...")
+                        print("[SEND] Discovered final output despite crawl termination. Processing...")
 
             # Cast list to FamilyBatch
             for family in family_list:
@@ -262,7 +259,7 @@ class Orchestrator:
                 family_batch.add_family(xtr_fam_obj)
 
                 if d_type == "gdrive":
-                    self.current_batch.append({"event": {"family_batch": family_batch,   # TODO: TYLER RIGHT HERE.
+                    self.current_batch.append({"event": {"family_batch": family_batch,  # TODO: Tyler, check this!
                                                          "creds": self.gdrive_token[0]},
                                                "func_id": ex_func_id})
                 elif d_type == "HTTPS":
