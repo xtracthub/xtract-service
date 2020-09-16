@@ -398,8 +398,15 @@ class Orchestrator:
             # Send off task_ids to poll, retrieve a bunch of statuses.
             status_thing = remote_poll_batch(task_ids=tids_to_poll, headers=self.fx_headers)
 
-            # TODO: why is this necessary?
-            if status_thing is None:
+            if type(status_thing) is dict:
+                print(f"Caught funcX error: {status_thing['exception_caught']}")
+                print(f"Putting the tasks back into active queue for retry")
+
+                for reject_tid in tids_to_poll:
+                    self.task_dict["active"].put(reject_tid)
+
+                print(f"Pausing for 10 seconds...")
+                time.sleep(10)
                 continue
 
             for tid in status_thing:

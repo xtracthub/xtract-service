@@ -38,8 +38,8 @@ def remote_poll_batch(task_ids, headers):
 
     try:
         return json.loads(statuses.content)["results"]
-    except json.JSONDecodeError as e:
+    except Exception as e:  # TODO: Bring back ^^ like above.
         print(f"[POLL BATCH] Unable to load content from funcX poll. Caught: {e}")
         print(f"[POLL BATCH] Response received from funcX: {statuses.content}")
-        return None
+        return {'exception_caught': statuses.content}
 
