@@ -221,6 +221,7 @@ class Orchestrator:
                         return  # this should terminate thread, because there is nothing to process and queue empty
                     else:  # Something snuck in during the race condition... process it!
                         print("[SEND] Discovered final output despite crawl termination. Processing...")
+                        time.sleep(0.5)  # This is a multi-minute task and only is reached due to starvation.
 
             # Cast list to FamilyBatch
             for family in family_list:
