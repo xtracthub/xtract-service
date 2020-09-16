@@ -147,6 +147,8 @@ class Orchestrator:
         while True:
             insertables = []
             self.logger.debug(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
+            print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
+            print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
 
             # If empty, then we want to return.
             if self.to_validate_q.empty():
