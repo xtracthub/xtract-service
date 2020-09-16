@@ -398,7 +398,7 @@ class Orchestrator:
             # Send off task_ids to poll, retrieve a bunch of statuses.
             status_thing = remote_poll_batch(task_ids=tids_to_poll, headers=self.fx_headers)
 
-            if type(status_thing) is dict:
+            if "exception_caught" in status_thing:
                 print(f"Caught funcX error: {status_thing['exception_caught']}")
                 print(f"Putting the tasks back into active queue for retry")
 
