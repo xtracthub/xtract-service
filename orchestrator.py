@@ -143,10 +143,10 @@ class Orchestrator:
     # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def validate_enqueue_loop(self, thr_id):
 
-        print("[VALIDATE] In validation enqueue loop!")
+        self.logger.debug("[VALIDATE] In validation enqueue loop!")
         while True:
             insertables = []
-            print(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
+            self.logger.debug(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
 
             # If empty, then we want to return.
             if self.to_validate_q.empty():
@@ -176,7 +176,7 @@ class Orchestrator:
                 item_to_add = self.to_validate_q.get()
                 insertables.append(item_to_add)
                 current_batch += 1
-            print(f"[VALIDATE] Current insertables: {insertables}")
+            print(f"[VALIDATE] Current insertables: {str(insertables)[0:50]} . . .")
 
             # try:
             ta = time.time()
@@ -200,14 +200,13 @@ class Orchestrator:
             # TODO: Make sure this comes in via the notebook.
             fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
 
-            print("Communicating with SQS to pull down new_files")
             family_list = []
             # Now keeping filling our list of families until it is empty.
             while len(family_list) < self.batch_size and not self.families_to_process.empty():
                 family_list.append(self.families_to_process.get())
 
-            print("Exited family loop!")
-            print(f"Length of family_list: {len(family_list)}")
+            # print("Exited family loop!")
+            # print(f"Length of family_list: {len(family_list)}")
 
             if len(family_list) == 0:
                 print("Length of new families is 0!")
@@ -280,7 +279,7 @@ class Orchestrator:
                     print(f"Putting the tasks back into active queue for retry")
 
                     for reject_fam in family_batch.families:
-                        self.families_to_process.put(reject_fam.to_dict())
+                        self.families_to_process.put(json.dumps(reject_fam.to_dict()))
 
                     print(f"Pausing for 10 seconds...")
                     time.sleep(10)
@@ -289,7 +288,7 @@ class Orchestrator:
                 for task_id in task_ids:
                     self.task_dict["active"].put(task_id)
 
-                print(f"Active task queue (local) size: {self.task_dict['active'].qsize()}")
+                # print(f"Active task queue (local) size: {self.task_dict['active'].qsize()}")
 
                 # Empty the batch! Everything in here has been sent :)
                 self.current_batch = []
@@ -422,7 +421,7 @@ class Orchestrator:
                             family_batch = unpacked_metadata['event']['family_batch']
                             unpacked_metadata = family_batch.to_dict()
 
-                        print(f"UNPACKED METADATA: {unpacked_metadata}")
+                        print(f"UNPACKED METADATA: {str(unpacked_metadata)[0:50]} . . .")
 
                         try:
                             self.to_validate_q.put({"Id": str(self.file_count),
