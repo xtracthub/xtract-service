@@ -270,10 +270,22 @@ class Orchestrator:
                     self.current_batch.append({"event": {"family_batch": family_batch.to_dict()},
                                                "func_id": ex_func_id})
 
-                try:
-                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
-                except Exception as e:
-                    print(f"[SEND] Caught exception here: {e}")
+                # try:
+                task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
+                # except Exception as e:
+                #     print(f"[SEND] Caught exception here: {e}")
+
+                if type(task_ids) is dict:
+                    print(f"Caught funcX error: {task_ids['exception_caught']}")
+                    print(f"Putting the tasks back into active queue for retry")
+
+                    for reject_fam in family_batch.families:
+                        self.families_to_process.put(reject_fam.to_dict())
+
+                    print(f"Pausing for 10 seconds...")
+                    time.sleep(10)
+                    continue
+
                 for task_id in task_ids:
                     self.task_dict["active"].put(task_id)
 
@@ -340,7 +352,6 @@ class Orchestrator:
                 self.get_families_status = "IDLE"
 
             time.sleep(2)
-
 
     def launch_extract(self):
         # TODO: will soon need more than just 1 thread here.
