@@ -58,7 +58,7 @@ fam_batch.add_family(fam_1)
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 
 print("submitting task")
-task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch},
+task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch.to_dict()},
                                             fx_eid="68bade94-bf58-4a7a-bfeb-9c6a61fa5443",
                                             headers=full_headers)
 
@@ -88,12 +88,12 @@ while True:
     if 'result' in status_thing:
         result = fx_ser.deserialize(status_thing['result'])
 
-        print(f"Result: {result}")
+        fam_batch = result["family_batch"].to_dict()
 
-        for family in result["family_batch"].families:
-            print(family)
-            for gid in family.groups:
-                print(family.groups[gid].metadata)
+        for family in fam_batch["families"]:
+            print(f"The family {family}")
+            for gid in family["groups"]:
+                print(gid["metadata"])
 
     elif 'exception' in status_thing:
         exception = fx_ser.deserialize(status_thing['exception'])

@@ -6,7 +6,7 @@ class ImageExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="637dc072-c341-4f5e-95e0-6890a1e58159",
+                         func_id="f22d9206-0352-449f-8a5a-f6855f2bef30",
                          extr_name="xtract-image",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
@@ -156,6 +156,8 @@ def images_extract(event):
 
     import logging
     import sys
+    import pickle as pkl
+    import base64
 
     # logging.error("Testing")
     # return "Made it here!"
@@ -205,7 +207,7 @@ def images_extract(event):
 
         new_mdata = xtract_images_main.extract_image('predict', img_path)
 
-        new_mdata["min_hash"] = min_hash(img_path)
+        new_mdata["min_hash"] = base64.b64encode(pkl.dumps(min_hash(img_path))).decode('ascii')
         vec_rep, labels = finalize_im_rep(img_path)  # TODO: was fname
 
         new_mdata['image_vector'] = vec_rep
