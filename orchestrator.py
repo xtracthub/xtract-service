@@ -27,12 +27,61 @@ class NumpyEncoder(json.JSONEncoder):
 #  TODO: Copied and pasted bits of code.
 
 class Orchestrator:
-    """ ADD HIGH OVERVIEW COMMENT HERE. """
+    """
+    A class used to ...
+
+    Attributes
+    ----------
+    says_str : str
+        a formatted string to print out what the animal says
+    name : str
+        the name of the animal
+    sound : str
+        the sound that the animal makes
+    num_legs : int
+        the number of legs the animal has (default 4)
+
+    Methods
+    -------
+    enqueue_loop(thr_id)
+        (action)
+    send_families_loop()
+
+    launch_poll()
+
+    get_next_families_loop()
+
+    launch_extract()
+
+    unpack_returned_family_batch(family_batch)
+
+    poll_responses()
+    """
 
     # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
-                 logging_level='debug', instance_id=None, extractor_finder='gdrive'):
+                 extractor_finder='gdrive'):
+        """
+                Parameters
+                ----------
+                crawl_id :
+                    The id/name for the queue that holds the crawl.
+                headers : dictionary
+
+                funcx_eid :
+                    Funcx endpoint id.
+                mdata_store_path :
+                    Location to store the extracted metadata.
+                source_eid : , optional
+                    Source endpoint id.
+                dest_eid : , optional
+                    Destination enpoint id.
+                gdrive_token : , optional
+                    Authentication token for accessing a Google Drive account.
+                extractor_finder : str
+
+                """
 
         self.extractor_finder = extractor_finder
 
@@ -75,8 +124,6 @@ class Orchestrator:
                                    'Petrel': self.headers['Petrel']
                                    }
 
-        self.logging_level = logging_level
-
         self.logger = logging.getLogger(__name__)
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
@@ -84,7 +131,6 @@ class Orchestrator:
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.DEBUG)
-        self.instance_id = instance_id
 
         # This creates the extraction and validation queues on the Simple Queue Service.
         self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"  # TODO: env var.
@@ -114,9 +160,6 @@ class Orchestrator:
         self.families_to_process = Queue()
         self.to_validate_q = Queue()
 
-        # TODO: file left here for someone named Will. Remove it.
-        self.will_file = open("will.mdata", "w")
-
         self.sqs_push_threads = {}
         self.thr_ls = []
         self.commit_threads = 1
@@ -135,6 +178,14 @@ class Orchestrator:
         # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
         # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def enqueue_loop(self, thr_id):
+        """purpose
+
+        Parameters
+        ----------
+        thr_id :
+
+
+        """
 
         print("[VALIDATE] In validation enqueue loop!")
         while True:
@@ -182,6 +233,19 @@ class Orchestrator:
             #     print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
     def send_families_loop(self):
+        """purpose
+
+        Parameters
+        ----------
+        thr_id :
+
+
+        Raises
+        ------
+        ValueError()
+            If the extractor_finder argument has an inappropriate value.
+
+        """
         # TODO: Zoa -- 'families' are collections of files and metadata.
 
         self.send_status = "RUNNING"
