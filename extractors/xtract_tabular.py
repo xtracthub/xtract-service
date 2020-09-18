@@ -13,8 +13,6 @@ class TabularExtractor(Extractor):
         super().set_extr_func(tabular_extract)
 
 
-
-
 def tabular_extract(event):
     """Extract metadata from tabular data.
     
@@ -29,6 +27,7 @@ def tabular_extract(event):
     """
     import sys
     import time
+    import os
     import shutil
 
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
@@ -70,15 +69,23 @@ def tabular_extract(event):
     creds = event["creds"]
     family_batch = event["family_batch"]
 
+    # This should be either 'local' or 'remote'.
+    extract_mode = event["extract_mode"]
+
     downloader = GoogleDriveDownloader(auth_creds=creds)
+    assert extract_mode in ["remote", "local"], "Invalid extraction mode"
 
-    ta = time.time()
-    downloader.batch_fetch(family_batch=family_batch)
-    tb = time.time()
+    if extract_mode == "remote":
+        ta = time.time()
+        downloader.batch_fetch(family_batch=family_batch)
+        tb = time.time()
 
-    file_paths = downloader.success_files
+        file_paths = downloader.success_files
+    elif extract_mode == "local":
+        ta = tb = 0  # Set both times to be zero so that transfer time is zero.
+        file_paths = []
 
-    if len(file_paths) == 0:
+    if len(file_paths) == 0 and file_paths == "remote":
         return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
                 'err_msg': "unable to download files"}
 
@@ -90,7 +97,8 @@ def tabular_extract(event):
         new_mdata["min_hash"] = min_hash(img_path)
         family.metadata = new_mdata
 
-    # shutil.rmtree(file_paths)  # TODO: Bring back proper way of doing this.
+    if extract_mode == "remote":
+        [os.remove(file_path) for file_path in downloader.success_files]
 
     t1 = time.time()
     # Return batch
