@@ -53,11 +53,15 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
+        # petrel_path = row[0]
+        # TODO: THIS IS HERE FOR TESTING:
+        petrel_path = "/test_file.gz"
+        filename = "test_file.gz"
 
         # 4. Transfer each file (one-at-a-time)
         try:
             t_s = time.time()
-            r = requests.get(base_url + row[0], headers=headers)
+            r = requests.get(base_url + petrel_path, headers=headers)
             t_e = time.time()
         except Exception as e:
             print(e)
