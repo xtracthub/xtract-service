@@ -115,11 +115,6 @@ def get_cr_status():
 
     return resp
 
-# TODO: delete this.
-@application.route('/login/callback', methods=['GET', 'POST'])
-def callback():
-    return "Hello"
-
 
 @application.route('/extract', methods=['POST'])
 def extract_mdata():
