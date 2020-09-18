@@ -2,6 +2,8 @@
 # This file contains all of the code for Zoa's compression rate study.
 
 import csv
+import time
+import os
 import requests
 from fair_research_login import NativeClient
 
@@ -37,6 +39,7 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
     # 3. Scan through the files
     base_url = "https://4f99675c-ac1f-11ea-bee8-0e716405a293.e.globus.org"
 
+    files_processed = 0
     for row in csv_reader:
 
         if row[3] != "compressed":
@@ -49,20 +52,29 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
+
         # 4. Transfer each file (one-at-a-time)
+        t_s = time.time()
         r = requests.get(base_url + row[0], headers=headers)
+        t_e = time.time()
+
+        print(f"Time to download: {t_e - t_s}")
+        files_processed += 1
+        print(f"Number of files downloaded: {files_processed}")
 
         with open(filename, 'wb') as g:
             g.write(r.content)
 
         print("successfully retrieved file! ")
 
+        
+
 
         # 5. For each transferred file, you should collect size/extension information about each file.
 
 
         # TODO: Add an 'exit' if you just want to try something in the loop 1x and then kill the program.
-        exit()
+        # exit()
 
 
         # 6. Decompress the file.  # TODO: You might want to copy and paste that python file over here.
@@ -72,4 +84,5 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
         # 8. Write the info to our CSVs.
 
-    # 9. Delete the file (from your local computer)
+        # 9. Delete the file (from your local computer)
+        os.remove(filename)
