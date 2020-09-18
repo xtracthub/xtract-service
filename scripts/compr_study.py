@@ -55,16 +55,20 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
 
         # 4. Transfer each file (one-at-a-time)
-        # t_s = time.time()
-        # r = requests.get(base_url + row[0], headers=headers)
-        # t_e = time.time()
-        #
-        # print(f"Time to download: {t_e - t_s}")
-        # files_processed += 1
-        # print(f"Number of files downloaded: {files_processed}")
-        #
-        # with open(filename, 'wb') as g:
-        #     g.write(r.content)
+        try:
+            t_s = time.time()
+            r = requests.get(base_url + row[0], headers=headers)
+            t_e = time.time()
+        except Exception as e:
+            print(e)
+            continue
+
+        print(f"Time to download: {t_e - t_s}")
+        files_processed += 1
+        print(f"Number of files downloaded: {files_processed}")
+
+        with open(filename, 'wb') as g:
+            g.write(r.content)
 
         print("successfully retrieved file! ")
 
