@@ -20,8 +20,8 @@ def get_crawl_status(crawl_id):
 
     vals = json.loads(r.content)
 
-    print("HERE IS VALS")
-    print(f"{vals}")
+    # print("HERE IS VALS")
+    # print(f"{vals}")
 
     # print(vals)
     #
@@ -45,7 +45,7 @@ def get_crawl_status(crawl_id):
     #
     t1 = time.time()
 
-    print(f"Total time to get crawl status: {t1-t0}")
+    # print(f"Total time to get crawl status: {t1-t0}")
     return vals
 
 

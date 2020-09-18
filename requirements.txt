@@ -1,4 +1,4 @@
-funcx
+funcx==0.0.2a0
 globus_sdk
 psycopg2-binary
 # dfttopif
@@ -11,9 +11,10 @@ flask_wtf
 requests
 # globus-action-provider-tools
 boto3
-xtract_sdk
 datasketch
 google-api-python-client
 google-auth-oauthlib
 numpy
 globus-action-provider-tools
+xtract_sdk==0.0.5
+git+https://github.com/materials-data-facility/MaterialsIO.git
