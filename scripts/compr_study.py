@@ -7,6 +7,7 @@ import os
 import requests
 from fair_research_login import NativeClient
 
+from test_decompress import decompress
 
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
@@ -54,20 +55,21 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
 
         # 4. Transfer each file (one-at-a-time)
-        t_s = time.time()
-        r = requests.get(base_url + row[0], headers=headers)
-        t_e = time.time()
-
-        print(f"Time to download: {t_e - t_s}")
-        files_processed += 1
-        print(f"Number of files downloaded: {files_processed}")
-
-        with open(filename, 'wb') as g:
-            g.write(r.content)
+        # t_s = time.time()
+        # r = requests.get(base_url + row[0], headers=headers)
+        # t_e = time.time()
+        #
+        # print(f"Time to download: {t_e - t_s}")
+        # files_processed += 1
+        # print(f"Number of files downloaded: {files_processed}")
+        #
+        # with open(filename, 'wb') as g:
+        #     g.write(r.content)
 
         print("successfully retrieved file! ")
 
-        
+
+
 
 
         # 5. For each transferred file, you should collect size/extension information about each file.
@@ -85,4 +87,4 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         # 8. Write the info to our CSVs.
 
         # 9. Delete the file (from your local computer)
-        os.remove(filename)
+        # os.remove(filename)
