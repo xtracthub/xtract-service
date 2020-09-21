@@ -56,13 +56,20 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         # TODO: THIS IS HERE FOR TESTING:
         petrel_path = "/test_file.gz"
         filename = "test_file.gz"
+<<<<<<< HEAD
 
         file_path = base_url + petrel_path
+=======
+>>>>>>> e69fa05498b9fb065f28694f94cec93443dfaec8
 
         # 4. Transfer each file (one-at-a-time)
         try:
             t_s = time.time()
+<<<<<<< HEAD
             r = requests.get(file_path, headers=headers)
+=======
+            r = requests.get(base_url + petrel_path, headers=headers)
+>>>>>>> e69fa05498b9fb065f28694f94cec93443dfaec8
             t_e = time.time()
         except Exception as e:
             print(e)
@@ -100,4 +107,8 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
             filewriter.writerow([file_path, extension, file_size, decomp_size])
 
         # 9. Delete the file (from your local computer)
+<<<<<<< HEAD
         # os.remove(filename)
+=======
+        # os.remove(filename)
+>>>>>>> e69fa05498b9fb065f28694f94cec93443dfaec8
