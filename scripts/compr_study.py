@@ -1,4 +1,3 @@
-
 # This file contains all of the code for Zoa's compression rate study.
 
 import csv
@@ -7,6 +6,7 @@ import os
 import requests
 from fair_research_login import NativeClient
 
+from test_decompress import decompress
 
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
@@ -52,11 +52,21 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
+        # petrel_path = row[0]
+        # TODO: THIS IS HERE FOR TESTING:
+        petrel_path = "/test_file.gz"
+        filename = "test_file.gz"
+
+        file_path = base_url + petrel_path
 
         # 4. Transfer each file (one-at-a-time)
-        t_s = time.time()
-        r = requests.get(base_url + row[0], headers=headers)
-        t_e = time.time()
+        try:
+            t_s = time.time()
+            r = requests.get(file_path, headers=headers)
+            t_e = time.time()
+        except Exception as e:
+            print(e)
+            continue
 
         print(f"Time to download: {t_e - t_s}")
         files_processed += 1
@@ -67,7 +77,8 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
         print("successfully retrieved file! ")
 
-        
+
+
 
 
         # 5. For each transferred file, you should collect size/extension information about each file.
@@ -78,11 +89,15 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
 
         # 6. Decompress the file.  # TODO: You might want to copy and paste that python file over here.
+        decompress(file_path, base_url)
 
         # 7. Collect the rest of the information.
-
+        decomp_size = 0
 
         # 8. Write the info to our CSVs.
+        with open('persons.csv', 'wb') as csvfile:
+            filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            filewriter.writerow([file_path, extension, file_size, decomp_size])
 
         # 9. Delete the file (from your local computer)
-        os.remove(filename)
+        # os.remove(filename)
