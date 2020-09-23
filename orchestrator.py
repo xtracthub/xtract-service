@@ -272,7 +272,7 @@ class Orchestrator:
                                                "func_id": ex_func_id})
 
                 # try:
-                task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
+                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
                 # except Exception as e:
                 #     print(f"[SEND] Caught exception here: {e}")
 
@@ -286,6 +286,8 @@ class Orchestrator:
                     print(f"Pausing for 10 seconds...")
                     time.sleep(10)
                     continue
+
+                print(f"Task IDs: {task_id}")
 
                 for task_id in task_ids:
                     self.task_dict["active"].put(task_id)
