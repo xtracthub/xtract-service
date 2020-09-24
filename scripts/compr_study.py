@@ -48,28 +48,21 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         file_size = row[1]
         extension = row[2]
 
-        # Filename is the thing after the last '/'
-        filename = row[0].split('/')[-1]
-        print(f"Retrieving file: {filename}; Size: {file_size}")
-
         # petrel_path = row[0]
         # TODO: THIS IS HERE FOR TESTING:
         petrel_path = "/test_file.gz"
         filename = "test_file.gz"
-<<<<<<< HEAD
+
+        # Filename is the thing after the last '/'
+        filename = row[0].split('/')[-1]
+        print(f"Retrieving file: {filename}; Size: {file_size}")
 
         file_path = base_url + petrel_path
-=======
->>>>>>> e69fa05498b9fb065f28694f94cec93443dfaec8
 
         # 4. Transfer each file (one-at-a-time)
         try:
             t_s = time.time()
-<<<<<<< HEAD
             r = requests.get(file_path, headers=headers)
-=======
-            r = requests.get(base_url + petrel_path, headers=headers)
->>>>>>> e69fa05498b9fb065f28694f94cec93443dfaec8
             t_e = time.time()
         except Exception as e:
             print(e)
@@ -84,31 +77,24 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
         print("successfully retrieved file! ")
 
+        # 5. For each transferred file, collect size/extension information about each file (done above)
 
-
-
-
-        # 5. For each transferred file, you should collect size/extension information about each file.
-
-
-        # TODO: Add an 'exit' if you just want to try something in the loop 1x and then kill the program.
-        # exit()
-
-
-        # 6. Decompress the file.  # TODO: You might want to copy and paste that python file over here.
+        # 6. Decompress the file.
         decompress(file_path, base_url)
 
-        # 7. Collect the rest of the information.
-        decomp_size = 0
+        # 7. Collect size of decompressed file
+        decomp_size = os.path.getsize(filepath[:-len("." + extension)])
 
         # 8. Write the info to our CSVs.
-        with open('persons.csv', 'wb') as csvfile:
+        with open('decompression_info.csv', 'wb') as csvfile:
             filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             filewriter.writerow([file_path, extension, file_size, decomp_size])
 
+        print("done")
+
+        exit()
+
         # 9. Delete the file (from your local computer)
-<<<<<<< HEAD
+
         # os.remove(filename)
-=======
-        # os.remove(filename)
->>>>>>> e69fa05498b9fb065f28694f94cec93443dfaec8
+
