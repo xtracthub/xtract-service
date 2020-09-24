@@ -54,7 +54,7 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         filename = "test_file.gz"
 
         # Filename is the thing after the last '/'
-        filename = row[0].split('/')[-1]
+        # filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
         file_path = base_url + petrel_path
