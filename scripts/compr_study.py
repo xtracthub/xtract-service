@@ -83,7 +83,7 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         decompress(file_path, base_url)
 
         # 7. Collect size of decompressed file
-        decomp_size = os.path.getsize(petrel_path[:-len("." + extension)])
+        decomp_size = os.path.getsize(filename[:-len("." + extension)])
 
         # 8. Write the info to our CSVs.
         with open('decompression_info.csv', 'wb') as csvfile:
