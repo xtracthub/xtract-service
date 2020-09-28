@@ -12,17 +12,15 @@ def decompress(file_path, extract_path):
     /local/path/file_path/).
     :return:
     """
-    try:
-        file_name = os.path.basename(file_path)[:os.path.basename(file_path).index('.')]
-        extract_path = os.path.join(extract_path, file_name)
-        try:
-            os.mkdir(extract_path)
-        except:
-            pass
+    #  try:
+    file_name = os.path.basename(file_path)[:os.path.basename(file_path).index('.')]
+    comp_file_path = os.path.join(extract_path, file_name)
+    os.makedirs(extract_path, exist_ok=True)
 
-        Archive(file_path).extractall(extract_path)
-    except Exception as e:
-        print(f"Extraction failed: {e}")
+    a = Archive(file_path)
+    b = a.extractall(extract_path)
+    #  except Exception as e:
+    # print(f"Decompression failed: {e}")
 
 
 def is_compressed(file_path):
@@ -80,4 +78,4 @@ def recursive_compression(file_path, extract_path):
 
 # 1. The extract_path must be an existing directory.
 # 2. The actual files are inside a folder inside of extract_path
-recursive_compression('error_log-1578067261.gz', 'tomato')
+# recursive_compression('error_log-1578067261.gz', 'tomato')

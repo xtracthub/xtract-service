@@ -80,13 +80,19 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         # 5. For each transferred file, collect size/extension information about each file (done above)
 
         # 6. Decompress the file.
-        decompress(file_path, base_url)
+        decompress(filename, "compress_folder")
 
         # 7. Collect size of decompressed file
-        decomp_size = os.path.getsize(filename[:-len("." + extension)])
+        # decomp_size = os.path.getsize(filename[:-len("." + extension)])
+        decomp_size = 0
+        start_path = 'compress_folder'  # To get size of current directory
+        for path, dirs, files in os.walk(start_path):
+            for f in files:
+                fp = os.path.join(path, f)
+                decomp_size += os.path.getsize(fp)
 
         # 8. Write the info to our CSVs.
-        with open('decompression_info.csv', 'wb') as csvfile:
+        with open('decompression_info.csv', 'w') as csvfile:
             filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             filewriter.writerow([file_path, extension, file_size, decomp_size])
 
