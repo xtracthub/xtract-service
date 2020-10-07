@@ -95,6 +95,5 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         print("wrote to csv")
 
         # 9. Delete the file (from your local computer)
-
-        # os.remove(filename)
+        os.remove(filename)
 
