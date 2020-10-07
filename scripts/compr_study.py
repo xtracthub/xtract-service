@@ -92,9 +92,7 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
             filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             filewriter.writerow([file_path, extension, file_size, decomp_size])
 
-        print("done")
-
-        exit()
+        print("wrote to csv")
 
         # 9. Delete the file (from your local computer)
 
