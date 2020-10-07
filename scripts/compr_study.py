@@ -43,18 +43,14 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
     for row in csv_reader:
 
         if row[3] != "compressed":
-            continue  # return to the top of the for-loop!
+            continue
 
+        petrel_path = row[0]
         file_size = row[1]
         extension = row[2]
 
-        # petrel_path = row[0]
-        # TODO: THIS IS HERE FOR TESTING:
-        petrel_path = "/test_file.gz"
-        filename = "test_file.gz"
-
         # Filename is the thing after the last '/'
-        # filename = row[0].split('/')[-1]
+        filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
         file_path = base_url + petrel_path
