@@ -8,6 +8,8 @@ from fair_research_login import NativeClient
 
 from test_decompress import decompress
 
+numfail = 0
+
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
 with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
@@ -85,8 +87,14 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         start_path = decomp_folder_name  # To get size of current directory
         for path, dirs, files in os.walk(start_path):
             for f in files:
-                fp = os.path.join(path, f)
-                decomp_size += os.path.getsize(fp)
+                try:
+                    fp = os.path.join(path, f)
+                    decomp_size += os.path.getsize(fp)
+                except FileNotFoundError as e:
+                    print(e)
+                    numfail += 1
+                    print(f"failures: {numfail}")
+                    continue
 
         # 8. Write the info to our CSVs.
         with open('decompression_info.csv', 'a') as csvfile:
