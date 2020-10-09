@@ -19,7 +19,7 @@ class GlobusPoller():
         self.data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
         self.data_path = "/project2/chard/skluzacek/data-to-process/"
 
-        self.max_gb = 50
+        self.max_gb = 0.05
 
         self.block_size = self.max_gb/5
 
@@ -111,7 +111,7 @@ class GlobusPoller():
                     tot_fam_size += file_size
 
                 self.family_map[fam_id] = family
-                self.local_transfer_queue = fam_id
+                self.local_transfer_queue.put(fam_id)
                 self.fam_to_size_map[fam_id] = tot_fam_size
 
                 size_of_fams += tot_fam_size
@@ -153,11 +153,10 @@ class GlobusPoller():
                     print("No new messages! Continuing... ")
 
             print(f"Total time to get folder size: {t1-t0} seconds")
-
             print("Made it here!")
             print(f"Num bytes: {num_bytes}")
             print(f"Total bytes: {self.total_bytes}")
-            print(f"Is queue empty?: {self.local_update_queue.empty()}")
+            print(f"Is queue empty?: {self.local_transfer_queue.empty()}")
 
             time.sleep(2)  # TODO: remove after testing.
 
@@ -166,14 +165,15 @@ class GlobusPoller():
                 need_more_families = True
                 print("ever make it here?! ")
 
-                cur_fam_id = self.local_update_queue.get()
+                cur_fam_id = self.local_transfer_queue.get()
+                print("We got an object!")
                 cur_fam_size = self.fam_to_size_map[cur_fam_id]
 
                 self.current_batch.append(self.family_map[cur_fam_id])
                 self.current_batch_bytes += cur_fam_size
 
                 # TODO: what if one file is larger than the entire batch size?
-
+            print("We are entering the 'if' block")
             if self.current_batch_bytes >= self.block_size:
                 # TODO: now we need to send the batch.
                 print("Generating a batch transfer object...")
@@ -194,6 +194,9 @@ class GlobusPoller():
                         tdata.add_item(file_path, f"{fam_dir}/{file_name}")
 
                         # TODO: add so we can poll Globus jobs.
+                    transfer_result = self.tc.submit_transfer(tdata)
+                    print(f"Transfer result: {transfer_result}")
+                    exit()
 
             else:
                 need_more_families = False
