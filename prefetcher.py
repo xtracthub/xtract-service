@@ -159,8 +159,10 @@ class GlobusPoller():
             print(f"Total bytes: {self.total_bytes}")
             print(f"Is queue empty?: {self.local_update_queue.empty()}")
 
+            time.sleep(2)  # TODO: remove after testing.
+
             # Check if we are under capacity and there's more queue elements to grab.
-            while num_bytes < self.total_bytes and not self.local_update_queue.empty():
+            while num_bytes < self.total_bytes and not self.local_transfer_queue.empty():
                 need_more_families = True
                 print("ever make it here?! ")
 
@@ -192,7 +194,6 @@ class GlobusPoller():
                         tdata.add_item(file_path, f"{fam_dir}/{file_name}")
 
                         # TODO: add so we can poll Globus jobs.
-
 
             else:
                 need_more_families = False
