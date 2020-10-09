@@ -199,7 +199,7 @@ class GlobusPoller():
 
 crawl_id = "5b4bab4f-01d0-4b2d-a186-476d69b320b0"
 g = GlobusPoller(crawl_id=crawl_id)
-g.get_new_families()
+g.main_poller_loop()
 
 # # high level interface; provides iterators for list responses
 # tdata = globus_sdk.TransferData(tc, data_source, data_dest, label="Xtract attempt", sync_level="checksum")
