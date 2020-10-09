@@ -151,13 +151,18 @@ class GlobusPoller():
                 if total_size is None:
                     total_size = 0
                     print("No new messages! Continuing... ")
-                # self.current_batch_bytes += total_size
 
             print(f"Total time to get folder size: {t1-t0} seconds")
+
+            print("Made it here!")
+            print(f"Num bytes: {num_bytes}")
+            print(f"Total bytes: {self.total_bytes}")
+            print(f"Is queue empty?: {self.local_update_queue.empty()}")
 
             # Check if we are under capacity and there's more queue elements to grab.
             while num_bytes < self.total_bytes and not self.local_update_queue.empty():
                 need_more_families = True
+                print("ever make it here?! ")
 
                 cur_fam_id = self.local_update_queue.get()
                 cur_fam_size = self.fam_to_size_map[cur_fam_id]
@@ -186,7 +191,7 @@ class GlobusPoller():
 
                         tdata.add_item(file_path, f"{fam_dir}/{file_name}")
 
-                        # TODO: add so we can poll Globus jobs. 
+                        # TODO: add so we can poll Globus jobs.
 
 
             else:
