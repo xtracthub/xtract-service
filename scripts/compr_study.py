@@ -9,12 +9,15 @@ from fair_research_login import NativeClient
 from test_decompress import decompress
 
 numfail = 0
+skiplines = 0
 
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
 with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
     csv_reader = csv.reader(f, delimiter=',')
     next(csv_reader)
+    for i in range(skiplines):
+        next(csv_reader)
 
     # # Each row is a list of all elements in order
     # for row in csv_reader:
