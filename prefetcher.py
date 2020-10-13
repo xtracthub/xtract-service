@@ -23,7 +23,7 @@ class GlobusPoller():
 
         self.max_gb = 0.005
 
-
+        self.last_batch = False
         bytes_in_kb = 1024
         bytes_in_mb = bytes_in_kb * 1024
         bytes_in_gb = bytes_in_mb * 1024
@@ -99,9 +99,10 @@ class GlobusPoller():
 
         size_of_fams = 0
 
-        print(f"Number of SQS messages: {sqs_response['Messages']}")
+        # print(sqs_response)
+        # print(f"Number of SQS messages: {sqs_response['Messages']}")
 
-        if len(sqs_response["Messages"]) > 0:
+        if "Messages" in sqs_response and len(sqs_response["Messages"]) > 0:
 
             del_list = []
             for item in sqs_response["Messages"]:
@@ -126,6 +127,7 @@ class GlobusPoller():
                 response = self.sqs_client.delete_message_batch(QueueUrl=self.crawl_queue_url, Entries=del_list)
                 print(response)              
         else:
+            self.last_batch = True
             return None
         return size_of_fams
 
@@ -181,7 +183,7 @@ class GlobusPoller():
 
             print(f"Current batch Size: {self.current_batch_bytes}")
             print(f"Block Size: {self.block_size}")
-            if self.current_batch_bytes >= self.block_size:
+            if self.current_batch_bytes >= self.block_size or (self.last_batch and len(self.current_batch) > 0):
                 # TODO: now we need to send the batch.
                 print("Generating a batch transfer object...")
                 time.sleep(5)
@@ -190,6 +192,8 @@ class GlobusPoller():
                                                 self.data_dest,
                                                 label="Xtract attempt",
                                                 sync_level="checksum")
+                
+                fid_list = []
                 for family_to_trans in self.current_batch:
 
                     # Create a directory (named by family_id) into which we want to place our families.
@@ -200,14 +204,20 @@ class GlobusPoller():
                         file_name = file_obj['path'].split('/')[-1]
 
                         tdata.add_item(file_path, f"{fam_dir}/{file_name}")
+                        fid_list.append(family_to_trans['family_id'])
 
                         # TODO: add so we can poll Globus jobs.
                 transfer_result = self.tc.submit_transfer(tdata)
                 print(f"Transfer result: {transfer_result}")
                 gl_task_id = transfer_result['task_id']
                 self.transfer_check_queue.put(gl_task_id)
+                
+                self.transfer_map[gl_task_id] = fid_list
+
                 self.current_batch = []
                 self.current_batch_bytes = 0    
+
+                
 
             else:
                 need_more_families = True
@@ -219,11 +229,18 @@ class GlobusPoller():
                 print(res)
                 if res['status'] != "SUCCEEDED":
                     gl_task_tmp_ls.append(gl_tid)
+                else:
+                    # TODO: Get the families associated with the transfer task. 
+                    fids = self.transfer_map[gl_tid]
+                    response = self.client.send_message_batch(QueueUrl=self.queue_url,
+                                                          Entries=insertables)
                 
             for gl_tid in gl_task_tmp_ls:
                 self.transfer_check_queue.put(gl_tid)
 
-            #time.sleep(1)
+            if self.last_batch and self.transfer_check_queue.empty():
+                print("No more Transfer tasks and incoming queue empty")
+                exit()
             
 
 crawl_id = "4bc5112f-f9be-442d-8ba9-df846aa0503f"
