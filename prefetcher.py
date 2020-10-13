@@ -4,6 +4,7 @@ import globus_sdk
 import boto3
 import json
 import time
+from random import randint
 import os
 
 
@@ -21,6 +22,8 @@ class GlobusPoller():
         self.data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
         self.data_path = "/project2/chard/skluzacek/data-to-process/"
 
+        self.file_counter = randint(100000, 999999)
+
         self.max_gb = 0.005
 
         self.last_batch = False
@@ -30,7 +33,6 @@ class GlobusPoller():
 
         self.total_bytes = bytes_in_gb * self.max_gb  # TODO: pop this out to class arg.
         self.block_size = self.total_bytes / 5
-
 
         self.client = None
         self.tc = None
@@ -43,12 +45,18 @@ class GlobusPoller():
                               aws_secret_access_key=os.environ["aws_secret"],
                               region_name='us-east-1')
 
-        response = self.sqs_client.get_queue_url(
+        crawl_q_response = self.sqs_client.get_queue_url(
             QueueName=f'crawl_{self.crawl_id}',
             QueueOwnerAWSAccountId=os.environ["aws_account"]
         )
 
-        self.crawl_queue_url = response["QueueUrl"]
+        self.crawl_queue_url = crawl_q_response["QueueUrl"]
+
+        transferred_q_response = self.sqs_client.get_queue_url(
+            QueueName=f'transferred_{self.crawl_id}',
+            QueueOwnerAWSAccountId=os.environ["aws_account"]
+        )
+        self.transferred_queue_url = transferred_q_response
 
     def login(self):
         self.client = globus_sdk.NativeAppAuthClient(self.client_id)
@@ -215,9 +223,7 @@ class GlobusPoller():
                 self.transfer_map[gl_task_id] = fid_list
 
                 self.current_batch = []
-                self.current_batch_bytes = 0    
-
-                
+                self.current_batch_bytes = 0
 
             else:
                 need_more_families = True
@@ -232,8 +238,19 @@ class GlobusPoller():
                 else:
                     # TODO: Get the families associated with the transfer task. 
                     fids = self.transfer_map[gl_tid]
-                    response = self.client.send_message_batch(QueueUrl=self.queue_url,
+                    print(f"These are the fids: {fids}")
+
+                    insertables = []
+                    for fid in fids:
+                        self.file_counter += 1
+                        family_object = {"Id": self.file_counter, "MessageBody": json.dumps(self.family_map[fid])}
+
+                        insertables.append(family_object)
+
+                    response = self.client.send_message_batch(QueueUrl=self.transferred_queue_url,
                                                           Entries=insertables)
+
+                    print("Response for crawl queue. ")
                 
             for gl_tid in gl_task_tmp_ls:
                 self.transfer_check_queue.put(gl_tid)
