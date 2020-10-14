@@ -6,7 +6,8 @@ import json
 import time
 from random import randint
 import os
-
+import csv
+import datetime
 
 class GlobusPoller():
 
@@ -24,7 +25,7 @@ class GlobusPoller():
 
         self.file_counter = randint(100000, 999999)
 
-        self.max_gb = 0.005
+        self.max_gb = 0.05
 
         self.last_batch = False
         bytes_in_kb = 1024
@@ -56,7 +57,18 @@ class GlobusPoller():
             QueueName=f'transferred_{self.crawl_id}',
             QueueOwnerAWSAccountId=os.environ["aws_account"]
         )
-        self.transferred_queue_url = transferred_q_response
+        self.transferred_queue_url = transferred_q_response["QueueUrl"]
+
+        # Get rid of log file if it already exists. # TODO: have timestamped log folders for each crawl/transfer. 
+        if os.path.exists("folder_size.csv"): 
+            os.remove("folder_size.csv")
+        
+        # Now create a fresh file here. 
+        with open("folder_size.csv", "w") as g: 
+            g.close()
+        #self.folder_size_file = open("folder_size.csv", "w") 
+        #self.folder_size_writer = csv.writer(self.folder_size_file)
+
 
     def login(self):
         self.client = globus_sdk.NativeAppAuthClient(self.client_id)
@@ -89,15 +101,15 @@ class GlobusPoller():
         self.tc = globus_sdk.TransferClient(authorizer=authorizer)
 
     def get_size(self, start_path = '.'):
-        total_size = 0
-        for dirpath, dirnames, filenames in os.walk(start_path):
-            for f in filenames:
-                fp = os.path.join(dirpath, f)
-                # skip if it is symbolic link
-                if not os.path.islink(fp):
-                    total_size += os.path.getsize(fp)
-
-        return total_size
+        #total_size = 0
+        #for dirpath, dirnames, filenames in os.walk(start_path):
+        #    for f in filenames:
+        #        fp = os.path.join(dirpath, f)
+        #        # skip if it is symbolic link
+        #        if not os.path.islink(fp):
+        #            total_size += os.path.getsize(fp)
+        #
+        # return total_size
 
     def get_new_families(self):
         sqs_response = self.sqs_client.receive_message(
@@ -158,6 +170,13 @@ class GlobusPoller():
         while True:
             t0 = time.time()
             num_bytes = self.get_size()
+            #            #bytes    #kilo  #mega 
+            num_mbytes = num_bytes / 1024 / 1024 
+            cur_time = datetime.datetime.now()
+            cur_read_time = cur_time.strftime("%Y-%m-%d %H:%M:%S")
+            with open("folder_size.csv", 'a') as f:
+                writer = csv.writer(f)
+                writer.writerow([cur_time, num_mbytes])
             t1 = time.time()
 
             print(f"Need more families: {need_more_families}")
@@ -240,17 +259,31 @@ class GlobusPoller():
                     fids = self.transfer_map[gl_tid]
                     print(f"These are the fids: {fids}")
 
+                    insertables_batch = []
                     insertables = []
+                    max_insertables = 10  # SQS can only upload 10 messages at a time. 
                     for fid in fids:
                         self.file_counter += 1
-                        family_object = {"Id": self.file_counter, "MessageBody": json.dumps(self.family_map[fid])}
+
+                        print(f"Family: {self.family_map[fid]}")
+                        family_object = {"Id": str(self.file_counter), "MessageBody": json.dumps(self.family_map[fid])}
 
                         insertables.append(family_object)
 
-                    response = self.client.send_message_batch(QueueUrl=self.transferred_queue_url,
-                                                          Entries=insertables)
+                        if len(insertables) == 6:
+                            insertables_batch.append(insertables)
+                            insertables = []  # reset to be empty since we dumped into the batch.
 
-                    print("Response for crawl queue. ")
+                    # Now catch case where batch isn't full BUT we still need to put them into list for push to SQS. 
+                    if len(insertables) > 0:
+                        insertables_batch.append(insertables)
+
+                    for insertables in insertables_batch: 
+                        response = self.sqs_client.send_message_batch(QueueUrl=self.transferred_queue_url,
+                                                                      Entries=insertables)
+
+                    print(f"Response for transferred queue: {response}")
+                    time.sleep(2)
                 
             for gl_tid in gl_task_tmp_ls:
                 self.transfer_check_queue.put(gl_tid)
@@ -260,7 +293,7 @@ class GlobusPoller():
                 exit()
             
 
-crawl_id = "4bc5112f-f9be-442d-8ba9-df846aa0503f"
+crawl_id = "3521e95b-669d-48a9-9c2c-d55a82c32846"
 g = GlobusPoller(crawl_id=crawl_id)
 g.main_poller_loop()
 
