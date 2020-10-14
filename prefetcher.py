@@ -8,6 +8,8 @@ from random import randint
 import os
 import csv
 import datetime
+from get_dir_size import get_data_dir_size
+import threading
 
 class GlobusPoller():
 
@@ -69,6 +71,15 @@ class GlobusPoller():
         #self.folder_size_file = open("folder_size.csv", "w") 
         #self.folder_size_writer = csv.writer(self.folder_size_file)
 
+        self.cur_data_folder_size = 0
+
+
+        print("Starting thread to get size!")
+        get_size_thr = threading.Thread(target=self.get_size, args=())
+        get_size_thr.start()
+        print("Successfully started thread!")
+
+
 
     def login(self):
         self.client = globus_sdk.NativeAppAuthClient(self.client_id)
@@ -100,16 +111,17 @@ class GlobusPoller():
         authorizer = globus_sdk.AccessTokenAuthorizer(TRANSFER_TOKEN)
         self.tc = globus_sdk.TransferClient(authorizer=authorizer)
 
-    def get_size(self, start_path = '.'):
-        #total_size = 0
-        #for dirpath, dirnames, filenames in os.walk(start_path):
-        #    for f in filenames:
-        #        fp = os.path.join(dirpath, f)
-        #        # skip if it is symbolic link
-        #        if not os.path.islink(fp):
-        #            total_size += os.path.getsize(fp)
-        #
-        # return total_size
+    def get_size(self):
+        # bytes    #kilo  #mega
+        num_mbytes = get_data_dir_size() / 1024 / 1024
+        cur_time = datetime.datetime.now()
+        cur_read_time = cur_time.strftime("%Y-%m-%d %H:%M:%S")
+
+        self.cur_data_folder_size = num_mbytes * 1024 * 1024  # Convert back to bytes.
+        with open("folder_size.csv", 'a') as f:
+            writer = csv.writer(f)
+            writer.writerow([cur_read_time, num_mbytes])
+
 
     def get_new_families(self):
         sqs_response = self.sqs_client.receive_message(
@@ -168,17 +180,6 @@ class GlobusPoller():
         need_more_families = True
 
         while True:
-            t0 = time.time()
-            num_bytes = self.get_size()
-            #            #bytes    #kilo  #mega 
-            num_mbytes = num_bytes / 1024 / 1024 
-            cur_time = datetime.datetime.now()
-            cur_read_time = cur_time.strftime("%Y-%m-%d %H:%M:%S")
-            with open("folder_size.csv", 'a') as f:
-                writer = csv.writer(f)
-                writer.writerow([cur_time, num_mbytes])
-            t1 = time.time()
-
             print(f"Need more families: {need_more_families}")
             if need_more_families:
                 total_size = self.get_new_families()
@@ -187,17 +188,12 @@ class GlobusPoller():
                     total_size = 0
                     print("No new messages! Continuing... ")
 
-            print(f"Total time to get folder size: {t1-t0} seconds")
-            print("Made it here!")
-            print(f"Num bytes: {num_bytes}")
-            print(f"Total bytes: {self.total_bytes}")
-            print(f"Is queue empty?: {self.local_transfer_queue.empty()}")
+            print(f"Current Data folder size (MB): {self.cur_data_folder_size}")
 
-            # time.sleep(2)  
 
             # Check if we are under capacity and there's more queue elements to grab.
             print(f"local_transfer_queue.empty()?: {self.local_transfer_queue.empty()}")
-            while num_bytes < self.total_bytes and not self.local_transfer_queue.empty():
+            while self.cur_data_folder_size < self.total_bytes and not self.local_transfer_queue.empty():
                 need_more_families = True
 
                 cur_fam_id = self.local_transfer_queue.get()
@@ -208,8 +204,8 @@ class GlobusPoller():
 
                 # TODO: what if one file is larger than the entire batch size?
 
-            print(f"Current batch Size: {self.current_batch_bytes}")
-            print(f"Block Size: {self.block_size}")
+            # print(f"Current batch Size: {self.current_batch_bytes}")
+            # print(f"Block Size: {self.block_size}")
             if self.current_batch_bytes >= self.block_size or (self.last_batch and len(self.current_batch) > 0):
                 # TODO: now we need to send the batch.
                 print("Generating a batch transfer object...")
@@ -282,7 +278,7 @@ class GlobusPoller():
                         response = self.sqs_client.send_message_batch(QueueUrl=self.transferred_queue_url,
                                                                       Entries=insertables)
 
-                    print(f"Response for transferred queue: {response}")
+                        print(f"Response for transferred queue: {response}")
                     time.sleep(2)
                 
             for gl_tid in gl_task_tmp_ls:
