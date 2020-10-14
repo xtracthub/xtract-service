@@ -122,7 +122,7 @@ class GlobusPoller():
             writer = csv.writer(f)
             writer.writerow([cur_read_time, num_mbytes])
 
-
+        print(f"************** SIZE IN MB: {self.cur_data_folder_size} ***********************")
     def get_new_families(self):
         sqs_response = self.sqs_client.receive_message(
             QueueUrl=self.crawl_queue_url,
@@ -130,9 +130,6 @@ class GlobusPoller():
             WaitTimeSeconds=5)
 
         size_of_fams = 0
-
-        # print(sqs_response)
-        # print(f"Number of SQS messages: {sqs_response['Messages']}")
 
         if "Messages" in sqs_response and len(sqs_response["Messages"]) > 0:
 
@@ -193,6 +190,9 @@ class GlobusPoller():
 
             # Check if we are under capacity and there's more queue elements to grab.
             print(f"local_transfer_queue.empty()?: {self.local_transfer_queue.empty()}")
+
+            print(f"[Tyler 1] Folder size: {self.cur_data_folder_size}")
+            print(f"[Tyler 2] Total bytes: {self.total_bytes}")
             while self.cur_data_folder_size < self.total_bytes and not self.local_transfer_queue.empty():
                 need_more_families = True
 
@@ -207,7 +207,6 @@ class GlobusPoller():
             # print(f"Current batch Size: {self.current_batch_bytes}")
             # print(f"Block Size: {self.block_size}")
             if self.current_batch_bytes >= self.block_size or (self.last_batch and len(self.current_batch) > 0):
-                # TODO: now we need to send the batch.
                 print("Generating a batch transfer object...")
                 time.sleep(5)
                 tdata = globus_sdk.TransferData(self.tc,
@@ -287,7 +286,8 @@ class GlobusPoller():
             if self.last_batch and self.transfer_check_queue.empty():
                 print("No more Transfer tasks and incoming queue empty")
                 exit()
-            
+        print(f"Broke out of loop. Sleeping for 5 seconds...") 
+        time.sleep(5)     
 
 crawl_id = "3521e95b-669d-48a9-9c2c-d55a82c32846"
 g = GlobusPoller(crawl_id=crawl_id)
