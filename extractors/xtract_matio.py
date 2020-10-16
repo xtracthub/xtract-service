@@ -22,6 +22,8 @@ def matio_extract(event):
     :return metadata (dict) -- metadata as gotten from the materials_io library:
     """
 
+    # return "Hello,world!"
+
     import os
     import sys
     import time
@@ -33,27 +35,28 @@ def matio_extract(event):
 
     t0 = time.time()
 
+
+    # return "Hot damn, we in here. "
+
     sys.path.insert(1, '/')
 
     from xtract_matio_main import extract_matio
     # from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
 
+    # return "Made it here???"
     # A list of file paths
     all_families = event['family_batch']
 
-    # return all_families
+    is_local = True
+    should_delete = False
 
-    # TODO: This is ugly. Clean up!
-    # return "hi"
-    family_batch = FamilyBatch()
-    for family in all_families["families"]:
-        # return family
-        fam = Family()
-        fam.from_dict(family)
-        family_batch.add_family(fam)
-    all_families = family_batch
-
-    # return {'family_batch': family_batch}
+    # TODO: potentially remove this if we definitely don't need for FamilyBatch.
+    # family_batch = FamilyBatch()
+    # for family in all_families.families:
+    #     fam = Family()
+    #     fam.from_dict(family)
+    #     family_batch.add_family(fam)
+    # all_families = family_batch
 
     # This collects all of the files for all of the families.
     file_counter = 0
@@ -69,7 +72,12 @@ def matio_extract(event):
         for file_obj in fam_files:
             base_url = file_obj["base_url"]
             filename = base_url + file_obj["path"]
+
+            # TODO: Likely need to take this out for processing.
+            # if not is_local:
             local_filename = filename.split('/')[-1]
+            # else:
+            #     local_filename = filename
 
             new_path = os.path.join(family_id, local_filename)
             filename_to_path_map[filename] = new_path
@@ -78,37 +86,59 @@ def matio_extract(event):
             batch_thruple_ls.append(batch_thruple)
             file_counter += 1
 
+    # return fam_files  # TODO 1: This one works.
     # return batch_thruple_ls
-    down_start_t = time.time()
-    downloader = GlobusHttpsDownloader()
-    downloader.batch_fetch(batch_thruple_ls)
-    down_end_t = time.time()
+    if not is_local:
+        down_start_t = time.time()
+        downloader = GlobusHttpsDownloader()
+        downloader.batch_fetch(batch_thruple_ls)
+        down_end_t = time.time()
 
-    if len(downloader.fail_files) > 0:
-        raise ValueError("TODO BETTER ERROR HANDLING -- was unable to fetch files from Globus")
+        if len(downloader.fail_files) > 0:
+            raise ValueError("TODO BETTER ERROR HANDLING -- was unable to fetch files from Globus")
+    else:
+        down_start_t = down_end_t = 0
 
-    # return {'success': downloader.success_files, 'failure': downloader.fail_files}
+    # return fam_files  # TODO 2: this one works.
+
+    # return all_families.families  # TODO 3: this one works.
 
     # This extracts the metadata for each group in each family.
     for family in all_families.families:
+        # return "WE EHRE 2"  # TODO 4: this one works.
+
+        # return family.groups
         for gid in family.groups:
             parser = family.groups[gid].parser
+            # return parser
             actual_group_paths = []
-            for file_obj in family.groups[gid].files:
-                filename = file_obj["base_url"] + file_obj["path"]
-                actual_group_paths.append(filename_to_path_map[filename])
 
-        # for path in actual_group_paths:
-        #     if "INCAR" in path:
-        #         lines = ""
-        #         with open(path, 'r') as f:
-        #             for line in f:
-        #                 lines += line
-        #         return lines
+            # return family.groups[gid].files
+            for file_obj in family.groups[gid].files:
+
+                filename = file_obj["base_url"] + file_obj["path"]
+
+                # TODO: Come further examine if this is the right way to do things.
+                if is_local:
+                    actual_group_paths.append(filename)
+                else:
+                    actual_group_paths.append(filename_to_path_map[filename])
+
+            # return "DID WE GET HERE???"
+            # for path in actual_group_paths:
+            #     if "INCAR" in path:
+            #         lines = ""
+            #         with open(path, 'r') as f:
+            #             for line in f:
+            #                 lines += line
+            #         return lines
 
             extraction_start_t = time.time()
 
+            # return "WE ARE EXTRACTING!"
+            # return actual_group_paths, parser
             new_mdata = extract_matio(paths=actual_group_paths, parser=parser)
+            return new_mdata
             extraction_end_t = time.time()
 
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t

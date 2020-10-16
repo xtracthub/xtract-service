@@ -32,19 +32,23 @@ class Extractor(metaclass=ABCMeta):
         task_id = invoke_solo_function(event, fx_eid, headers, func_id=self.func_id)
         return task_id
 
-    def register_function(self):
+    def register_function(self, container_type='docker', location=None, ep_id=None):
         from funcx import FuncXClient
 
         assert(self.extr_func is not None, "Extractor function must first be registered!")
 
+        if location is None:
+            location = self.store_url
+
         fxc = FuncXClient()
 
         container_id = fxc.register_container(
-            location=self.store_url,
-            container_type='docker',
+            location=location,
+            container_type=container_type,
             name='kube-tabular',
             description='I don\'t think so!')
         self.func_id = fxc.register_function(self.extr_func,
+                                             ep_id,
                                              container_uuid=container_id,
                                              description="A sum function")
 
