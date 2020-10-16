@@ -32,7 +32,7 @@ class Orchestrator:
     # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
-                 logging_level='debug', instance_id=None, extractor_finder='gdrive'):
+                 logging_level='debug', instance_id=None, extractor_finder='gdrive', prefetch_remote=False):
 
         self.t_crawl_start = time.time()
         self.t_get_families = 0
@@ -113,8 +113,10 @@ class Orchestrator:
         else:
             raise ConnectionError("Received non-200 status from SQS!")
 
+        q_prefix = 'transferred' if prefetch_remote else 'crawl'
+
         response = self.client.get_queue_url(
-            QueueName=f'crawl_{self.crawl_id}',
+            QueueName=f'{q_prefix}_{self.crawl_id}',
             QueueOwnerAWSAccountId=os.environ["aws_account"]
         )
 
@@ -250,7 +252,7 @@ class Orchestrator:
                     extr_code = xtr_fam_obj.groups[list(xtr_fam_obj.groups.keys())[0]].parser
 
                 else:
-                    raise ValueError("Incorrect extractor_finder arg.")
+                    raise ValueError(f"Incorrect extractor_finder arg: {self.extractor_finder}")
 
                 # TODO: add the decompression work and the hdf5/netcdf extractors!
                 if extr_code is None or extr_code == 'hierarch' or extr_code == 'compressed':  # TODO: Any bookkeeping we need to do here?
@@ -388,7 +390,7 @@ class Orchestrator:
                 self.logger.debug("No live IDs... sleeping...")
                 # p_empty = time.time()
                 # print(p_empty)
-                time.sleep(0.25)
+                time.sleep(5)  # todo: big sleep.
                 continue
 
             # Here we pull all values from active task queue to create a batch of them!
