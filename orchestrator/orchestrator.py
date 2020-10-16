@@ -5,9 +5,9 @@ import time
 import boto3
 import logging
 import threading
-import numpy as np
 
 from queue import Queue
+from utils.encoders import NumpyEncoder
 from status_checks import get_crawl_status
 from funcx.serialize import FuncXSerializer
 from xtract_sdk.packagers import Family, FamilyBatch
@@ -15,21 +15,11 @@ from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
 
 
-# TODO: Put this dang numpy encoder in 1 place and import it everywhere it's needed.
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
-
-
-# TODO: get rid of clutter: nondescriptive print statements, unused variables, unused functions.
-#  TODO: Copied and pasted bits of code.
-
 class Orchestrator:
     """ ADD HIGH OVERVIEW COMMENT HERE. """
 
-    # TODO: Make source_eid and dest_eid default to None for the HTTPS case?
+    # TODO 1: Make source_eid and dest_eid default to None for the HTTPS case?
+    # TODO 2: prefetch decision should eventually be decided by the system on file-by-file basis.
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
                  logging_level='debug', instance_id=None, extractor_finder='gdrive', prefetch_remote=False):
@@ -47,7 +37,7 @@ class Orchestrator:
                           "images": xtract_images.ImageExtractor(),
                           "tabular": xtract_tabular.TabularExtractor(),
                           "text": xtract_keyword.KeywordExtractor(),
-                          "matio": xtract_matio.MatioExtractor()}  # TODO: cleanup extra imgs
+                          "matio": xtract_matio.MatioExtractor()}
 
         self.fx_ser = FuncXSerializer()
 
@@ -106,13 +96,13 @@ class Orchestrator:
 
         if xtract_queue["ResponseMetadata"]["HTTPStatusCode"] == 200 and \
                 validation_queue["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            self.xtract_queue_url = xtract_queue["QueueUrl"]  # TODO: ZOA -- this does nothing currently(but keep it in)
-            self.validation_queue_url = validation_queue["QueueUrl"]  # TODO: sends finished metadata to validation service.
-                                                                    # TODO: have third 'crawl' queue (elsewhere) that just holds all metadata from before this point
-                                                                    # TODO:   aka the files/metadata we want to pull down and process.
+            self.xtract_queue_url = xtract_queue["QueueUrl"]
+            self.validation_queue_url = validation_queue["QueueUrl"]
+
         else:
             raise ConnectionError("Received non-200 status from SQS!")
 
+        # Adjust the queue to fit the 'prefetch' mode. One extra queue (transferred) if prefetch == True.
         q_prefix = 'transferred' if prefetch_remote else 'crawl'
 
         response = self.client.get_queue_url(
@@ -124,9 +114,6 @@ class Orchestrator:
 
         self.families_to_process = Queue()
         self.to_validate_q = Queue()
-
-        # TODO: file left here for someone named Will. Remove it.
-        self.will_file = open("will.mdata", "w")
 
         self.sqs_push_threads = {}
         self.thr_ls = []
@@ -178,27 +165,23 @@ class Orchestrator:
 
             # Remove up to n elements from queue, where n is current_batch.
             current_batch = 1
-            while (not self.to_validate_q.empty() and current_batch < 10):
+            while not self.to_validate_q.empty() and current_batch < 10:
                 item_to_add = self.to_validate_q.get()
                 insertables.append(item_to_add)
                 current_batch += 1
             print(f"[VALIDATE] Current insertables: {str(insertables)[0:50]} . . .")
 
-            # try:
-            ta = time.time()
-            response = self.client.send_message_batch(QueueUrl=self.validation_queue_url,
-                                                          Entries=insertables)
+            try:
+                ta = time.time()
+                self.client.send_message_batch(QueueUrl=self.validation_queue_url,
+                                               Entries=insertables)
+                tb = time.time()
+                self.t_send_batch += tb-ta
 
-            # print(f"[VALIDATE] SQS response on insert: {response}")
-            tb = time.time()
-
-            self.t_send_batch += tb-ta
-
-            # except Exception as e:  # TODO: too vague
-            #     print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
+            except Exception as e:  # TODO: too vague
+                print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
     def send_families_loop(self):
-        # TODO: Zoa -- 'families' are collections of files and metadata.
 
         self.send_status = "RUNNING"
 
@@ -212,19 +195,19 @@ class Orchestrator:
                 family_list.append(self.families_to_process.get())
 
             if len(family_list) == 0:
-                # print("Length of new families is 0!")
                 # Here we check if the crawl is complete. If so, then we can start the teardown checks.
                 status_dict = get_crawl_status(self.crawl_id)
 
-                # print(f"Checking if crawl_status is SUCCEEDED or FAILED!: {status_dict['crawl_status']}")
                 if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
-                    # family_list = self.get_next_families()
-                    # print(f"[SEND] Is idle?: {self.get_families_status}")
-                    # print(f"[SEND] Empty families to process?: {self.families_to_process.empty()}")
-                    if self.families_to_process.empty() and self.get_families_status == "IDLE":  # Checking second time due to narrow race condition.
+
+                    # Checking second time due to narrow race condition.
+                    if self.families_to_process.empty() and self.get_families_status == "IDLE":
+
                         self.send_status = "SUCCEEDED"
                         print("[SEND] Queue still empty -- terminating!")
-                        return  # this should terminate thread, because there is nothing to process and queue empty
+
+                        # this should terminate thread, because there is nothing to process and queue empty
+                        return
                     else:  # Something snuck in during the race condition... process it!
                         print("[SEND] Discovered final output despite crawl termination. Processing...")
                         time.sleep(0.5)  # This is a multi-minute task and only is reached due to starvation.
@@ -255,10 +238,12 @@ class Orchestrator:
                     raise ValueError(f"Incorrect extractor_finder arg: {self.extractor_finder}")
 
                 # TODO: add the decompression work and the hdf5/netcdf extractors!
-                if extr_code is None or extr_code == 'hierarch' or extr_code == 'compressed':  # TODO: Any bookkeeping we need to do here?
+                if extr_code is None or extr_code == 'hierarch' or extr_code == 'compressed':
                     continue
 
                 extractor = self.func_dict[extr_code]
+
+                # TODO TYLER: Get the proper function ID here!!!
                 ex_func_id = extractor.func_id
 
                 # Putting into family batch -- we use funcX batching now, but no use rewriting...
@@ -298,7 +283,6 @@ class Orchestrator:
 
                 # Empty the batch! Everything in here has been sent :)
                 self.current_batch = []
-            # time.sleep(1)  # TODO: no.
 
     def launch_poll(self):
         print("POLLER IS STARTING!!!!")
@@ -323,8 +307,6 @@ class Orchestrator:
                 self.get_families_status = "ACTIVE"
                 for message in sqs_response["Messages"]:
                     message_body = message["Body"]
-
-                    # print(f"Messages in message body: {message_body}")
 
                     self.families_to_process.put(message_body)
 
@@ -364,7 +346,6 @@ class Orchestrator:
         ex_thr.start()
 
     def unpack_returned_family_batch(self, family_batch):
-        # assert(self.batch_size==1 or self.batch_size%10==0)
         fam_batch_dict = family_batch.to_dict()
         return fam_batch_dict
 
@@ -388,9 +369,7 @@ class Orchestrator:
                         return
 
                 self.logger.debug("No live IDs... sleeping...")
-                # p_empty = time.time()
-                # print(p_empty)
-                time.sleep(5)  # todo: big sleep.
+                time.sleep(10)
                 continue
 
             # Here we pull all values from active task queue to create a batch of them!
@@ -419,22 +398,18 @@ class Orchestrator:
                 continue
 
             for tid in status_thing:
-
                 if "result" in status_thing[tid]:
                     res = self.fx_ser.deserialize(status_thing[tid]['result'])
 
                     if "family_batch" in res:
                         family_batch = res["family_batch"]
                         unpacked_metadata = self.unpack_returned_family_batch(family_batch)
-                        # print(type(unpacked_mdata))
 
-                        # TODO: make this a regular feature for matio
-                        # print(f"[CHECK HERE] {unpacked_metadata}")
+                        # TODO: make this a regular feature for matio (so this code isn't necessary...)
                         if 'event' in unpacked_metadata:
                             family_batch = unpacked_metadata['event']['family_batch']
                             unpacked_metadata = family_batch.to_dict()
 
-                        # print(f"UNPACKED METADATA: {str(unpacked_metadata)[0:50]} . . .")
                         print(unpacked_metadata)
 
                         try:
