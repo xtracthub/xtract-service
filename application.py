@@ -128,6 +128,8 @@ def extract_mdata():
     source_eid = None
     dest_eid = None
     mdata_store_path = None
+    extractor_finder = None
+    prefetch_remote = None
 
 
     try:
@@ -147,6 +149,7 @@ def extract_mdata():
             mdata_store_path = r["mdata_store_path"]
             print(f"Received {r['repo_type']} data!")
             extractor_finder = "matio"
+            prefetch_remote = True  # TODO: bump this out to the client.
 
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
@@ -165,7 +168,8 @@ def extract_mdata():
                         dest_eid=dest_eid,
                         mdata_store_path=mdata_store_path,
                         gdrive_token=gdrive_token,
-                        extractor_finder=extractor_finder
+                        extractor_finder=extractor_finder,
+                        prefetch_remote=prefetch_remote
                         )
 
     print("Launching response poller...")
