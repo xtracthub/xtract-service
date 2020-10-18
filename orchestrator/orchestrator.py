@@ -7,6 +7,7 @@ import logging
 import threading
 
 from queue import Queue
+from extractors.utils.mappings import mapping
 from utils.encoders import NumpyEncoder
 from status_checks import get_crawl_status
 from funcx.serialize import FuncXSerializer
@@ -29,6 +30,7 @@ class Orchestrator:
         self.t_send_batch = 0
         self.t_transfer = 0
         self.n_fams_transferred = 0
+        self.prefetch_remote = prefetch_remote
 
         self.extractor_finder = extractor_finder
 
@@ -130,6 +132,15 @@ class Orchestrator:
         consumer_thr.start()
         print("Successfully started the get_next_families() thread! ")
 
+        # Do the startup checks to ensure that all funcX endpoint are online.
+        self.startup_checks()
+
+
+    def startup_checks(self):
+        # Need to use container on all 'singularity' or 'docker' instances. Otherwise 'RAW' is okay.
+        pass
+
+
     # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
     # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def validate_enqueue_loop(self, thr_id):
@@ -187,7 +198,8 @@ class Orchestrator:
 
         while True:
             # TODO: Make sure this comes in via the notebook.
-            fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
+            # fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
+            fx_ep = "22890260-52bd-4d30-b4d6-fcfdda27d120"
 
             family_list = []
             # Now keeping filling our list of families until it is empty.
@@ -224,6 +236,10 @@ class Orchestrator:
                     xtr_fam_obj.from_dict(json.loads(family))
                     xtr_fam_obj.headers = self.family_headers
 
+                    # TODO: insert adapater here for prefetch data.
+                    # if self.prefetch_remote:
+
+
                 # TODO: kick this logic for finding extractor into sdk/crawler.
                 elif self.extractor_finder == 'gdrive':
                     d_type = 'gdrive'
@@ -244,7 +260,8 @@ class Orchestrator:
                 extractor = self.func_dict[extr_code]
 
                 # TODO TYLER: Get the proper function ID here!!!
-                ex_func_id = extractor.func_id
+                # ex_func_id = extractor.func_id
+                ex_func_id = mapping['xtract-matio::midway2']['func_uuid']
 
                 # Putting into family batch -- we use funcX batching now, but no use rewriting...
                 family_batch = FamilyBatch()
@@ -259,7 +276,8 @@ class Orchestrator:
                                                "func_id": ex_func_id})
 
                 # try:
-                    task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
+                print(f"Current batch: {self.current_batch}")
+                task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
                 # except Exception as e:
                 #     print(f"[SEND] Caught exception here: {e}")
 
@@ -274,12 +292,10 @@ class Orchestrator:
                     time.sleep(10)
                     continue
 
-                print(f"Task IDs: {task_id}")
+                # print(f"Task IDs: {task_id}")
 
                 for task_id in task_ids:
                     self.task_dict["active"].put(task_id)
-
-                # print(f"Active task queue (local) size: {self.task_dict['active'].qsize()}")
 
                 # Empty the batch! Everything in here has been sent :)
                 self.current_batch = []
@@ -412,9 +428,13 @@ class Orchestrator:
 
                         print(unpacked_metadata)
 
+                        json_mdata = json.dumps(unpacked_metadata, cls=NumpyEncoder)
+                        print(json_mdata)
+                        # exit()
+
                         try:
                             self.to_validate_q.put({"Id": str(self.file_count),
-                                                    "MessageBody": json.dumps(unpacked_metadata, cls=NumpyEncoder)})
+                                                    "MessageBody": json_mdata})
                             self.file_count += 1
                         except TypeError as e1:
                             print(f"Type error: {e1}")

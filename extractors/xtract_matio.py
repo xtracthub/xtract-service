@@ -7,7 +7,7 @@ class MatioExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="9944ab30-9ae1-414c-9a3f-0a30f83cb99a",
+                         func_id="ae23f090-5a3e-4ef1-9285-31c751abd1a9",
                          extr_name="xtract-matio",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest")
@@ -35,33 +35,35 @@ def matio_extract(event):
 
     t0 = time.time()
 
-
-    # return "Hot damn, we in here. "
-
     sys.path.insert(1, '/')
 
     from xtract_matio_main import extract_matio
     # from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
 
-    # return "Made it here???"
     # A list of file paths
     all_families = event['family_batch']
+
+    #@ return "WE OUT HERE. "
 
     is_local = True
     should_delete = False
 
     # TODO: potentially remove this if we definitely don't need for FamilyBatch.
-    # family_batch = FamilyBatch()
-    # for family in all_families.families:
-    #     fam = Family()
-    #     fam.from_dict(family)
-    #     family_batch.add_family(fam)
-    # all_families = family_batch
+
+    if type(all_families) == dict:
+        family_batch = FamilyBatch()
+        for family in all_families["families"]:
+            fam = Family()
+            fam.from_dict(family)
+            family_batch.add_family(fam)
+        all_families = family_batch
 
     # This collects all of the files for all of the families.
     file_counter = 0
     filename_to_path_map = dict()
     batch_thruple_ls = []
+
+    # return all_families.families
 
     base_url = None  # TODO: add function to apply base_url
     for family in all_families.families:
@@ -99,18 +101,12 @@ def matio_extract(event):
     else:
         down_start_t = down_end_t = 0
 
-    # return fam_files  # TODO 2: this one works.
-
-    # return all_families.families  # TODO 3: this one works.
-
     # This extracts the metadata for each group in each family.
+    lots_mdata = []
     for family in all_families.families:
-        # return "WE EHRE 2"  # TODO 4: this one works.
 
-        # return family.groups
         for gid in family.groups:
             parser = family.groups[gid].parser
-            # return parser
             actual_group_paths = []
 
             # return family.groups[gid].files
@@ -124,7 +120,7 @@ def matio_extract(event):
                 else:
                     actual_group_paths.append(filename_to_path_map[filename])
 
-            # return "DID WE GET HERE???"
+            # TODO: bounce this out as a 'check that file is real' logic.
             # for path in actual_group_paths:
             #     if "INCAR" in path:
             #         lines = ""
@@ -135,14 +131,15 @@ def matio_extract(event):
 
             extraction_start_t = time.time()
 
-            # return "WE ARE EXTRACTING!"
-            # return actual_group_paths, parser
             new_mdata = extract_matio(paths=actual_group_paths, parser=parser)
-            return new_mdata
+            # lots_mdata.append(new_mdata)
+
+            # return new_mdata
             extraction_end_t = time.time()
 
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t
             family.groups[gid].metadata = new_mdata
+        # return lots_mdata
 
         # TODO: Gotta delete data.
         # shutil.rmtree(family_id)  # Cleanup the clutter -- will not need file again since family includes all groups
