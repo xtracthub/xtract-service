@@ -4,7 +4,7 @@ import json
 import os
 
 
-crawl_id = "be752aec-4130-4d79-9aec-9f4915458550"
+crawl_id = "5589bfed-8473-4bec-ac6a-cc0fb7a15643"
 
 
 # Make sure we can connect to the live test queue url.
@@ -13,7 +13,7 @@ client = boto3.client('sqs',
                       aws_secret_access_key=os.environ["aws_secret"],
                       region_name='us-east-1')
 print(f"Creating queue for crawl_id: {crawl_id}")
-test_queue = client.create_queue(QueueName=f"validate_test")
+test_queue = client.create_queue(QueueName=f"validate_test_2")
 
 # if test_queue["ResponseMetadata"]["HTTPStatusCode"] == 200:
 test_queue_url = test_queue["QueueUrl"]
@@ -28,7 +28,7 @@ val_queue_url = response["QueueUrl"]
 
 for i in range(100):
 
-    print(i)
+    # print(i)
     # TODO:  Pull from the crawl_id queue.
     sqs_response = client.receive_message(
         QueueUrl=val_queue_url,
@@ -39,9 +39,12 @@ for i in range(100):
         message = sqs_response["Messages"][0]
 
         id = message['MessageId']
-        body = json.dumps(message['Body'])
-        #print(body)
-        #exit()
+        body = message['Body']
+
+        print(body)
+
+        # print(type(body))
+        # exit()
 
         new_msg = {"Id": id, "MessageBody": body}
 
