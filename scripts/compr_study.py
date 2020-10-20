@@ -6,9 +6,15 @@ import os
 import requests
 from fair_research_login import NativeClient
 
+import globus_sdk
+
 from test_decompress import decompress
 
 numfail = 0
+
+data_source = "4f99675c-ac1f-11ea-bee8-0e716405a293"
+
+data_dest = "1c115272-a3f2-11e9-b594-0e56e8fd6d5a"
 
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
@@ -37,9 +43,13 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
     headers = {'Authorization': f"Bearer {auth_token}", 'Transfer': auth_token, 'Petrel': auth_token}
     print(f"Headers: {headers}")
 
+    authorizer = globus_sdk.AccessTokenAuthorizer(transfer_token)
+    tc = globus_sdk.TransferClient(authorizer=authorizer)
+
     ### FOR-LOOP ...
     # 3. Scan through the files
-    base_url = "https://4f99675c-ac1f-11ea-bee8-0e716405a293.e.globus.org"
+    # TYLER: 3/n
+    # base_url = "https://4f99675c-ac1f-11ea-bee8-0e716405a293.e.globus.org"
 
     files_processed = 0
     for row in csv_reader:
@@ -55,25 +65,52 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
-        file_path = base_url + petrel_path
+        # file_path = base_url + petrel_path
 
         # 4. Transfer each file (one-at-a-time)
-        try:
-            t_s = time.time()
-            r = requests.get(file_path, headers=headers)
-            t_e = time.time()
-        except Exception as e:
-            print(e)
-            continue
 
-        print(f"Time to download: {t_e - t_s}")
-        files_processed += 1
-        print(f"Number of files downloaded: {files_processed}")
+        # TYLER: 1/n Zoa, this is your code. Just commenting out so I can add my own.
+        # try:
+        #     t_s = time.time()
+        #     r = requests.get(file_path, headers=headers)
+        #     t_e = time.time()
+        # except Exception as e:
+        #     print(e)
+        #     continue
 
-        with open(filename, 'wb') as g:
-            g.write(r.content)
+        tdata = globus_sdk.TransferData(tc,
+                                        data_source,
+                                        data_dest,
+                                        label="Xtract attempt",
+                                        sync_level="checksum")
 
-        print("successfully retrieved file! ")
+        cur_dir = os.getcwd()
+        new_file_path = os.path.join(cur_dir, filename)
+
+        tdata.add_item(petrel_path, new_file_path)
+
+        transfer_result = tc.submit_transfer(tdata)
+        tid = transfer_result['task_id']
+        # print(transfer_result)
+        # exit()
+
+        t0 = time.time()
+        while True:
+            res = tc.get_task(tid)
+            if res['status'] != "SUCCEEDED":
+                time.sleep(1)
+                break
+        # Tyler: 2/n
+        # print(f"Time to download: {t_e - t_s}")
+        # files_processed += 1
+        # print(f"Number of files downloaded: {files_processed}")
+
+        # with open(filename, 'wb') as g:
+        #     g.write(r.content)
+
+        t1 = time.time()
+        print("Successfully retrieved file! ")
+        print(f"Total transfer time: {t1-t0}")
 
         # 5. For each transferred file, collect size/extension information about each file (done above)
 
@@ -99,7 +136,7 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         # 8. Write the info to our CSVs.
         with open('decompression_info.csv', 'a') as csvfile:
             filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            filewriter.writerow([file_path, extension, file_size, decomp_size])
+            filewriter.writerow([petrel_path, extension, file_size, decomp_size])
 
         print("wrote to csv")
 
