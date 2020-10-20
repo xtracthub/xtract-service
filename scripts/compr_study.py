@@ -1,4 +1,3 @@
-
 # This file contains all of the code for Zoa's compression rate study.
 
 import csv
@@ -8,6 +7,8 @@ import requests
 from fair_research_login import NativeClient
 
 from test_decompress import decompress
+
+numfail = 0
 
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
@@ -44,8 +45,9 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
     for row in csv_reader:
 
         if row[3] != "compressed":
-            continue  # return to the top of the for-loop!
+            continue
 
+        petrel_path = row[0]
         file_size = row[1]
         extension = row[2]
 
@@ -53,15 +55,12 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
-        # petrel_path = row[0]
-        # TODO: THIS IS HERE FOR TESTING:
-        petrel_path = "/test_file.gz"
-        filename = "test_file.gz"
+        file_path = base_url + petrel_path
 
         # 4. Transfer each file (one-at-a-time)
         try:
             t_s = time.time()
-            r = requests.get(base_url + petrel_path, headers=headers)
+            r = requests.get(file_path, headers=headers)
             t_e = time.time()
         except Exception as e:
             print(e)
@@ -76,23 +75,34 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
         print("successfully retrieved file! ")
 
+        # 5. For each transferred file, collect size/extension information about each file (done above)
 
+        # 6. Decompress the file.
+        decomp_folder_name = "decompressed_" + filename
+        decompress(filename, decomp_folder_name)
 
-
-
-        # 5. For each transferred file, you should collect size/extension information about each file.
-
-
-        # TODO: Add an 'exit' if you just want to try something in the loop 1x and then kill the program.
-        # exit()
-
-
-        # 6. Decompress the file.  # TODO: You might want to copy and paste that python file over here.
-
-        # 7. Collect the rest of the information.
-
+        # 7. Collect size of decompressed file
+        # decomp_size = os.path.getsize(filename[:-len("." + extension)])
+        decomp_size = 0
+        start_path = decomp_folder_name  # To get size of current directory
+        for path, dirs, files in os.walk(start_path):
+            for f in files:
+                try:
+                    fp = os.path.join(path, f)
+                    decomp_size += os.path.getsize(fp)
+                except FileNotFoundError as e:
+                    print(e)
+                    numfail += 1
+                    print(f"failures: {numfail}")
+                    continue
 
         # 8. Write the info to our CSVs.
+        with open('decompression_info.csv', 'a') as csvfile:
+            filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            filewriter.writerow([file_path, extension, file_size, decomp_size])
+
+        print("wrote to csv")
 
         # 9. Delete the file (from your local computer)
-        # os.remove(filename)
+        os.remove(filename)
+
