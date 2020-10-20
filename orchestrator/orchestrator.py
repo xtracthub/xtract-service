@@ -430,7 +430,6 @@ class Orchestrator:
 
                         json_mdata = json.dumps(unpacked_metadata, cls=NumpyEncoder)
                         print(json_mdata)
-                        # exit()
 
                         try:
                             self.to_validate_q.put({"Id": str(self.file_count),
