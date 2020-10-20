@@ -8,6 +8,8 @@ from fair_research_login import NativeClient
 
 from test_decompress import decompress
 
+numfail = 0
+
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
 with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
@@ -43,18 +45,14 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
     for row in csv_reader:
 
         if row[3] != "compressed":
-            continue  # return to the top of the for-loop!
+            continue
 
+        petrel_path = row[0]
         file_size = row[1]
         extension = row[2]
 
-        # petrel_path = row[0]
-        # TODO: THIS IS HERE FOR TESTING:
-        petrel_path = "/test_file.gz"
-        filename = "test_file.gz"
-
         # Filename is the thing after the last '/'
-        # filename = row[0].split('/')[-1]
+        filename = row[0].split('/')[-1]
         print(f"Retrieving file: {filename}; Size: {file_size}")
 
         file_path = base_url + petrel_path
@@ -80,21 +78,31 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         # 5. For each transferred file, collect size/extension information about each file (done above)
 
         # 6. Decompress the file.
-        decompress(file_path, base_url)
+        decomp_folder_name = "decompressed_" + filename
+        decompress(filename, decomp_folder_name)
 
         # 7. Collect size of decompressed file
-        decomp_size = os.path.getsize(filename[:-len("." + extension)])
+        # decomp_size = os.path.getsize(filename[:-len("." + extension)])
+        decomp_size = 0
+        start_path = decomp_folder_name  # To get size of current directory
+        for path, dirs, files in os.walk(start_path):
+            for f in files:
+                try:
+                    fp = os.path.join(path, f)
+                    decomp_size += os.path.getsize(fp)
+                except FileNotFoundError as e:
+                    print(e)
+                    numfail += 1
+                    print(f"failures: {numfail}")
+                    continue
 
         # 8. Write the info to our CSVs.
-        with open('decompression_info.csv', 'wb') as csvfile:
+        with open('decompression_info.csv', 'a') as csvfile:
             filewriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             filewriter.writerow([file_path, extension, file_size, decomp_size])
 
-        print("done")
-
-        exit()
+        print("wrote to csv")
 
         # 9. Delete the file (from your local computer)
-
-        # os.remove(filename)
+        os.remove(filename)
 
