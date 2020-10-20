@@ -52,31 +52,7 @@ class Orchestrator:
     # TODO 2: prefetch decision should eventually be decided by the system on file-by-file basis.
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
-<<<<<<< HEAD:orchestrator.py
-                 extractor_finder='gdrive'):
-        """
-                Parameters
-                ----------
-                crawl_id :
-                    The id/name for the queue that holds the crawl.
-                headers : dictionary
-
-                funcx_eid :
-                    Funcx endpoint id.
-                mdata_store_path :
-                    Location to store the extracted metadata.
-                source_eid : , optional
-                    Source endpoint id.
-                dest_eid : , optional
-                    Destination enpoint id.
-                gdrive_token : , optional
-                    Authentication token for accessing a Google Drive account.
-                extractor_finder : str
-
-                """
-=======
                  logging_level='debug', instance_id=None, extractor_finder='gdrive', prefetch_remote=False):
->>>>>>> 5ac4c84f557ff5f1ab0c26d03d8ff0233b183946:orchestrator/orchestrator.py
 
         self.t_crawl_start = time.time()
         self.t_get_families = 0
@@ -182,21 +158,6 @@ class Orchestrator:
         consumer_thr.start()
         print("Successfully started the get_next_families() thread! ")
 
-<<<<<<< HEAD:orchestrator.py
-<<<<<<< HEAD
-        # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
-        # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
-    def enqueue_loop(self, thr_id):
-        """purpose
-
-        Parameters
-        ----------
-        thr_id :
-
-
-        """
-=======
-=======
         # Do the startup checks to ensure that all funcX endpoint are online.
         self.startup_checks()
 
@@ -206,11 +167,9 @@ class Orchestrator:
         pass
 
 
->>>>>>> 5ac4c84f557ff5f1ab0c26d03d8ff0233b183946:orchestrator/orchestrator.py
     # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
     # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def validate_enqueue_loop(self, thr_id):
->>>>>>> ec2e54e8bd1b7d622f1cef194b56d97c0b476fde
 
         self.logger.debug("[VALIDATE] In validation enqueue loop!")
         while True:
@@ -260,23 +219,6 @@ class Orchestrator:
                 print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
     def send_families_loop(self):
-<<<<<<< HEAD:orchestrator.py
-        """purpose
-
-        Parameters
-        ----------
-        thr_id :
-
-
-        Raises
-        ------
-        ValueError()
-            If the extractor_finder argument has an inappropriate value.
-
-        """
-        # TODO: Zoa -- 'families' are collections of files and metadata.
-=======
->>>>>>> 5ac4c84f557ff5f1ab0c26d03d8ff0233b183946:orchestrator/orchestrator.py
 
         self.send_status = "RUNNING"
 
