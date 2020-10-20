@@ -36,7 +36,8 @@ print(f"Function ID: {img_funcid}")
 
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 for i in range(1, 30):
-    task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch, 'creds': creds},
+    task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch,
+                                                       'creds': creds},
                                                 fx_eid="68bade94-bf58-4a7a-bfeb-9c6a61fa5443",
                                                 headers=headers)
     task_dict["active"].put(task_id)

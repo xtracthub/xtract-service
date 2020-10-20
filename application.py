@@ -3,16 +3,15 @@ import time
 import boto3
 from enum import Enum
 from queue import Queue
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 
 from globus_action_provider_tools.authentication import TokenChecker
-from globus_action_provider_tools.validation import request_validator, response_validator
 
 from globus_sdk import ConfidentialAppAuthClient
 
 from status_checks import get_crawl_status, get_extract_status
-from orchestrator import Orchestrator
+from orchestrator.orchestrator import Orchestrator
 
 import pickle
 
@@ -22,7 +21,7 @@ import json
 import os
 
 # Third-party libraries
-from flask import Flask, redirect, request, url_for, jsonify
+from flask import Flask, request, jsonify
 import requests
 
 
@@ -123,6 +122,8 @@ def extract_mdata():
     source_eid = None
     dest_eid = None
     mdata_store_path = None
+    extractor_finder = None
+    prefetch_remote = None
 
 
     try:
@@ -142,6 +143,7 @@ def extract_mdata():
             mdata_store_path = r["mdata_store_path"]
             print(f"Received {r['repo_type']} data!")
             extractor_finder = "matio"
+            prefetch_remote = True  # TODO: bump this out to the client.
 
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
@@ -160,7 +162,8 @@ def extract_mdata():
                         dest_eid=dest_eid,
                         mdata_store_path=mdata_store_path,
                         gdrive_token=gdrive_token,
-                        extractor_finder=extractor_finder
+                        extractor_finder=extractor_finder,
+                        prefetch_remote=prefetch_remote
                         )
 
     print("Launching response poller...")
