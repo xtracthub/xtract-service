@@ -10,6 +10,7 @@ import csv
 import datetime
 from get_dir_size import get_data_dir_size
 import threading
+import argparse
 
 class GlobusPoller():
 
@@ -21,7 +22,8 @@ class GlobusPoller():
 
         self.client_id = "83cd643f-8fef-4d4b-8bcf-7d146c288d81"
 
-        self.data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
+        # self.data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"  # MDF@Petrel
+        self.data_source = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"
         self.data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
         self.data_path = "/project2/chard/skluzacek/data-to-process/"
 
@@ -82,6 +84,10 @@ class GlobusPoller():
 
 
     def login(self):
+
+        # TODO: Pick up the refresh token here! 
+
+
         self.client = globus_sdk.NativeAppAuthClient(self.client_id)
         self.client.oauth2_start_flow(refresh_tokens=True)
 
@@ -157,7 +163,7 @@ class GlobusPoller():
                 print(response)              
         else:
             self.last_batch = True
-            return None
+            return 
         return size_of_fams
 
 
@@ -225,8 +231,23 @@ class GlobusPoller():
                         file_path = file_obj['path']
                         file_name = file_obj['path'].split('/')[-1]
 
+                        # TODO: is this actually mutable? 
+                        file_obj['path'] = f"{fam_dir}/{file_name}"
+
                         tdata.add_item(file_path, f"{fam_dir}/{file_name}")
-                        fid_list.append(family_to_trans['family_id'])
+                    fid_list.append(family_to_trans['family_id'])
+
+                    # print(family_to_trans)
+                    # exit()
+
+                    # Now we do the same for groups unless we want to #TODO move this upstream. 
+                    for group_obj in family_to_trans['groups']:
+                        for file_obj in group_obj['files']:
+                            file_path = file_obj['path']
+                            file_name = file_obj['path'].split('/')[-1]
+                        
+                            file_obj['path'] = f"{fam_dir}/{file_name}"
+                        
 
                         # TODO: add so we can poll Globus jobs.
                 transfer_result = self.tc.submit_transfer(tdata)
@@ -256,13 +277,13 @@ class GlobusPoller():
 
                     insertables_batch = []
                     insertables = []
-                    max_insertables = 10  # SQS can only upload 10 messages at a time. 
+                    max_insertables = 10  # SQS can only upload 10 messages at a time.
+
                     for fid in fids:
                         self.file_counter += 1
 
                         print(f"Family: {self.family_map[fid]}")
                         family_object = {"Id": str(self.file_counter), "MessageBody": json.dumps(self.family_map[fid])}
-
                         insertables.append(family_object)
 
                         if len(insertables) == 6:
@@ -289,7 +310,14 @@ class GlobusPoller():
         print(f"Broke out of loop. Sleeping for 5 seconds...") 
         time.sleep(5)     
 
-crawl_id = "3521e95b-669d-48a9-9c2c-d55a82c32846"
-g = GlobusPoller(crawl_id=crawl_id)
-g.main_poller_loop()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('--crawl_id', metavar='-C', type=str,
+                        help='an integer for the accumulator')
+
+    args = parser.parse_args()
+    crawl_id = args.crawl_id
+    print(f"Processing with crawl_id: {crawl_id}") 
+    g = GlobusPoller(crawl_id)
+    g.main_poller_loop()
 
