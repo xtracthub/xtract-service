@@ -16,6 +16,8 @@ class GlobusPoller():
 
     def __init__(self, crawl_id):
 
+        self.transfer_token = 'Ag39WzDmB0Wr47K69MGzlBB0kGqmjywXy9bWboNOm8kVxMM45yiVC57nMX5bwOVkgY27KOBv2w6eD8sXYQ4aDHgB6z'
+
         self.crawl_id = crawl_id
         
         self.transfer_check_queue = Queue()
@@ -29,20 +31,27 @@ class GlobusPoller():
 
         self.file_counter = randint(100000, 999999)
 
-        self.max_gb = 0.05
+        max_gb = 0.05
 
         self.last_batch = False
-        bytes_in_kb = 1024
-        bytes_in_mb = bytes_in_kb * 1024
-        bytes_in_gb = bytes_in_mb * 1024
+        bytes_in_gb = 1024 * 1024 * 1024
 
-        self.total_bytes = bytes_in_gb * self.max_gb  # TODO: pop this out to class arg.
-        self.block_size = self.total_bytes / 5
+        self.max_bytes = bytes_in_gb * max_gb  # TODO: pop this out to class arg.
+        self.block_size = self.max_bytes / 5
 
         self.client = None
         self.tc = None
 
-        self.login()
+        self.family_map = dict()
+        self.fam_to_size_map = dict()
+        self.local_transfer_queue = Queue()
+        self.local_update_queue = Queue()
+        self.transfer_map = dict()
+
+        self.current_batch = []
+        self.current_batch_bytes = 0
+
+        self.get_globus_tc(self.transfer_token)
 
         print("Getting SQS client from boto3...")
         self.sqs_client = boto3.client('sqs',
@@ -70,50 +79,16 @@ class GlobusPoller():
         # Now create a fresh file here. 
         with open("folder_size.csv", "w") as g: 
             g.close()
-        #self.folder_size_file = open("folder_size.csv", "w") 
-        #self.folder_size_writer = csv.writer(self.folder_size_file)
 
         self.cur_data_folder_size = 0
-
 
         print("Starting thread to get size!")
         get_size_thr = threading.Thread(target=self.get_size, args=())
         get_size_thr.start()
         print("Successfully started thread!")
 
+    def get_globus_tc(self, TRANSFER_TOKEN):
 
-
-    def login(self):
-
-        # TODO: Pick up the refresh token here! 
-
-
-        self.client = globus_sdk.NativeAppAuthClient(self.client_id)
-        self.client.oauth2_start_flow(refresh_tokens=True)
-
-        print('Please go to this URL and login: {0}'
-              .format(self.client.oauth2_get_authorize_url()))
-
-        authorize_url = self.client.oauth2_get_authorize_url()
-        print('Please go to this URL and login:\n {0}'.format(authorize_url))
-
-        # this is to work on Python2 and Python3 -- you can just use raw_input() or
-        # input() for your specific version
-        get_input = getattr(__builtins__, 'raw_input', input)
-        auth_code = get_input(
-            'Please enter the code you get after login here: ').strip()
-        token_response = self.client.oauth2_exchange_code_for_tokens(auth_code)
-
-        globus_auth_data = token_response.by_resource_server['auth.globus.org']
-        globus_transfer_data = token_response.by_resource_server['transfer.api.globus.org']
-
-        # most specifically, you want these tokens as strings
-        AUTH_TOKEN = globus_auth_data['access_token']
-        TRANSFER_TOKEN = globus_transfer_data['access_token']
-
-        # a GlobusAuthorizer is an auxiliary object we use to wrap the token. In
-        # more advanced scenarios, other types of GlobusAuthorizers give us
-        # expressive power
         authorizer = globus_sdk.AccessTokenAuthorizer(TRANSFER_TOKEN)
         self.tc = globus_sdk.TransferClient(authorizer=authorizer)
 
@@ -129,6 +104,7 @@ class GlobusPoller():
             writer.writerow([cur_read_time, num_mbytes])
 
         print(f"************** SIZE IN MB: {self.cur_data_folder_size} ***********************")
+
     def get_new_families(self):
         sqs_response = self.sqs_client.receive_message(
             QueueUrl=self.crawl_queue_url,
@@ -166,19 +142,7 @@ class GlobusPoller():
             return 
         return size_of_fams
 
-
     def main_poller_loop(self):
-
-        self.family_map = dict()
-        self.fam_to_size_map = dict()
-        self.local_transfer_queue = Queue()
-        self.local_update_queue = Queue()
-        self.transfer_map = dict()
-
-        self.current_batch = []
-        self.current_batch_bytes = 0
-
-        self.bytes_in_flight = 0
 
         need_more_families = True
 
@@ -193,13 +157,12 @@ class GlobusPoller():
 
             print(f"Current Data folder size (MB): {self.cur_data_folder_size}")
 
-
             # Check if we are under capacity and there's more queue elements to grab.
             print(f"local_transfer_queue.empty()?: {self.local_transfer_queue.empty()}")
 
             print(f"[Tyler 1] Folder size: {self.cur_data_folder_size}")
-            print(f"[Tyler 2] Total bytes: {self.total_bytes}")
-            while self.cur_data_folder_size < self.total_bytes and not self.local_transfer_queue.empty():
+            print(f"[Tyler 2] Maximum bytes: {self.max_bytes}")
+            while self.cur_data_folder_size < self.max_bytes and not self.local_transfer_queue.empty():
                 print("INSIDE THIS LOOP")
                 print(f"Update queue size: {self.local_transfer_queue.qsize()}")
                 need_more_families = True
@@ -240,9 +203,6 @@ class GlobusPoller():
                         tdata.add_item(file_path, f"{fam_dir}/{file_name}")
                     fid_list.append(family_to_trans['family_id'])
 
-                    # print(family_to_trans)
-                    # exit()
-
                     # Now we do the same for groups unless we want to #TODO move this upstream. 
                     for group_obj in family_to_trans['groups']:
                         for file_obj in group_obj['files']:
@@ -250,9 +210,7 @@ class GlobusPoller():
                             file_name = file_obj['path'].split('/')[-1]
                         
                             file_obj['path'] = f"{fam_dir}/{file_name}"
-                        
 
-                        # TODO: add so we can poll Globus jobs.
                 transfer_result = self.tc.submit_transfer(tdata)
                 print(f"Transfer result: {transfer_result}")
                 gl_task_id = transfer_result['task_id']
@@ -310,8 +268,9 @@ class GlobusPoller():
             if self.last_batch and self.transfer_check_queue.empty():
                 print("No more Transfer tasks and incoming queue empty")
                 exit()
-        print(f"Broke out of loop. Sleeping for 5 seconds...") 
-        time.sleep(5)     
+            print(f"Broke out of loop. Sleeping for 5 seconds...")
+            time.sleep(5)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
