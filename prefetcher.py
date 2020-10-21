@@ -22,8 +22,8 @@ class GlobusPoller():
 
         self.client_id = "83cd643f-8fef-4d4b-8bcf-7d146c288d81"
 
-        # self.data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"  # MDF@Petrel
-        self.data_source = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"
+        self.data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"  # MDF@Petrel
+        # self.data_source = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"  # MDF@NCSA
         self.data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
         self.data_path = "/project2/chard/skluzacek/data-to-process/"
 
@@ -200,6 +200,8 @@ class GlobusPoller():
             print(f"[Tyler 1] Folder size: {self.cur_data_folder_size}")
             print(f"[Tyler 2] Total bytes: {self.total_bytes}")
             while self.cur_data_folder_size < self.total_bytes and not self.local_transfer_queue.empty():
+                print("INSIDE THIS LOOP")
+                print(f"Update queue size: {self.local_transfer_queue.qsize()}")
                 need_more_families = True
 
                 cur_fam_id = self.local_transfer_queue.get()
@@ -210,8 +212,9 @@ class GlobusPoller():
 
                 # TODO: what if one file is larger than the entire batch size?
 
-            # print(f"Current batch Size: {self.current_batch_bytes}")
-            # print(f"Block Size: {self.block_size}")
+            print(f"Current batch Size: {self.current_batch_bytes}")
+            print(f"Block Size: {self.block_size}")
+
             if self.current_batch_bytes >= self.block_size or (self.last_batch and len(self.current_batch) > 0):
                 print("Generating a batch transfer object...")
                 time.sleep(5)
