@@ -43,8 +43,6 @@ def matio_extract(event):
     # A list of file paths
     all_families = event['family_batch']
 
-    #@ return "WE OUT HERE. "
-
     is_local = True
     should_delete = False
 
@@ -62,8 +60,6 @@ def matio_extract(event):
     file_counter = 0
     filename_to_path_map = dict()
     batch_thruple_ls = []
-
-    # return all_families.families
 
     base_url = None  # TODO: add function to apply base_url
     for family in all_families.families:
@@ -88,8 +84,6 @@ def matio_extract(event):
             batch_thruple_ls.append(batch_thruple)
             file_counter += 1
 
-    # return fam_files  # TODO 1: This one works.
-    # return batch_thruple_ls
     if not is_local:
         down_start_t = time.time()
         downloader = GlobusHttpsDownloader()
@@ -102,7 +96,6 @@ def matio_extract(event):
         down_start_t = down_end_t = 0
 
     # This extracts the metadata for each group in each family.
-    lots_mdata = []
     for family in all_families.families:
 
         for gid in family.groups:
@@ -120,29 +113,19 @@ def matio_extract(event):
                 else:
                     actual_group_paths.append(filename_to_path_map[filename])
 
-            # TODO: bounce this out as a 'check that file is real' logic.
-            # for path in actual_group_paths:
-            #     if "INCAR" in path:
-            #         lines = ""
-            #         with open(path, 'r') as f:
-            #             for line in f:
-            #                 lines += line
-            #         return lines
-
             extraction_start_t = time.time()
 
             new_mdata = extract_matio(paths=actual_group_paths, parser=parser)
-            # lots_mdata.append(new_mdata)
 
-            # return new_mdata
+            extraction_end_t = time.time()
             extraction_end_t = time.time()
 
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t
             family.groups[gid].metadata = new_mdata
-        # return lots_mdata
 
-        # TODO: Gotta delete data.
-        # shutil.rmtree(family_id)  # Cleanup the clutter -- will not need file again since family includes all groups
+        # if should_delete:
+        #     # Cleanup the clutter -- will not need file again since family includes all groups
+        # ZZ    shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
     t1 = time.time()
 
     return {"family_batch": all_families,

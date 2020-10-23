@@ -465,4 +465,4 @@ def automate_release(action_id):
 
 
 if __name__ == '__main__':
-    application.run(debug=True, threaded=True, ssl_context="adhoc")
+    application.run(debug=True, threaded=True)  #, ssl_context="adhoc")
