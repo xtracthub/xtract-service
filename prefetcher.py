@@ -11,8 +11,22 @@ def globus_poller_funcx(event):
     import os
     import csv
     import datetime
-    from get_dir_size import get_data_dir_size
+    # from get_dir_size import get_data_dir_size
     import threading
+
+    def get_data_dir_size():
+        total_size = 0
+
+        from os.path import join, getsize
+        for root, dirs, files in os.walk('/project2/chard/skluzacek/data_to_process'):
+            # print root, "consumes",
+            total_size += sum(getsize(join(root, name)) for name in files)
+            total_size += sum(getsize(join(root, name)) for name in dirs)
+            # print "bytes in", len(files), "non-directory files"
+            if 'CVS' in dirs:
+                dirs.remove('CVS')  # don't visit CVS directories
+
+        return total_size
 
     class GlobusPoller():
 
@@ -282,7 +296,7 @@ def globus_poller_funcx(event):
 
                 if self.last_batch and self.transfer_check_queue.empty():
                     print("No more Transfer tasks and incoming queue empty")
-                    exit()
+                    return "SUCCESS"
                 print(f"Broke out of loop. Sleeping for 5 seconds...")
                 time.sleep(5)
 
@@ -292,7 +306,9 @@ def globus_poller_funcx(event):
                           event['data_dest'],
                           event['data_path'],
                           event['max_gb'])
-    poller.main_poller_loop()
+    status = poller.main_poller_loop()
+    return status
+
 
 
 from funcx import FuncXClient
@@ -305,7 +321,7 @@ ep_id = "17214422-4570-4891-9831-2212614d04fa"
 fn_uuid = fxc.register_function(globus_poller_funcx, ep_id,
                                 description="I wrote this when Matt said he was undecided during 2020 election")
 
-crawl_id = "9473948a-be98-4c7f-963b-c69bc240425e"
+crawl_id = "248c29d6-17a6-4205-b68c-40e0c2739d42"
 
 data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
 transfer_token = 'AgGdePJzb81r61NEKw09XYD83NeXkam8Q9QzVd9jz10w4obYwwU7CKeJx4Qxmaago8PgQNrQOWdY3EtQ2a3PoFvNlQ'
@@ -322,5 +338,17 @@ event = {'transfer_token': transfer_token,
 
 print(fn_uuid)
 
-task_id = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
+import time
+res = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
+
+for i in range(100):
+        try:
+            x = fxc.get_result(res)
+            #x = fxc.get_result(res)
+            print(x)
+            break
+        except Exception as e:
+            print("Exception: {}".format(e))
+            time.sleep(2)
+
 # launch function.
