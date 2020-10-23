@@ -13,9 +13,12 @@ from test_decompress import decompress
 numfail = 0
 skip_count = 20
 
+# This is the Xtract repo on Petrel. 
 data_source = "4f99675c-ac1f-11ea-bee8-0e716405a293"
+data_dest = "dbc62586-12f8-11eb-abe1-0213fe609573"
 
-data_dest = "1c115272-a3f2-11e9-b594-0e56e8fd6d5a"
+# This is Tyler's macbook (for debuggin)
+# data_dest = "1c115272-a3f2-11e9-b594-0e56e8fd6d5a"
 
 # 1. Here we will read a list of compressed files that I previously created for UMich.
 #    I should note that there are ~800 GB of compressed data.
@@ -26,6 +29,9 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
     # # Each row is a list of all elements in order
     # for row in csv_reader:
     #     print(row)
+
+    for _ in range(skip_count):
+        next(csv_reader)
 
     # 2. Authenticate with Globus (just one time) so that we can transfer files here.
     client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
@@ -82,8 +88,8 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         tdata = globus_sdk.TransferData(tc,
                                         data_source,
                                         data_dest,
-                                        label="Xtract attempt",
-                                        sync_level="checksum")
+                                        label="Xtract attempt")
+                                        #sync_level="checksum")
 
         cur_dir = os.getcwd()
         new_file_path = os.path.join(cur_dir, filename)
@@ -100,6 +106,7 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
             res = tc.get_task(tid)
             if res['status'] != "SUCCEEDED":
                 time.sleep(1)
+            else: 
                 break
         # Tyler: 2/n
         # print(f"Time to download: {t_e - t_s}")
@@ -117,6 +124,7 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
 
         # 6. Decompress the file.
         decomp_folder_name = "decompressed_" + filename
+
         decompress(filename, decomp_folder_name)
 
         # 7. Collect size of decompressed file
@@ -127,6 +135,8 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
             for f in files:
                 try:
                     fp = os.path.join(path, f)
+                    fp = fp.replace(')', '\)')
+                    fp = fp.replace('(', '\(') 
                     decomp_size += os.path.getsize(fp)
                 except FileNotFoundError as e:
                     print(e)
