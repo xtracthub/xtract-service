@@ -5,7 +5,6 @@ from enum import Enum
 from queue import Queue
 from datetime import datetime, timezone
 
-
 from globus_action_provider_tools.authentication import TokenChecker
 
 from globus_sdk import ConfidentialAppAuthClient
