@@ -11,6 +11,7 @@ import globus_sdk
 from test_decompress import decompress
 
 numfail = 0
+skip_count = 20
 
 data_source = "4f99675c-ac1f-11ea-bee8-0e716405a293"
 
