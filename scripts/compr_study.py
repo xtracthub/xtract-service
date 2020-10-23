@@ -3,6 +3,7 @@
 import csv
 import time
 import os
+import shutil
 import requests
 from fair_research_login import NativeClient
 
@@ -15,7 +16,12 @@ skip_count = 20
 
 # This is the Xtract repo on Petrel. 
 data_source = "4f99675c-ac1f-11ea-bee8-0e716405a293"
-data_dest = "dbc62586-12f8-11eb-abe1-0213fe609573"
+data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
+
+data_store_path = "/project2/chard/skluzacek/files_to_decomp"
+
+# This is the Jetstream instance
+#data_dest = "dbc62586-12f8-11eb-abe1-0213fe609573"
 
 # This is Tyler's macbook (for debuggin)
 # data_dest = "1c115272-a3f2-11e9-b594-0e56e8fd6d5a"
@@ -92,7 +98,10 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
                                         #sync_level="checksum")
 
         cur_dir = os.getcwd()
-        new_file_path = os.path.join(cur_dir, filename)
+        new_file_path = os.path.join(data_store_path, filename)
+
+        # new_file_path = new_file_path.replace(")", "")
+        # new_file_path = new_file_path.replace("(", "")
 
         tdata.add_item(petrel_path, new_file_path)
 
@@ -123,9 +132,14 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         # 5. For each transferred file, collect size/extension information about each file (done above)
 
         # 6. Decompress the file.
-        decomp_folder_name = "decompressed_" + filename
-
-        decompress(filename, decomp_folder_name)
+        decomp_folder_name = os.path.join(data_store_path, "decompressed_file")
+        compressed_filename = os.path.join(data_store_path, filename)
+       
+        os.makedirs(decomp_folder_name, exist_ok=True) 
+        decompress(os.path.join(data_store_path, filename), decomp_folder_name)
+        print(f"Compressed filename: {compressed_filename}")
+        print(f"Data decompressed to: {decomp_folder_name}")
+        # exit()
 
         # 7. Collect size of decompressed file
         # decomp_size = os.path.getsize(filename[:-len("." + extension)])
@@ -135,8 +149,10 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
             for f in files:
                 try:
                     fp = os.path.join(path, f)
-                    fp = fp.replace(')', '\)')
-                    fp = fp.replace('(', '\(') 
+                    #fp = fp.replace(')', '\\)')
+                    #fp = fp.replace('(', '\\(') 
+                    if not os.path.isfile(fp):
+                        continue
                     decomp_size += os.path.getsize(fp)
                 except FileNotFoundError as e:
                     print(e)
@@ -152,5 +168,6 @@ with open("UMICH-07-17-2020-CRAWL.csv", "r") as f:
         print("wrote to csv")
 
         # 9. Delete the file (from your local computer)
-        os.remove(filename)
+        os.remove(os.path.join(data_store_path, filename))
+        shutil.rmtree(decomp_folder_name)
 

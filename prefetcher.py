@@ -296,7 +296,7 @@ def globus_poller_funcx(event):
 
 
 from funcx import FuncXClient
-
+"""
 fxc= FuncXClient()
 
 ep_id = "17214422-4570-4891-9831-2212614d04fa"
@@ -304,7 +304,7 @@ ep_id = "17214422-4570-4891-9831-2212614d04fa"
 # register function
 fn_uuid = fxc.register_function(globus_poller_funcx, ep_id,
                                 description="I wrote this when Matt said he was undecided during 2020 election")
-
+"""
 crawl_id = "9473948a-be98-4c7f-963b-c69bc240425e"
 
 data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
@@ -320,7 +320,9 @@ event = {'transfer_token': transfer_token,
          'data_path': data_path,
          'max_gb': 0.05}
 
-print(fn_uuid)
+# print(fn_uuid)
 
-task_id = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
-# launch function.
+# task_id = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
+# launch function
+globus_poller_funcx(event)
+
