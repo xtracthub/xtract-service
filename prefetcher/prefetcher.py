@@ -27,9 +27,6 @@ class Prefetcher:
         func_id = fxc.register_function(function=hello_world, function_name='hw')
         print(func_id)
 
-        #exit()
-
-
         task_uuid = invoke_solo_function(event=None, fx_eid=self.fx_eid, headers=headers, func_id=func_id)
 
         print(task_uuid)
