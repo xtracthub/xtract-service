@@ -123,6 +123,7 @@ def extract_mdata():
     mdata_store_path = None
     extractor_finder = None
     prefetch_remote = None
+    data_prefetch_path = None
 
 
     try:
@@ -144,6 +145,8 @@ def extract_mdata():
             extractor_finder = "matio"
             prefetch_remote = True  # TODO: bump this out to the client.
 
+            data_prefetch_path = r['data_prefetch_path']
+
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
     funcx_eid = r["funcx_eid"]
@@ -162,7 +165,8 @@ def extract_mdata():
                         mdata_store_path=mdata_store_path,
                         gdrive_token=gdrive_token,
                         extractor_finder=extractor_finder,
-                        prefetch_remote=prefetch_remote
+                        prefetch_remote=prefetch_remote,
+                        data_prefetch_path=data_prefetch_path
                         )
 
     print("Launching response poller...")

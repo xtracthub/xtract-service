@@ -8,6 +8,7 @@ import threading
 
 from queue import Queue
 from extractors.utils.mappings import mapping
+from utils.fx_utils import invoke_solo_function
 from utils.encoders import NumpyEncoder
 from status_checks import get_crawl_status
 from funcx.serialize import FuncXSerializer
@@ -52,7 +53,8 @@ class Orchestrator:
     # TODO 2: prefetch decision should eventually be decided by the system on file-by-file basis.
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
-                 logging_level='debug', instance_id=None, extractor_finder='gdrive', prefetch_remote=False):
+                 logging_level='debug', instance_id=None, extractor_finder='gdrive', prefetch_remote=False,
+                 data_prefetch_path=None):
 
         self.t_crawl_start = time.time()
         self.t_get_families = 0
@@ -60,6 +62,7 @@ class Orchestrator:
         self.t_transfer = 0
         self.n_fams_transferred = 0
         self.prefetch_remote = prefetch_remote
+        self.data_prefetch_path = data_prefetch_path
 
         self.extractor_finder = extractor_finder
 
@@ -92,6 +95,8 @@ class Orchestrator:
         self.current_batch = []
 
         self.mdata_store_path = mdata_store_path
+
+        self.prefetcher_tid = None
 
         self.headers = headers
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
@@ -158,14 +163,32 @@ class Orchestrator:
         consumer_thr.start()
         print("Successfully started the get_next_families() thread! ")
 
+        # If configured to be a data 'prefetch' scenario, then we want to go get it.
+        if prefetch_remote:
+            self.launch_prefetcher()
+
         # Do the startup checks to ensure that all funcX endpoint are online.
         self.startup_checks()
-
 
     def startup_checks(self):
         # Need to use container on all 'singularity' or 'docker' instances. Otherwise 'RAW' is okay.
         pass
 
+    def launch_prefetcher(self):
+        pf_func = mapping['prefetcher::midway2']
+
+        event = {'transfer_token': self.headers['Transfer'],
+                 'crawl_id': self.crawl_id,
+                 'data_source': self.source_endpoint,
+                 'data_dest': self.dest_endpoint,
+                 'data_path': self.data_prefetch_path,
+                 'max_gb': 0.05}
+
+        fx_ep_id = "71509922-996f-4559-b488-4588f06f0925"  # TODO: This should not be hardcoded.
+
+        task_uuid = invoke_solo_function(event=event, fx_eid=fx_ep_id, headers=self.fx_headers, func_id=pf_func)
+
+        print(f"Task ID for prefetcher: {task_uuid}")
 
     # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
     # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
