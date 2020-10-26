@@ -28,38 +28,22 @@ def globus_poller_funcx(event):
 
         return total_size
 
-    class GlobusPoller():
+    class GlobusPoller:
 
         def __init__(self, transfer_token, crawl_id, data_source, data_dest, data_path, max_gb):
 
-            # TODO 1: pass this in.
             self.transfer_token = transfer_token
-            # self.transfer_token =
-
-            # TODO 2: pass this in.
             self.crawl_id = crawl_id
 
             self.transfer_check_queue = Queue()
 
             self.client_id = "83cd643f-8fef-4d4b-8bcf-7d146c288d81"
-
-            # TODO 3: pass this in.
-            # self.data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"  # MDF@Petrel
             self.data_source = data_source
-            # self.data_source = "82f1b5c6-6e9b-11e5-ba47-22000b92c6ec"  # MDF@NCSA
-
-            # TODO 4: pass this in.
-            # self.data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
             self.data_dest = data_dest
-
-            # TODO 5: pass this in.
-            # self.data_path = "/project2/chard/skluzacek/data-to-process/"
             self.data_path = data_path
 
             self.file_counter = randint(100000, 999999)
 
-            # TODO 6: pass this in.
-            # max_gb = 0.05
             self.max_gb = max_gb
 
             self.last_batch = False
@@ -163,6 +147,7 @@ def globus_poller_funcx(event):
 
                     del_list.append({'ReceiptHandle': item["ReceiptHandle"],
                                          'Id': item["MessageId"]})
+
                 if len(del_list) > 0:
                     response = self.sqs_client.delete_message_batch(QueueUrl=self.crawl_queue_url, Entries=del_list)
                     print(response)
@@ -207,14 +192,20 @@ def globus_poller_funcx(event):
                 print(f"Current batch Size: {self.current_batch_bytes}")
                 print(f"Block Size: {self.block_size}")
 
+                # return f"Made it here! Block size: {self.block_size}"
+
                 if self.current_batch_bytes >= self.block_size or (self.last_batch and len(self.current_batch) > 0):
                     print("Generating a batch transfer object...")
-                    time.sleep(5)
-                    tdata = globus_sdk.TransferData(self.tc,
-                                                    self.data_source,
-                                                    self.data_dest,
-                                                    label="Xtract attempt",
-                                                    sync_level="checksum")
+
+                    # THIS WORKS (1)
+                    # return "Are we generating a batch transfer object?!"
+                    # time.sleep(5)
+                    # return self.tc
+                    # return self.data_source, self.data_dest
+                    tdata = globus_sdk.TransferData(transfer_client=self.tc,
+                                                    source_endpoint=self.data_source,
+                                                    destination_endpoint=self.data_dest)
+                    return tdata
 
                     fid_list = []
                     for family_to_trans in self.current_batch:
@@ -300,15 +291,17 @@ def globus_poller_funcx(event):
                 print(f"Broke out of loop. Sleeping for 5 seconds...")
                 time.sleep(5)
 
-    poller = GlobusPoller(event['transfer_token'],
-                          event['crawl_id'],
-                          event['data_source'],
-                          event['data_dest'],
-                          event['data_path'],
-                          event['max_gb'])
+    # return "We are here... "
+    poller = GlobusPoller(transfer_token=event['transfer_token'],
+                          crawl_id=event['crawl_id'],
+                          data_source=event['data_source'],
+                          data_dest=event['data_dest'],
+                          data_path=event['data_path'],
+                          max_gb=event['max_gb'])
+
+    # return "WE MADE IT HERE."
     status = poller.main_poller_loop()
     return status
-
 
 
 from funcx import FuncXClient
@@ -321,7 +314,7 @@ ep_id = "17214422-4570-4891-9831-2212614d04fa"
 fn_uuid = fxc.register_function(globus_poller_funcx, ep_id,
                                 description="I wrote this when Matt said he was undecided during 2020 election")
 
-crawl_id = "248c29d6-17a6-4205-b68c-40e0c2739d42"
+crawl_id = "f38b3de1-32d3-44bb-af95-33365a89d606"
 
 data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
 transfer_token = 'AgGdePJzb81r61NEKw09XYD83NeXkam8Q9QzVd9jz10w4obYwwU7CKeJx4Qxmaago8PgQNrQOWdY3EtQ2a3PoFvNlQ'
