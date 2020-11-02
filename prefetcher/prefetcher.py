@@ -14,19 +14,23 @@ def globus_poller_funcx(event):
     # from get_dir_size import get_data_dir_size
     import threading
 
+    # def get_data_dir_size():
+    #     total_size = 0
+    #
+    #     from os.path import join, getsize
+    #     for root, dirs, files in os.walk('/project2/chard/skluzacek/data_to_process'):
+    #         # print root, "consumes",
+    #         total_size += sum(getsize(join(root, name)) for name in files)
+    #         total_size += sum(getsize(join(root, name)) for name in dirs)
+    #         # print "bytes in", len(files), "non-directory files"
+    #         if 'CVS' in dirs:
+    #             dirs.remove('CVS')  # don't visit CVS directories
+    #
+    #     return total_size
+
     def get_data_dir_size():
-        total_size = 0
-
-        from os.path import join, getsize
-        for root, dirs, files in os.walk('/project2/chard/skluzacek/data_to_process'):
-            # print root, "consumes",
-            total_size += sum(getsize(join(root, name)) for name in files)
-            total_size += sum(getsize(join(root, name)) for name in dirs)
-            # print "bytes in", len(files), "non-directory files"
-            if 'CVS' in dirs:
-                dirs.remove('CVS')  # don't visit CVS directories
-
-        return total_size
+        time.sleep(10)
+        return 0
 
     class GlobusPoller:
 
@@ -118,6 +122,67 @@ def globus_poller_funcx(event):
 
             print(f"************** SIZE IN MB: {self.cur_data_folder_size} ***********************")
 
+        def transfer_queue_thread(self):
+            gl_task_tmp_ls = []
+
+            while True:
+                gl_tid = self.transfer_check_queue.get()
+                res = self.tc.get_task(gl_tid)
+                # print(res)
+                if res['status'] != "SUCCEEDED":
+                    gl_task_tmp_ls.append(gl_tid)
+                else:
+                    # TODO: Get the families associated with the transfer task.
+                    fids = self.transfer_map[gl_tid]
+                    # print(f"These are the fids: {fids}")
+
+                    insertables_batch = []
+                    insertables = []
+                    max_insertables = 10  # SQS can only upload 10 messages at a time.
+
+                    for fid in fids:
+                        self.file_counter += 1
+
+                        # print(f"Family: {self.family_map[fid]}")
+
+                        family = self.family_map[fid]
+                        family['metadata']["pf_transfer_completed"] = time.time()
+
+                        # print(f"This is the family: {family}")
+
+                        family_object = {"Id": str(self.file_counter), "MessageBody": json.dumps(family)}
+                        insertables.append(family_object)
+
+                        if len(insertables) == 6:
+                            insertables_batch.append(insertables)
+                            insertables = []  # reset to be empty since we dumped into the batch.
+
+                    # Now catch case where batch isn't full BUT we still need to put them into list for push to SQS.
+                    if len(insertables) > 0:
+                        insertables_batch.append(insertables)
+
+                    for insertables in insertables_batch:
+                        response = self.sqs_client.send_message_batch(QueueUrl=self.transferred_queue_url,
+                                                                      Entries=insertables)
+
+                        print(f"Response for transferred queue: {response}")
+                    time.sleep(2)
+
+                if self.transfer_check_queue.empty():
+
+                    for gl_tid in gl_task_tmp_ls:
+                        self.transfer_check_queue.put(gl_tid)
+                    gl_task_tmp_ls = []
+
+                    print(f"[TRANSFER QUEUE] Queue empty. Sleeping for 5 seconds! ")
+                    time.sleep(5)
+
+                # HERE we use the same kill condition as the main loop, so this ought to quit at the same time.
+                if self.last_batch and self.transfer_check_queue.empty():
+                    return "SUCCESS"  #
+
+
+
         def get_new_families(self):
             sqs_response = self.sqs_client.receive_message(
                 QueueUrl=self.crawl_queue_url,
@@ -157,6 +222,9 @@ def globus_poller_funcx(event):
             return size_of_fams
 
         def main_poller_loop(self):
+
+            transfer_thr = threading.Thread(target=self.transfer_queue_thread, args=())
+            transfer_thr.start()
 
             need_more_families = True
 
@@ -237,53 +305,6 @@ def globus_poller_funcx(event):
 
                 else:
                     need_more_families = True
-
-                gl_task_tmp_ls = []
-                while not self.transfer_check_queue.empty():
-                    gl_tid = self.transfer_check_queue.get()
-                    res = self.tc.get_task(gl_tid)
-                    # print(res)
-                    if res['status'] != "SUCCEEDED":
-                        gl_task_tmp_ls.append(gl_tid)
-                    else:
-                        # TODO: Get the families associated with the transfer task.
-                        fids = self.transfer_map[gl_tid]
-                        # print(f"These are the fids: {fids}")
-
-                        insertables_batch = []
-                        insertables = []
-                        max_insertables = 10  # SQS can only upload 10 messages at a time.
-
-                        for fid in fids:
-                            self.file_counter += 1
-
-                            # print(f"Family: {self.family_map[fid]}")
-
-                            family = self.family_map[fid]
-                            family['metadata']["pf_transfer_completed"] = time.time()
-
-                            # print(f"This is the family: {family}")
-
-                            family_object = {"Id": str(self.file_counter), "MessageBody": json.dumps(family)}
-                            insertables.append(family_object)
-
-                            if len(insertables) == 6:
-                                insertables_batch.append(insertables)
-                                insertables = []  # reset to be empty since we dumped into the batch.
-
-                        # Now catch case where batch isn't full BUT we still need to put them into list for push to SQS.
-                        if len(insertables) > 0:
-                            insertables_batch.append(insertables)
-
-                        for insertables in insertables_batch:
-                            response = self.sqs_client.send_message_batch(QueueUrl=self.transferred_queue_url,
-                                                                          Entries=insertables)
-
-                            print(f"Response for transferred queue: {response}")
-                        time.sleep(2)
-
-                for gl_tid in gl_task_tmp_ls:
-                    self.transfer_check_queue.put(gl_tid)
 
                 if self.last_batch and self.transfer_check_queue.empty():
                     print("No more Transfer tasks and incoming queue empty")
