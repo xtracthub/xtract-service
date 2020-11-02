@@ -10,5 +10,5 @@ mapping = {
     'xtract-matio::riverk8s': "TODO",
     'prefetcher::midway2':
     {
-        'func_uuid': '370e9230-38e8-4719-a1b6-c00fd5bed0ea'}
+        'func_uuid': 'b185ac6a-1ed0-4c62-bcde-f90b50bcf6df'}
 }

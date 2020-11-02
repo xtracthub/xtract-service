@@ -65,6 +65,7 @@ class Orchestrator:
         self.data_prefetch_path = data_prefetch_path
 
         self.extractor_finder = extractor_finder
+        self.pf_task_id = None
 
         self.funcx_eid = funcx_eid
         self.func_dict = {"image": xtract_images.ImageExtractor(),
@@ -97,6 +98,7 @@ class Orchestrator:
         self.mdata_store_path = mdata_store_path
 
         self.prefetcher_tid = None
+        self.prefetch_status = None
 
         self.headers = headers
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
@@ -175,20 +177,46 @@ class Orchestrator:
         pass
 
     def launch_prefetcher(self):
-        pf_func = mapping['prefetcher::midway2']
+        pf_func = mapping['prefetcher::midway2']['func_uuid']
 
         event = {'transfer_token': self.headers['Transfer'],
                  'crawl_id': self.crawl_id,
                  'data_source': self.source_endpoint,
                  'data_dest': self.dest_endpoint,
                  'data_path': self.data_prefetch_path,
-                 'max_gb': 0.05}
+                 'max_gb': 50}
 
-        fx_ep_id = "71509922-996f-4559-b488-4588f06f0925"  # TODO: This should not be hardcoded.
+        fx_ep_id = "17214422-4570-4891-9831-2212614d04fa"  # TODO: This should not be hardcoded.
 
         task_uuid = invoke_solo_function(event=event, fx_eid=fx_ep_id, headers=self.fx_headers, func_id=pf_func)
 
-        print(f"Task ID for prefetcher: {task_uuid}")
+        print(f"Headers: {self.fx_headers}")
+        self.pf_task_id = task_uuid
+        self.prefetch_status = "PROCESSING"
+
+        pf_poll_th = threading.Thread(target=self.poll_prefetcher, args=())
+        pf_poll_th.start()
+
+    def poll_prefetcher(self):
+        while True:
+
+            print(self.pf_task_id)
+
+            status_thing = remote_poll_batch(task_ids=[self.pf_task_id], headers=self.fx_headers)
+            print(f"Prefetcher status: {status_thing}")
+
+            print(type(status_thing))
+
+            if "exception_caught" in status_thing:
+                print(f"Caught funcX error: {status_thing['exception_caught']}")
+                print(f"Putting the tasks back into active queue for retry")
+            elif 'status' in status_thing[self.pf_task_id] and \
+                    status_thing[self.pf_task_id]['status'].lower() == 'success':
+                print("HEY")
+                self.prefetch_status = "SUCCEEDED"
+                print(f"[PREFETCH-POLL] Success signal received. Terminating...")
+                return
+            time.sleep(2)
 
     # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
     # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
@@ -247,8 +275,6 @@ class Orchestrator:
 
         while True:
             # TODO: Make sure this comes in via the notebook.
-            # fx_ep = "68bade94-bf58-4a7a-bfeb-9c6a61fa5443"
-            #fx_ep = "22890260-52bd-4d30-b4d6-fcfdda27d120"
             fx_ep = "71509922-996f-4559-b488-4588f06f0925"
 
             family_list = []
@@ -263,13 +289,17 @@ class Orchestrator:
                 if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
 
                     # Checking second time due to narrow race condition.
+                    # TODO: Add a prefetcher condition.
                     if self.families_to_process.empty() and self.get_families_status == "IDLE":
 
-                        self.send_status = "SUCCEEDED"
-                        print("[SEND] Queue still empty -- terminating!")
+                        if self.prefetch_remote and self.prefetch_status in ["SUCCEEDED", "FAILED"]:
 
-                        # this should terminate thread, because there is nothing to process and queue empty
-                        return
+                            self.send_status = "SUCCEEDED"
+                            print("[SEND] Queue still empty -- terminating!")
+
+                            # this should terminate thread, because there is nothing to process and queue empty
+                            return
+
                     else:  # Something snuck in during the race condition... process it!
                         print("[SEND] Discovered final output despite crawl termination. Processing...")
                         time.sleep(0.5)  # This is a multi-minute task and only is reached due to starvation.
@@ -285,10 +315,6 @@ class Orchestrator:
 
                     xtr_fam_obj.from_dict(json.loads(family))
                     xtr_fam_obj.headers = self.family_headers
-
-                    # TODO: insert adapater here for prefetch data.
-                    # if self.prefetch_remote:
-
 
                 # TODO: kick this logic for finding extractor into sdk/crawler.
                 elif self.extractor_finder == 'gdrive':
