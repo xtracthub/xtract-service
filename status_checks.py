@@ -45,7 +45,6 @@ def get_crawl_status(crawl_id):
     #
     t1 = time.time()
 
-    # print(f"Total time to get crawl status: {t1-t0}")
     return vals
 
 
