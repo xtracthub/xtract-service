@@ -50,7 +50,7 @@ def globus_poller_funcx(event):
             bytes_in_gb = 1024 * 1024 * 1024
 
             self.max_bytes = bytes_in_gb * max_gb  # TODO: pop this out to class arg.
-            self.block_size = self.max_bytes / 5
+            self.block_size = self.max_bytes / 20
 
             self.client = None
             self.tc = None
@@ -288,8 +288,8 @@ def globus_poller_funcx(event):
                 if self.last_batch and self.transfer_check_queue.empty():
                     print("No more Transfer tasks and incoming queue empty")
                     return "SUCCESS"
-                print(f"Broke out of loop. Sleeping for 5 seconds...")
-                time.sleep(5)
+            # print(f"Broke out of loop. Sleeping for 5 seconds...")
+            # time.sleep(5)
 
     # return "We are here... "
     poller = GlobusPoller(transfer_token=event['transfer_token'],
@@ -304,30 +304,30 @@ def globus_poller_funcx(event):
     return status
 
 
-from funcx import FuncXClient
-fxc= FuncXClient()
+# from funcx import FuncXClient
+# fxc= FuncXClient()
 
-ep_id = "17214422-4570-4891-9831-2212614d04fa"
+# ep_id = "17214422-4570-4891-9831-2212614d04fa"
 
 # register function
-fn_uuid = fxc.register_function(globus_poller_funcx, ep_id,
-                                description="I wrote this when Matt said he was undecided during 2020 election")
+# fn_uuid = fxc.register_function(globus_poller_funcx, ep_id,
+#                                 description="I wrote this when Matt said he was undecided during 2020 election")
 
-print(f"Function: {fn_uuid}")
+# print(f"Function: {fn_uuid}")
 
 #crawl_id = "43edcfdb-627d-4db6-8714-289e927e7691"
 # crawl_id = "64d6dc79-7f5b-4e5c-b28c-526792314c3d"
 # crawl_id = "0fc64a8a-9c04-40ae-be92-392177829407"
-crawl_id = "4be2a5c9-24c1-402c-a9ab-7f8a74f14a08"
+# crawl_id = "4be2a5c9-24c1-402c-a9ab-7f8a74f14a08"
 
-data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
+# data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
 # ansfer_token = 'AgGdePJzb81r61NEKw09XYD83NeXkam8Q9QzVd9jz10w4obYwwU7CKeJx4Qxmaago8PgQNrQOWdY3EtQ2a3PoFvNlQ'
 
-transfer_token = 'AganoO3zxxM5XBP245gan1Y1Y35bX2br8NjEEPbdMe06nDzkKzt9CzOE1kOdKxKB7rE18Vml1wbdymfPG6kW0s6W9N'
+# transfer_token = 'AganoO3zxxM5XBP245gan1Y1Y35bX2br8NjEEPbdMe06nDzkKzt9CzOE1kOdKxKB7rE18Vml1wbdymfPG6kW0s6W9N'
 
-data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
-data_path = "/project2/chard/skluzacek/data-to-process/"
-
+ #data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
+# data_path = "/project2/chard/skluzacek/data-to-process/"
+"""
 event = {'transfer_token': transfer_token,
          'crawl_id': crawl_id,
          'data_source': data_source,
@@ -335,6 +335,9 @@ event = {'transfer_token': transfer_token,
          'data_path': data_path,
          'max_gb': 0.05}
 
+
+globus_poller_funcx(event)
+"""
 # print(fn_uuid)
 
 # task_id = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
@@ -342,7 +345,7 @@ event = {'transfer_token': transfer_token,
 
 
 # globus_poller_funcx(event)
-
+"""
 import time
 res = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
 
@@ -355,6 +358,6 @@ for i in range(100):
         except Exception as e:
             print("Exception: {}".format(e))
             time.sleep(2)
-
+"""
 # launch function.
 
