@@ -92,6 +92,8 @@ class Orchestrator:
         self.batch_size = 100
         self.crawl_id = crawl_id
 
+        self.pause_q_consume = False
+
         self.file_count = 0
         self.current_batch = []
 
@@ -153,6 +155,8 @@ class Orchestrator:
         self.sqs_push_threads = {}
         self.thr_ls = []
         self.commit_threads = 1
+        self.get_family_threads = 10
+
         for i in range(0, self.commit_threads):
             thr = threading.Thread(target=self.validate_enqueue_loop, args=(i,))
             self.thr_ls.append(thr)
@@ -160,15 +164,20 @@ class Orchestrator:
             self.sqs_push_threads[i] = True
         print(f"Successfully started {len(self.sqs_push_threads)} SQS push threads!")
 
-        print(f"Attempting to start get_next_families() as its own thread... ")
-        consumer_thr = threading.Thread(target=self.get_next_families_loop, args=())
-        consumer_thr.start()
-        print("Successfully started the get_next_families() thread! ")
+        for i in range(0, self.get_family_threads):
+            print(f"Attempting to start get_next_families() as its own thread... ")
+            consumer_thr = threading.Thread(target=self.get_next_families_loop, args=())
+            consumer_thr.start()
+            print(f"Successfully started the get_next_families() thread number {i} ")
 
         # If configured to be a data 'prefetch' scenario, then we want to go get it.
+
+        # TODO: turned this off. TURN IT BACK ON ONCE FIXED.
+        """
         if prefetch_remote:
             self.launch_prefetcher()
 
+        """
         # Do the startup checks to ensure that all funcX endpoint are online.
         self.startup_checks()
 
@@ -351,24 +360,29 @@ class Orchestrator:
                     self.current_batch.append({"event": {"family_batch": family_batch.to_dict()},
                                                "func_id": ex_func_id})
 
-                # try:
-                print(f"Current batch: {self.current_batch}")
+            # try:
+            # print(f"Current batch: {self.current_batch}")
+            # TODO [TYLER]: I think this is sending one at a time!
+            if len(self.current_batch) > 0:
                 task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
                 # except Exception as e:
                 #     print(f"[SEND] Caught exception here: {e}")
 
+                # TODO: This complicates the batch workflow. Work back in later!!!
                 if type(task_ids) is dict:
                     print(f"Caught funcX error: {task_ids['exception_caught']}")
                     print(f"Putting the tasks back into active queue for retry")
+    
+                    for reject_fam_batch in self.current_batch:
 
-                    for reject_fam in family_batch.families:
-                        self.families_to_process.put(json.dumps(reject_fam.to_dict()))
+                        fam_batch_dict = reject_fam_batch['event']['family_batch']
 
+                        for reject_fam in fam_batch_dict['families']:
+                            self.families_to_process.put(json.dumps(reject_fam))
+    
                     print(f"Pausing for 10 seconds...")
                     time.sleep(10)
                     continue
-
-                # print(f"Task IDs: {task_id}")
 
                 for task_id in task_ids:
                     self.task_dict["active"].put(task_id)
@@ -385,6 +399,12 @@ class Orchestrator:
     def get_next_families_loop(self):
 
         while True:
+
+            if self.pause_q_consume:
+                print("[GET NEXT FAMILIES] Pausing pull of new families. Sleeping for 20 seconds...")
+                time.sleep(20)
+                continue
+
             # Step 1. Get ceiling(batch_size/10) messages down from queue.
             sqs_response = self.client.receive_message(  # TODO: properly try/except this block.
                 QueueUrl=self.crawl_queue,
@@ -406,6 +426,7 @@ class Orchestrator:
                                      'Id': message["MessageId"]})
                 found_messages = True
 
+            # TODO: Should I kick out deletion to its own thread?  If it's bottleneck I definitely should.
             # Step 2. Delete the messages from SQS.
             if len(del_list) > 0:
                 response = self.client.delete_message_batch(
@@ -485,9 +506,12 @@ class Orchestrator:
                 for reject_tid in tids_to_poll:
                     self.task_dict["active"].put(reject_tid)
 
-                print(f"Pausing for 10 seconds...")
-                time.sleep(10)
+                print(f"Pausing for 20 seconds...")
+                self.pause_q_consume = True
+                time.sleep(20)
                 continue
+            else:
+                self.pause_q_consume = False
 
             for tid in status_thing:
                 if "result" in status_thing[tid]:

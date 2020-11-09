@@ -44,7 +44,7 @@ def matio_extract(event):
     all_families = event['family_batch']
 
     is_local = True
-    should_delete = False
+    should_delete = True
 
     # TODO: potentially remove this if we definitely don't need for FamilyBatch.
 
@@ -124,8 +124,8 @@ def matio_extract(event):
             family.groups[gid].metadata = new_mdata
 
         # if should_delete:
-        #     # Cleanup the clutter -- will not need file again since family includes all groups
-        # ZZ    shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
+            #     # Cleanup the clutter -- will not need file again since family includes all groups
+        #    shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
     t1 = time.time()
 
     return {"family_batch": all_families,
