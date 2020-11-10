@@ -64,6 +64,7 @@ class Orchestrator:
 
         self.file_count = 0
         self.current_batch = []
+        self.extract_end = None
 
         self.mdata_store_path = mdata_store_path
 
