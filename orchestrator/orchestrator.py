@@ -18,42 +18,10 @@ from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keywo
 
 
 class Orchestrator:
-    """
-    A class used to ...
 
-    Attributes
-    ----------
-    says_str : str
-        a formatted string to print out what the animal says
-    name : str
-        the name of the animal
-    sound : str
-        the sound that the animal makes
-    num_legs : int
-        the number of legs the animal has (default 4)
-
-    Methods
-    -------
-    enqueue_loop(thr_id)
-        (action)
-    send_families_loop()
-
-    launch_poll()
-
-    get_next_families_loop()
-
-    launch_extract()
-
-    unpack_returned_family_batch(family_batch)
-
-    poll_responses()
-    """
-
-    # TODO 1: Make source_eid and dest_eid default to None for the HTTPS case?
-    # TODO 2: prefetch decision should eventually be decided by the system on file-by-file basis.
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
-                 logging_level='debug', instance_id=None, extractor_finder='gdrive', prefetch_remote=False,
+                 extractor_finder='gdrive', prefetch_remote=False,
                  data_prefetch_path=None):
 
         self.t_crawl_start = time.time()
@@ -171,7 +139,6 @@ class Orchestrator:
             print(f"Successfully started the get_next_families() thread number {i} ")
 
         # If configured to be a data 'prefetch' scenario, then we want to go get it.
-
         # TODO: turned this off. TURN IT BACK ON ONCE FIXED.
         """
         if prefetch_remote:
@@ -195,7 +162,7 @@ class Orchestrator:
                  'data_path': self.data_prefetch_path,
                  'max_gb': 50}
 
-        fx_ep_id = "17214422-4570-4891-9831-2212614d04fa"  # TODO: This should not be hardcoded.
+        fx_ep_id = mapping['prefetcher::midway2']['func_uuid']
 
         task_uuid = invoke_solo_function(event=event, fx_eid=fx_ep_id, headers=self.fx_headers, func_id=pf_func)
 
@@ -284,7 +251,7 @@ class Orchestrator:
 
         while True:
             # TODO: Make sure this comes in via the notebook.
-            fx_ep = "71509922-996f-4559-b488-4588f06f0925"
+            # fx_ep = "71509922-996f-4559-b488-4588f06f0925"
 
             family_list = []
             # Now keeping filling our list of families until it is empty.
@@ -353,22 +320,16 @@ class Orchestrator:
                 family_batch.add_family(xtr_fam_obj)
 
                 if d_type == "gdrive":
-                    self.current_batch.append({"event": {"family_batch": family_batch,  # TODO: Tyler, check this!
+                    self.current_batch.append({"event": {"family_batch": family_batch,
                                                          "creds": self.gdrive_token[0]},
                                                "func_id": ex_func_id})
                 elif d_type == "HTTPS":
                     self.current_batch.append({"event": {"family_batch": family_batch.to_dict()},
                                                "func_id": ex_func_id})
 
-            # try:
-            # print(f"Current batch: {self.current_batch}")
-            # TODO [TYLER]: I think this is sending one at a time!
             if len(self.current_batch) > 0:
-                task_ids = remote_extract_batch(self.current_batch, ep_id=fx_ep, headers=self.fx_headers)
-                # except Exception as e:
-                #     print(f"[SEND] Caught exception here: {e}")
+                task_ids = remote_extract_batch(self.current_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
 
-                # TODO: This complicates the batch workflow. Work back in later!!!
                 if type(task_ids) is dict:
                     print(f"Caught funcX error: {task_ids['exception_caught']}")
                     print(f"Putting the tasks back into active queue for retry")
@@ -426,17 +387,11 @@ class Orchestrator:
                                      'Id': message["MessageId"]})
                 found_messages = True
 
-            # TODO: Should I kick out deletion to its own thread?  If it's bottleneck I definitely should.
             # Step 2. Delete the messages from SQS.
             if len(del_list) > 0:
-                response = self.client.delete_message_batch(
+                self.client.delete_message_batch(
                     QueueUrl=self.crawl_queue,
                     Entries=del_list)
-                # TODO: Do the 200 check. Weird data format.
-                # print(f"Delete response: {response}")
-                # if response["HTTPStatusCode"] is not 200:
-                #     raise ConnectionError("Could not delete messages from queue!")
-                delete_messages = True
 
             # Simple because if the poller is done, then there's no point pulling down any work.
             if self.poll_status == "COMPLETED":
@@ -446,7 +401,6 @@ class Orchestrator:
 
                 return  # terminate the thread.
 
-            # print("ARE WE HERE????")
             if not deleted_messages and not found_messages:
                 print("FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
                 self.get_families_status = "IDLE"
@@ -454,7 +408,6 @@ class Orchestrator:
             time.sleep(2)
 
     def launch_extract(self):
-        # TODO: will soon need more than just 1 thread here.
         ex_thr = threading.Thread(target=self.send_families_loop, args=())
         ex_thr.start()
 
@@ -526,6 +479,7 @@ class Orchestrator:
                             family_batch = unpacked_metadata['event']['family_batch']
                             unpacked_metadata = family_batch.to_dict()
 
+                        # leave this in. We have the I/O to print this (great for debugging)
                         print(unpacked_metadata)
 
                         json_mdata = json.dumps(unpacked_metadata, cls=NumpyEncoder)
@@ -569,7 +523,7 @@ class Orchestrator:
                     exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
                     try:
                         exc.reraise()
-                    except ModuleNotFoundError as e:
+                    except ModuleNotFoundError:
                         mod_not_found += 1
                         print(f"Num. ModuleNotFound: {mod_not_found}")
 
