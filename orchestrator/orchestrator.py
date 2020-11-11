@@ -7,19 +7,20 @@ import logging
 import threading
 
 from queue import Queue
+from orchestrator.funcx_scheduler import FuncXScheduler
 from extractors.utils.mappings import mapping
 from utils.fx_utils import invoke_solo_function
 from utils.encoders import NumpyEncoder
 from status_checks import get_crawl_status
 from funcx.serialize import FuncXSerializer
 from xtract_sdk.packagers import Family, FamilyBatch
-from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
+from extractors.utils.batch_utils import remote_poll_batch
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
 
 
 class Orchestrator:
 
-    def __init__(self, crawl_id, headers, funcx_eid,
+    def __init__(self, crawl_id, headers, funcx_eids,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
                  extractor_finder='gdrive', prefetch_remote=False,
                  data_prefetch_path=None):
@@ -35,7 +36,7 @@ class Orchestrator:
         self.extractor_finder = extractor_finder
         self.pf_task_id = None
 
-        self.funcx_eid = funcx_eid
+        self.funcx_eids = funcx_eids
         self.func_dict = {"image": xtract_images.ImageExtractor(),
                           "images": xtract_images.ImageExtractor(),
                           "tabular": xtract_tabular.TabularExtractor(),
@@ -73,6 +74,8 @@ class Orchestrator:
 
         self.headers = headers
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
+
+        self.fx_scheduler = FuncXScheduler(self.funcx_eids, self.fx_headers)
 
         self.family_headers = None
         if 'Petrel' in self.headers:
@@ -329,25 +332,21 @@ class Orchestrator:
                                                "func_id": ex_func_id})
 
             if len(self.current_batch) > 0:
-                task_ids = remote_extract_batch(self.current_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
+                self.fx_scheduler.remote_extract_batch(self.current_batch)
 
-                if type(task_ids) is dict:
-                    print(f"Caught funcX error: {task_ids['exception_caught']}")
-                    print(f"Putting the tasks back into active queue for retry")
-    
-                    for reject_fam_batch in self.current_batch:
-
+                if self.fx_scheduler.failed_batches:
+                    for reject_fam_batch in self.fx_scheduler.failed_batches:
                         fam_batch_dict = reject_fam_batch['event']['family_batch']
 
                         for reject_fam in fam_batch_dict['families']:
                             self.families_to_process.put(json.dumps(reject_fam))
-    
+
                     print(f"Pausing for 10 seconds...")
                     time.sleep(10)
                     continue
 
-                for task_id in task_ids:
-                    self.task_dict["active"].put(task_id)
+                while self.fx_scheduler.task_uuids:
+                    self.task_dict["active"].put(self.fx_scheduler.task_uuids.pop())
 
                 # Empty the batch! Everything in here has been sent :)
                 self.current_batch = []

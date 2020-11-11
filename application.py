@@ -149,7 +149,7 @@ def extract_mdata():
 
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
-    funcx_eid = r["funcx_eid"]
+    funcx_eids = r["funcx_eid"]
 
     if crawl_id in active_orchestrators:  # TODO: improved error-handling.
         return "ERROR -- crawl_id already has an associated orchestrator!"
@@ -159,7 +159,7 @@ def extract_mdata():
     # TODO: Can have parallel orchestrators, esp now that we're using queues.
     orch = Orchestrator(crawl_id=crawl_id,
                         headers=headers,
-                        funcx_eid=funcx_eid,
+                        funcx_eids=funcx_eids,
                         source_eid=source_eid,
                         dest_eid=dest_eid,
                         mdata_store_path=mdata_store_path,
