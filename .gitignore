@@ -1,0 +1,6 @@
+# Runtime info repos
+__pycache__/
+
+# Intellij project directories
+.idea/
+
