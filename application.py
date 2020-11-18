@@ -124,6 +124,7 @@ def extract_mdata():
     extractor_finder = None
     prefetch_remote = None
     data_prefetch_path = None
+    dataset_mdata = None
 
 
     try:
@@ -147,6 +148,11 @@ def extract_mdata():
 
             data_prefetch_path = r['data_prefetch_path']
 
+            if 'dataset_mdata' in r:
+                dataset_mdata = r['dataset_mdata']
+            else:
+                dataset_mdata = None
+
     crawl_id = r["crawl_id"]
     headers = json.loads(r["headers"])
     funcx_eid = r["funcx_eid"]
@@ -166,7 +172,8 @@ def extract_mdata():
                         gdrive_token=gdrive_token,
                         extractor_finder=extractor_finder,
                         prefetch_remote=prefetch_remote,
-                        data_prefetch_path=data_prefetch_path
+                        data_prefetch_path=data_prefetch_path,
+                        dataset_mdata=dataset_mdata
                         )
 
     print("Launching response poller...")
