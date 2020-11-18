@@ -33,7 +33,7 @@ fam_batch.add_family(fam_1)
 img_extractor = MatioExtractor()
 
 fn_uuid = img_extractor.register_function(container_type=container_type, location=location,
-                                                        ep_id=ep_id)
+                                          ep_id=ep_id, group="a31d8dce-5d0a-11ea-afea-0a53601d30b5")
 
 
 def test(event):
