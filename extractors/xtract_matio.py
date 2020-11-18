@@ -114,18 +114,15 @@ def matio_extract(event):
                     actual_group_paths.append(filename_to_path_map[filename])
 
             extraction_start_t = time.time()
-
             new_mdata = extract_matio(paths=actual_group_paths, parser=parser)
-
-            extraction_end_t = time.time()
             extraction_end_t = time.time()
 
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t
             family.groups[gid].metadata = new_mdata
 
-        # if should_delete:
-            #     # Cleanup the clutter -- will not need file again since family includes all groups
-        #    shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
+        if should_delete:
+            # Cleanup the clutter -- will not need file again since family includes all groups
+            shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
     t1 = time.time()
 
     return {"family_batch": all_families,
