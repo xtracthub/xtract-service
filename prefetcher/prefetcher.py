@@ -1,252 +1,195 @@
 
-
-def globus_poller_funcx(event):
-
-    from queue import Queue
-    import globus_sdk
-    import boto3
-    import json
-    import time
-    from random import randint
-    import os
-    import csv
-    import datetime
-    # from get_dir_size import get_data_dir_size
-    import threading
-
-    # def get_data_dir_size():
-    #     total_size = 0
-    #
-    #     from os.path import join, getsize
-    #     for root, dirs, files in os.walk('/project2/chard/skluzacek/data_to_process'):
-    #         # print root, "consumes",
-    #         total_size += sum(getsize(join(root, name)) for name in files)
-    #         total_size += sum(getsize(join(root, name)) for name in dirs)
-    #         # print "bytes in", len(files), "non-directory files"
-    #         if 'CVS' in dirs:
-    #             dirs.remove('CVS')  # don't visit CVS directories
-    #
-    #     return total_size
-
-    def get_data_dir_size():
-        time.sleep(10)
-        return 0
-
-    class GlobusPoller:
-
-        def __init__(self, transfer_token, crawl_id, data_source, data_dest, data_path, max_gb):
-
-            self.transfer_token = transfer_token
-            self.crawl_id = crawl_id
-
-            self.transfer_check_queue = Queue()
-
-            self.client_id = "83cd643f-8fef-4d4b-8bcf-7d146c288d81"
-            self.data_source = data_source
-            self.data_dest = data_dest
-            self.data_path = data_path
-
-            self.file_counter = randint(100000, 999999)
-
-            self.max_gb = max_gb
-
-            self.last_batch = False
-            bytes_in_gb = 1024 * 1024 * 1024
-
-            self.max_bytes = bytes_in_gb * max_gb  # TODO: pop this out to class arg.
-            self.block_size = self.max_bytes / 20
-
-            self.client = None
-            self.tc = None
-
-            self.family_map = dict()
-            self.fam_to_size_map = dict()
-            self.local_transfer_queue = Queue()
-            self.local_update_queue = Queue()
-            self.transfer_map = dict()
-
-            self.current_batch = []
-            self.current_batch_bytes = 0
-
-            self.get_globus_tc(self.transfer_token)
-
-            print("Getting SQS client from boto3...")
-            self.sqs_client = boto3.client('sqs',
-                                  aws_access_key_id=os.environ["aws_access"],
-                                  aws_secret_access_key=os.environ["aws_secret"],
-                                  region_name='us-east-1')
-
-            crawl_q_response = self.sqs_client.get_queue_url(
-                QueueName=f'crawl_{self.crawl_id}',
-                QueueOwnerAWSAccountId=os.environ["aws_account"]
-            )
-
-            self.crawl_queue_url = crawl_q_response["QueueUrl"]
-
-            transferred_q_response = self.sqs_client.get_queue_url(
-                QueueName=f'transferred_{self.crawl_id}',
-                QueueOwnerAWSAccountId=os.environ["aws_account"]
-            )
-            self.transferred_queue_url = transferred_q_response["QueueUrl"]
-
-            # Get rid of log file if it already exists. # TODO: have timestamped log folders for each crawl/transfer.
-            if os.path.exists("folder_size.csv"):
-                os.remove("folder_size.csv")
-
-            # Now create a fresh file here.
-            with open("folder_size.csv", "w") as g:
-                g.close()
-
-            self.cur_data_folder_size = 0
-
-            print("Starting thread to get size!")
-            get_size_thr = threading.Thread(target=self.get_size, args=())
-            get_size_thr.start()
-            print("Successfully started thread!")
-
-        def get_globus_tc(self, TRANSFER_TOKEN):
-
-            authorizer = globus_sdk.AccessTokenAuthorizer(TRANSFER_TOKEN)
-            self.tc = globus_sdk.TransferClient(authorizer=authorizer)
-
-        def get_size(self):
-            # bytes    #kilo  #mega
-            num_mbytes = get_data_dir_size() / 1024 / 1024
-            cur_time = datetime.datetime.now()
-            cur_read_time = cur_time.strftime("%Y-%m-%d %H:%M:%S")
-
-            self.cur_data_folder_size = num_mbytes * 1024 * 1024  # Convert back to bytes.
-            with open("folder_size.csv", 'a') as f:
-                writer = csv.writer(f)
-                writer.writerow([cur_read_time, num_mbytes])
-
-            print(f"************** SIZE IN MB: {self.cur_data_folder_size} ***********************")
-
-        def transfer_queue_thread(self):
-            gl_task_tmp_ls = []
-
-            while True:
-                gl_tid = self.transfer_check_queue.get()
-                res = self.tc.get_task(gl_tid)
-                # print(res)
-                if res['status'] != "SUCCEEDED":
-                    gl_task_tmp_ls.append(gl_tid)
-                else:
-                    # TODO: Get the families associated with the transfer task.
-                    fids = self.transfer_map[gl_tid]
-                    # print(f"These are the fids: {fids}")
-
-                    insertables_batch = []
-                    insertables = []
-                    max_insertables = 10  # SQS can only upload 10 messages at a time.
-
-                    for fid in fids:
-                        self.file_counter += 1
-
-                        # print(f"Family: {self.family_map[fid]}")
-
-                        family = self.family_map[fid]
-                        family['metadata']["pf_transfer_completed"] = time.time()
-
-                        # print(f"This is the family: {family}")
-
-                        family_object = {"Id": str(self.file_counter), "MessageBody": json.dumps(family)}
-                        insertables.append(family_object)
-
-                        if len(insertables) == 6:
-                            insertables_batch.append(insertables)
-                            insertables = []  # reset to be empty since we dumped into the batch.
-
-                    # Now catch case where batch isn't full BUT we still need to put them into list for push to SQS.
-                    if len(insertables) > 0:
-                        insertables_batch.append(insertables)
-
-                    for insertables in insertables_batch:
-                        response = self.sqs_client.send_message_batch(QueueUrl=self.transferred_queue_url,
-                                                                      Entries=insertables)
-
-                        print(f"Response for transferred queue: {response}")
-                    time.sleep(2)
-
-                if self.transfer_check_queue.empty():
-
-                    for gl_tid in gl_task_tmp_ls:
-                        self.transfer_check_queue.put(gl_tid)
-                    gl_task_tmp_ls = []
-
-                    print(f"[TRANSFER QUEUE] Queue empty. Sleeping for 5 seconds! ")
-                    time.sleep(5)
-
-                # HERE we use the same kill condition as the main loop, so this ought to quit at the same time.
-                if self.last_batch and self.transfer_check_queue.empty():
-                    return "SUCCESS"  #
+from queue import Queue
+import globus_sdk
+import json
+import time
+import os
+import threading
 
 
+class GlobusPrefetcher:
 
-        def get_new_families(self):
-            sqs_response = self.sqs_client.receive_message(
-                QueueUrl=self.crawl_queue_url,
-                MaxNumberOfMessages=10,
-                WaitTimeSeconds=5)
+    def __init__(self, transfer_token, crawl_id, data_source, data_dest, data_path, max_gb):
 
-            size_of_fams = 0
+        self.transfer_token = transfer_token
+        self.crawl_id = crawl_id
 
-            if "Messages" in sqs_response and len(sqs_response["Messages"]) > 0:
+        self.transfer_check_queue = Queue()
 
-                del_list = []
-                for item in sqs_response["Messages"]:
-                    family = json.loads(item["Body"])
+        self.client_id = "83cd643f-8fef-4d4b-8bcf-7d146c288d81"
+        self.data_source = data_source
+        self.data_dest = data_dest
+        self.data_path = data_path
 
-                    fam_id = family["family_id"]
+        self.max_gb = max_gb
+        self.max_files_in_batch = 10000
 
-                    tot_fam_size = 0
-                    for file_obj in family["files"]:
-                        file_size = file_obj["metadata"]["physical"]["size"]
-                        tot_fam_size += file_size
+        self.last_batch = False
+        bytes_in_gb = 1024 * 1024 * 1024
 
-                    self.family_map[fam_id] = family
-                    self.local_transfer_queue.put(fam_id)
-                    self.fam_to_size_map[fam_id] = tot_fam_size
+        self.max_bytes = bytes_in_gb * max_gb
+        self.block_size = self.max_bytes / 20
 
-                    size_of_fams += tot_fam_size
+        self.client = None
+        self.tc = None
 
-                    del_list.append({'ReceiptHandle': item["ReceiptHandle"],
-                                         'Id': item["MessageId"]})
+        self.family_map = dict()
+        self.fam_to_size_map = dict()
+        self.local_transfer_queue = Queue()
+        self.transfer_map = dict()
 
-                if len(del_list) > 0:
-                    response = self.sqs_client.delete_message_batch(QueueUrl=self.crawl_queue_url, Entries=del_list)
-                    print(response)
+        self.num_transfers = 0
+        self.num_families_transferred = 0
+
+        self.num_families_mid_transfer = 0
+
+        self.current_batch = []
+        self.current_batch_bytes = 0
+        self.current_batch_num_families = 0
+
+        self.bytes_pf_in_flight = 0
+        self.bytes_pf_completed = 0  # This goes before they become 'bytes_orch_unextracted'
+
+        self.get_globus_tc(self.transfer_token)
+
+        # Get rid of log file if it already exists. # TODO: be better about this.
+        if os.path.exists("folder_size.csv"):
+            os.remove("folder_size.csv")
+
+        # Now create a fresh file here.
+        with open("folder_size.csv", "w") as g:
+            g.close()
+
+        self.orch_reader_q = Queue()
+
+        # Puppet variables. The orchestrator will edit these.
+        self.orch_unextracted_bytes = 0
+        self.next_prefetch_queue = Queue()
+
+        # The orchestrator class will kill any loops here by changing this variable.
+        self.kill_prefetcher = False
+
+        self.pf_msgs_pulled_since_last_batch = 0
+
+    def get_globus_tc(self, TRANSFER_TOKEN):
+
+        authorizer = globus_sdk.AccessTokenAuthorizer(TRANSFER_TOKEN)
+        self.tc = globus_sdk.TransferClient(authorizer=authorizer)
+
+    def get_family_size(self, family):
+        tot_fam_size = 0
+        for file_obj in family["files"]:
+            file_size = file_obj["metadata"]["physical"]["size"]
+            tot_fam_size += file_size
+        return tot_fam_size
+
+    def transfer_queue_thread(self):
+        # TODO: this is also a thread that needs to be killed!
+
+        gl_task_tmp_ls = []
+
+        while True:
+            gl_tid = self.transfer_check_queue.get()
+            res = self.tc.get_task(gl_tid)
+
+            if res['status'] != "SUCCEEDED":
+                gl_task_tmp_ls.append(gl_tid)
             else:
-                self.last_batch = True
+
+                fids = self.transfer_map[gl_tid]
+
+                for fid in fids:
+
+                    family = self.family_map[fid]
+                    fam_size = self.get_family_size(family)
+                    family['metadata']["pf_transfer_completed"] = time.time()
+
+                    self.bytes_pf_in_flight -= fam_size
+                    self.bytes_pf_completed += fam_size
+
+                    self.orch_reader_q.put(json.dumps(family))
+                    self.num_families_mid_transfer -= 1
+
+                print(f"SLEEPING??? ")
+                time.sleep(0.5)  # TODO: why is this sleep here?
+
+            if self.transfer_check_queue.empty():
+
+                for gl_tid in gl_task_tmp_ls:
+                    self.transfer_check_queue.put(gl_tid)
+                gl_task_tmp_ls = []
+
+                print(f"[PF TRANSFER QUEUE] Queue empty. Sleeping for 5 seconds! ")
+                time.sleep(5)
+
+    def get_new_families(self):
+
+        # Grab 10 from queue.
+        i = 0
+        families_to_pf = []
+
+        while i < 1000 and not self.next_prefetch_queue.empty():
+            i += 1
+            pf_family = self.next_prefetch_queue.get()
+            families_to_pf.append(pf_family)
+            self.pf_msgs_pulled_since_last_batch += 1
+
+        size_of_fams = 0
+        if len(families_to_pf) > 0:
+
+            for fam_json in families_to_pf:
+                family = json.loads(fam_json)
+
+                fam_id = family["family_id"]
+
+                tot_fam_size = self.get_family_size(family)
+
+                self.family_map[fam_id] = family
+                self.local_transfer_queue.put(fam_id)
+                self.fam_to_size_map[fam_id] = tot_fam_size
+
+                size_of_fams += tot_fam_size
+            self.bytes_pf_in_flight += size_of_fams
+
+        return size_of_fams
+
+    def main_poller_loop(self):
+
+        transfer_thr = threading.Thread(target=self.transfer_queue_thread, args=())
+        transfer_thr.start()
+
+        need_more_families = True
+
+        while True:
+
+            if self.kill_prefetcher and self.last_batch:
+                print("[PF] Killing main PF loop...")
                 return
-            return size_of_fams
 
-        def main_poller_loop(self):
+            # However in the case where it's NOT last_batch.
+            elif self.kill_prefetcher:
+                print("Kill_Prefetcher message received... Checking if last batch...")
+                if self.next_prefetch_queue.empty():
+                    print("Prefetch queue empty! Signifying last batch...")
+                    self.last_batch = True
 
-            transfer_thr = threading.Thread(target=self.transfer_queue_thread, args=())
-            transfer_thr.start()
+            if need_more_families:
+                total_size = self.get_new_families()
 
-            need_more_families = True
+                # If nothing to prefetch, BUT not ready to kill...
+                if total_size is None:
+                    print("No new prefetchable families, but not ready to kill. CONTINUING!")
+                    continue
 
-            while True:
-                print(f"Need more families: {need_more_families}")
-                if need_more_families:
-                    total_size = self.get_new_families()
+            # Dir size is added via the following...
+            eff_dir_size = self.orch_unextracted_bytes + self.bytes_pf_in_flight + self.bytes_pf_completed
 
-                    if total_size is None:
-                        total_size = 0
-                        print("No new messages! Continuing... ")
+            # If we are under the folder size.
+            if eff_dir_size < self.max_bytes:
 
-                print(f"Current Data folder size (MB): {self.cur_data_folder_size}")
+                # As long as our local queue is not empty...
+                while not self.local_transfer_queue.empty():
 
-                # Check if we are under capacity and there's more queue elements to grab.
-                print(f"local_transfer_queue.empty()?: {self.local_transfer_queue.empty()}")
-
-                print(f"[Tyler 1] Folder size: {self.cur_data_folder_size}")
-                print(f"[Tyler 2] Maximum bytes: {self.max_bytes}")
-                while self.cur_data_folder_size < self.max_bytes and not self.local_transfer_queue.empty():
-                    print("INSIDE THIS LOOP")
-                    print(f"Update queue size: {self.local_transfer_queue.qsize()}")
                     need_more_families = True
 
                     cur_fam_id = self.local_transfer_queue.get()
@@ -254,131 +197,78 @@ def globus_poller_funcx(event):
 
                     self.current_batch.append(self.family_map[cur_fam_id])
                     self.current_batch_bytes += cur_fam_size
+                    self.current_batch_num_families += 1
 
-                    # TODO: what if one file is larger than the entire batch size?
+                    # If we filled our block to the brim, close the batch!
+                    if self.current_batch_bytes >= self.block_size or \
+                            len(self.current_batch) >= self.max_files_in_batch:
+                        print("Batch is full! Breaking loop!!!")
+                        break
 
-                print(f"Current batch Size: {self.current_batch_bytes}")
-                print(f"Block Size: {self.block_size}")
+            else:
+                print(f"[PF] Directory full with {eff_dir_size / 1024 / 1024 / 1024} GB. Sleeping for 5s...")
+                print(self.orch_unextracted_bytes)
+                print(self.bytes_pf_in_flight)
+                print(self.bytes_pf_completed)
+                time.sleep(5)
 
-                # return f"Made it here! Block size: {self.block_size}"
+            # If we have a full batch OR it's the last batch in the job...
+            if self.current_batch_bytes >= self.block_size or \
+                    (self.last_batch and len(self.current_batch) > 0) or\
+                    len(self.current_batch) > self.max_files_in_batch:
+                print("[PF] Generating a batch transfer object...")
+                self.pf_msgs_pulled_since_last_batch = 0
 
-                if self.current_batch_bytes >= self.block_size or (self.last_batch and len(self.current_batch) > 0):
-                    print("Generating a batch transfer object...")
+                tdata = globus_sdk.TransferData(transfer_client=self.tc,
+                                                source_endpoint=self.data_source,
+                                                destination_endpoint=self.data_dest)
 
-                    tdata = globus_sdk.TransferData(transfer_client=self.tc,
-                                                    source_endpoint=self.data_source,
-                                                    destination_endpoint=self.data_dest)
+                fid_list = []
+                for family_to_trans in self.current_batch:
 
-                    fid_list = []
-                    for family_to_trans in self.current_batch:
+                    # Create a directory (named by family_id) into which we want to place our families.
+                    # TODO: hardcoding.
+                    fam_dir = '/project2/chard/skluzacek/data_to_process/{}'.format(family_to_trans['family_id'])
 
-                        # Create a directory (named by family_id) into which we want to place our families.
-                        fam_dir = '/project2/chard/skluzacek/data_to_process/{}'.format(family_to_trans['family_id'])
-                        os.makedirs(fam_dir, exist_ok=True)
-                        for file_obj in family_to_trans['files']:
+                    for file_obj in family_to_trans['files']:
+                        file_path = file_obj['path']
+                        file_name = file_obj['path'].split('/')[-1]
+
+                        file_obj['path'] = f"{fam_dir}/{file_name}"
+
+                        tdata.add_item(file_path, f"{fam_dir}/{file_name}")
+                    fid_list.append(family_to_trans['family_id'])
+
+                    # Now we do the same for groups... # TODO: Move this upstream. Crawler?
+                    for group_obj in family_to_trans['groups']:
+                        for file_obj in group_obj['files']:
                             file_path = file_obj['path']
-                            file_name = file_obj['path'].split('/')[-1]
+                            file_name = file_path.split('/')[-1]
 
-                            # TODO: is this actually mutable?
                             file_obj['path'] = f"{fam_dir}/{file_name}"
+                    self.num_families_transferred += 1
+                    self.num_families_mid_transfer += 1
 
-                            tdata.add_item(file_path, f"{fam_dir}/{file_name}")
-                        fid_list.append(family_to_trans['family_id'])
+                transfer_result = self.tc.submit_transfer(tdata)
+                self.num_transfers += 1
+                print(f"Transfer result: {transfer_result}")
+                gl_task_id = transfer_result['task_id']
+                self.transfer_check_queue.put(gl_task_id)
 
-                        # Now we do the same for groups unless we want to #TODO move this upstream.
-                        for group_obj in family_to_trans['groups']:
-                            for file_obj in group_obj['files']:
-                                file_path = file_obj['path']
-                                file_name = file_obj['path'].split('/')[-1]
+                self.transfer_map[gl_task_id] = fid_list
 
-                                file_obj['path'] = f"{fam_dir}/{file_name}"
+                self.current_batch = []
+                self.current_batch_bytes = 0
+                self.current_batch_num_families = 0
 
-                    transfer_result = self.tc.submit_transfer(tdata)
-                    print(f"Transfer result: {transfer_result}")
-                    gl_task_id = transfer_result['task_id']
-                    self.transfer_check_queue.put(gl_task_id)
+            else:
+                need_more_families = True
 
-                    self.transfer_map[gl_task_id] = fid_list
-
-                    self.current_batch = []
-                    self.current_batch_bytes = 0
-
-                else:
-                    need_more_families = True
-
-                if self.last_batch and self.transfer_check_queue.empty():
-                    print("No more Transfer tasks and incoming queue empty")
+            if self.last_batch and self.transfer_check_queue.empty():
+                if self.kill_prefetcher:
+                    print("[PF] Prefetcher kill message received and nothing else to transfer...")
+                    print("[PF] Terminating...")
                     return "SUCCESS"
-            # print(f"Broke out of loop. Sleeping for 5 seconds...")
-            # time.sleep(5)
-
-    # return "We are here... "
-    poller = GlobusPoller(transfer_token=event['transfer_token'],
-                          crawl_id=event['crawl_id'],
-                          data_source=event['data_source'],
-                          data_dest=event['data_dest'],
-                          data_path=event['data_path'],
-                          max_gb=event['max_gb'])
-
-    # return "WE MADE IT HERE."
-    status = poller.main_poller_loop()
-    return status
-
-
-# from funcx import FuncXClient
-# fxc= FuncXClient()
-
-# ep_id = "17214422-4570-4891-9831-2212614d04fa"
-
-# register function
-# fn_uuid = fxc.register_function(globus_poller_funcx, ep_id,
-#                                 description="I wrote this when Matt said he was undecided during 2020 election")
-
-# print(f"Function: {fn_uuid}")
-
-#crawl_id = "43edcfdb-627d-4db6-8714-289e927e7691"
-# crawl_id = "64d6dc79-7f5b-4e5c-b28c-526792314c3d"
-# crawl_id = "0fc64a8a-9c04-40ae-be92-392177829407"
-# crawl_id = "4be2a5c9-24c1-402c-a9ab-7f8a74f14a08"
-
-# data_source = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
-# ansfer_token = 'AgGdePJzb81r61NEKw09XYD83NeXkam8Q9QzVd9jz10w4obYwwU7CKeJx4Qxmaago8PgQNrQOWdY3EtQ2a3PoFvNlQ'
-
-# transfer_token = 'AganoO3zxxM5XBP245gan1Y1Y35bX2br8NjEEPbdMe06nDzkKzt9CzOE1kOdKxKB7rE18Vml1wbdymfPG6kW0s6W9N'
-
- #data_dest = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
-# data_path = "/project2/chard/skluzacek/data-to-process/"
-"""
-event = {'transfer_token': transfer_token,
-         'crawl_id': crawl_id,
-         'data_source': data_source,
-         'data_dest': data_dest,
-         'data_path': data_path,
-         'max_gb': 0.05}
-
-
-globus_poller_funcx(event)
-"""
-# print(fn_uuid)
-
-# task_id = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
-# launch function
-
-
-# globus_poller_funcx(event)
-"""
-import time
-res = fxc.run(event, endpoint_id=ep_id, function_id=fn_uuid)
-
-for i in range(100):
-        try:
-            x = fxc.get_result(res)
-
-            print(x)
-            break
-        except Exception as e:
-            print("Exception: {}".format(e))
-            time.sleep(2)
-"""
-# launch function.
-
+                else:
+                    print("Last current batch, but still waiting on more data from orchestrator. Sleeping for 5s...")
+                    time.sleep(5)

@@ -8,13 +8,14 @@ import threading
 
 from queue import Queue
 from extractors.utils.mappings import mapping
-from utils.fx_utils import invoke_solo_function
 from utils.encoders import NumpyEncoder
 from status_checks import get_crawl_status
 from funcx.serialize import FuncXSerializer
 from xtract_sdk.packagers import Family, FamilyBatch
+from prefetcher.prefetcher import GlobusPrefetcher
 from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
+from orchestrator.orch_utils.utils import create_list_chunks
 
 
 class Orchestrator:
@@ -22,18 +23,20 @@ class Orchestrator:
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
                  extractor_finder='gdrive', prefetch_remote=False,
-                 data_prefetch_path=None):
+                 data_prefetch_path=None, dataset_mdata=None):
+
+        self.crawl_id = crawl_id
+
+        self.dataset_mdata = dataset_mdata
 
         self.t_crawl_start = time.time()
-        self.t_get_families = 0
         self.t_send_batch = 0
         self.t_transfer = 0
-        self.n_fams_transferred = 0
+
         self.prefetch_remote = prefetch_remote
         self.data_prefetch_path = data_prefetch_path
 
         self.extractor_finder = extractor_finder
-        self.pf_task_id = None
 
         self.funcx_eid = funcx_eid
         self.func_dict = {"image": xtract_images.ImageExtractor(),
@@ -52,14 +55,32 @@ class Orchestrator:
         self.dest_endpoint = dest_eid
         self.gdrive_token = gdrive_token
 
+        self.num_families_fetched = 0
+        self.get_families_start_time = time.time()
+        self.last_checked = time.time()
+
+        self.pre_launch_counter = 0
+
+        self.success_returns = 0
+        self.failed_returns = 0
+
         self.poll_gap_s = 5
+        self.num_send_reqs = 0
+        self.num_poll_reqs = 0
         self.get_families_status = "STARTING"
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
-        self.batch_size = 100
-        self.crawl_id = crawl_id
+        # Batch size we use to send tasks to funcx.
+        self.fx_batch_size = 100
 
+        # Number (current and max) of number of tasks sent to funcX for extraction.
+        self.max_extracting_tasks = 1000
+        self.num_extracting_tasks = 0
+
+        self.status_things = Queue()
+
+        # If this is turned on, should mean that we hit our local task maximum and don't want to pull down new work...
         self.pause_q_consume = False
 
         self.file_count = 0
@@ -67,6 +88,7 @@ class Orchestrator:
         self.extract_end = None
 
         self.mdata_store_path = mdata_store_path
+        self.n_fams_transferred = 0
 
         self.prefetcher_tid = None
         self.prefetch_status = None
@@ -109,7 +131,7 @@ class Orchestrator:
             raise ConnectionError("Received non-200 status from SQS!")
 
         # Adjust the queue to fit the 'prefetch' mode. One extra queue (transferred) if prefetch == True.
-        q_prefix = 'transferred' if prefetch_remote else 'crawl'
+        q_prefix = "crawl"
 
         response = self.client.get_queue_url(
             QueueName=f'{q_prefix}_{self.crawl_id}',
@@ -124,7 +146,7 @@ class Orchestrator:
         self.sqs_push_threads = {}
         self.thr_ls = []
         self.commit_threads = 1
-        self.get_family_threads = 10
+        self.get_family_threads = 20
 
         for i in range(0, self.commit_threads):
             thr = threading.Thread(target=self.validate_enqueue_loop, args=(i,))
@@ -140,68 +162,24 @@ class Orchestrator:
             print(f"Successfully started the get_next_families() thread number {i} ")
 
         # If configured to be a data 'prefetch' scenario, then we want to go get it.
-        # TODO: turned this off. TURN IT BACK ON ONCE FIXED.
-        """
+
         if prefetch_remote:
-            self.launch_prefetcher()
+            self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
+                                               crawl_id=self.crawl_id,
+                                               data_source=self.source_endpoint,
+                                               data_dest=self.dest_endpoint,
+                                               data_path=self.data_prefetch_path,
+                                               max_gb=5)  # TODO: bounce this out.
 
-        """
-        # Do the startup checks to ensure that all funcX endpoint are online.
-        self.startup_checks()
+            prefetch_thread = threading.Thread(target=self.prefetcher.main_poller_loop, args=())
+            prefetch_thread.start()
 
-    def startup_checks(self):
-        # Need to use container on all 'singularity' or 'docker' instances. Otherwise 'RAW' is okay.
-        pass
-
-    def launch_prefetcher(self):
-        pf_func = mapping['prefetcher::midway2']['func_uuid']
-
-        event = {'transfer_token': self.headers['Transfer'],
-                 'crawl_id': self.crawl_id,
-                 'data_source': self.source_endpoint,
-                 'data_dest': self.dest_endpoint,
-                 'data_path': self.data_prefetch_path,
-                 'max_gb': 50}
-
-        fx_ep_id = mapping['prefetcher::midway2']['func_uuid']
-
-        task_uuid = invoke_solo_function(event=event, fx_eid=fx_ep_id, headers=self.fx_headers, func_id=pf_func)
-
-        print(f"Headers: {self.fx_headers}")
-        self.pf_task_id = task_uuid
-        self.prefetch_status = "PROCESSING"
-
-        pf_poll_th = threading.Thread(target=self.poll_prefetcher, args=())
-        pf_poll_th.start()
-
-    def poll_prefetcher(self):
-        while True:
-
-            print(self.pf_task_id)
-
-            status_thing = remote_poll_batch(task_ids=[self.pf_task_id], headers=self.fx_headers)
-            print(f"Prefetcher status: {status_thing}")
-
-            print(type(status_thing))
-
-            if "exception_caught" in status_thing:
-                print(f"Caught funcX error: {status_thing['exception_caught']}")
-                print(f"Putting the tasks back into active queue for retry")
-            elif 'status' in status_thing[self.pf_task_id] and \
-                    status_thing[self.pf_task_id]['status'].lower() == 'success':
-                print("HEY")
-                self.prefetch_status = "SUCCEEDED"
-                print(f"[PREFETCH-POLL] Success signal received. Terminating...")
-                return
-            time.sleep(2)
-
-    # TODO: Add a preliminary loop-polling 'status check' on the endpoint that returns a noop
-    # TODO: And do it here in the init. Should print something like "endpoint online!" or return error if not.
     def validate_enqueue_loop(self, thr_id):
 
         self.logger.debug("[VALIDATE] In validation enqueue loop!")
         while True:
             insertables = []
+
             self.logger.debug(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
             print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
             print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
@@ -251,12 +229,21 @@ class Orchestrator:
         self.send_status = "RUNNING"
 
         while True:
-            # TODO: Make sure this comes in via the notebook.
-            # fx_ep = "71509922-996f-4559-b488-4588f06f0925"
+
+            if self.prefetch_remote:
+                while not self.prefetcher.orch_reader_q.empty():
+                    family = self.prefetcher.orch_reader_q.get()
+                    family_size = self.prefetcher.get_family_size(json.loads(family))
+
+                    self.prefetcher.bytes_pf_completed -= family_size
+                    self.prefetcher.orch_unextracted_bytes += family_size
+                    self.pre_launch_counter += 1
+
+                    self.families_to_process.put(family)
 
             family_list = []
             # Now keeping filling our list of families until it is empty.
-            while len(family_list) < self.batch_size and not self.families_to_process.empty():
+            while len(family_list) < self.fx_batch_size and not self.families_to_process.empty():
                 family_list.append(self.families_to_process.get())
 
             if len(family_list) == 0:
@@ -266,7 +253,6 @@ class Orchestrator:
                 if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
 
                     # Checking second time due to narrow race condition.
-                    # TODO: Add a prefetcher condition.
                     if self.families_to_process.empty() and self.get_families_status == "IDLE":
 
                         if self.prefetch_remote and self.prefetch_status in ["SUCCEEDED", "FAILED"]:
@@ -330,6 +316,9 @@ class Orchestrator:
 
             if len(self.current_batch) > 0:
                 task_ids = remote_extract_batch(self.current_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
+                self.num_send_reqs += 1
+                self.pre_launch_counter -= len(self.current_batch)
+                print(f"Total send requests: {self.num_send_reqs}")
 
                 if type(task_ids) is dict:
                     print(f"Caught funcX error: {task_ids['exception_caught']}")
@@ -348,26 +337,48 @@ class Orchestrator:
 
                 for task_id in task_ids:
                     self.task_dict["active"].put(task_id)
+                    self.num_extracting_tasks += 1
 
                 # Empty the batch! Everything in here has been sent :)
                 self.current_batch = []
 
     def launch_poll(self):
         print("POLLER IS STARTING!!!!")
-        po_thr = threading.Thread(target=self.poll_responses, args=())
+        po_thr = threading.Thread(target=self.poll_extractions_and_stats, args=())
         po_thr.start()
 
-    # TODO: Smarter batching that takes into account file size.
     def get_next_families_loop(self):
+        """
+
+        get_next_families() will keep polling SQS queue containing all of the crawled data. This should generally be
+        read as its own thread, and terminate when the orchestrator's POLLER is completed
+        (because, well, that means everything is finished)
+
+        If prefetching is turned OFF, then families will be placed directly into families_to_process queue.
+
+        If prefetching is turned ON, then families will be placed directly into families_to_prefetch queue.
+
+        NOTE: *n* current threads of this loop!
+
+        """
+
+        final_kill_check = False
 
         while True:
 
+            # Do some queue pause checks (if too many current uncompleted tasks)
+            if self.num_extracting_tasks > self.max_extracting_tasks:
+                self.pause_q_consume = True
+                print(f"[GET] Num. active tasks ({self.num_extracting_tasks}) "
+                      f"above threshold. Pausing SQS consumption...")
+
             if self.pause_q_consume:
-                print("[GET NEXT FAMILIES] Pausing pull of new families. Sleeping for 20 seconds...")
+                print("[GET] Pausing pull of new families. Sleeping for 20 seconds...")
                 time.sleep(20)
                 continue
 
             # Step 1. Get ceiling(batch_size/10) messages down from queue.
+            # Otherwise, we can just pluck straight from the sqs crawl queue
             sqs_response = self.client.receive_message(  # TODO: properly try/except this block.
                 QueueUrl=self.crawl_queue,
                 MaxNumberOfMessages=10,
@@ -380,13 +391,37 @@ class Orchestrator:
             if ("Messages" in sqs_response) and (len(sqs_response["Messages"]) > 0):
                 self.get_families_status = "ACTIVE"
                 for message in sqs_response["Messages"]:
+                    self.num_families_fetched += 1
                     message_body = message["Body"]
+                    # print(f"Message: {message_body}")
 
-                    self.families_to_process.put(message_body)
+                    # IF WE ARE NOT PREFETCHING, place directly into processing queue.
+                    if not self.prefetch_remote:
+                        self.families_to_process.put(message_body)
+
+                    # OTHERWISE, place into prefetching queue.
+                    else:
+                        self.prefetcher.next_prefetch_queue.put(message_body)
 
                     del_list.append({'ReceiptHandle': message["ReceiptHandle"],
                                      'Id': message["MessageId"]})
                 found_messages = True
+
+            # If we didn't get messages last time around, and the crawl is over.
+            if final_kill_check:
+                # Make sure no final messages squeaked in...
+                if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
+
+                    # If GET about to die, then the next step is that prefetcher should die.
+                    # TODO: Technically a race condition here since there are n concurrent threads.
+                    # TODO: Should wait until this is the LAST such thread.
+                    self.prefetcher.kill_prefetcher = True
+
+                    print(f"[GET] Crawl successful and no messages in queue to get...")
+                    print("[GET] Terminating...")
+                    return
+                else:
+                    final_kill_check = False
 
             # Step 2. Delete the messages from SQS.
             if len(del_list) > 0:
@@ -394,17 +429,15 @@ class Orchestrator:
                     QueueUrl=self.crawl_queue,
                     Entries=del_list)
 
-            # Simple because if the poller is done, then there's no point pulling down any work.
-            if self.poll_status == "COMPLETED":
-                print(f"[GET] Terminating thread to get more work.")
-                print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
-                print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
-
-                return  # terminate the thread.
-
             if not deleted_messages and not found_messages:
-                print("FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
+                print("[GET] FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
                 self.get_families_status = "IDLE"
+
+            if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
+                status_dict = get_crawl_status(self.crawl_id)
+
+                if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
+                    final_kill_check = True
 
             time.sleep(2)
 
@@ -416,15 +449,77 @@ class Orchestrator:
         fam_batch_dict = family_batch.to_dict()
         return fam_batch_dict
 
-    def poll_responses(self):
-        success_returns = 0
+    def print_stats(self):
+        # STAT CHECK: if we haven't updated stats in 5 seconds, then we update.
+        cur_time = time.time()
+        if cur_time - self.last_checked > 5:
+            total_bytes = self.prefetcher.orch_unextracted_bytes + \
+                          self.prefetcher.bytes_pf_completed + \
+                          self.prefetcher.bytes_pf_in_flight
+
+            print("********** EXTRACTION STATISTICS **********")
+
+            print("Phase 1: Fetch crawl tasks from SQS...")
+            print(f"\tTotal messages pulled: {self.num_families_fetched}")
+            files_fetched_per_second = self.num_families_fetched / (cur_time - self.get_families_start_time)
+            print(f"\tSQS messages per second: {files_fetched_per_second}\n")
+
+            print("Phase 2: prefetch")
+            print(f"\t Eff. dir size (GB): {total_bytes / 1024 / 1024 / 1024} | "
+                  f"\tNew Pulled Messages {self.prefetcher.pf_msgs_pulled_since_last_batch}")
+            print(f"\t N Transfer Tasks: {self.prefetcher.num_transfers}")
+            print(f"\t Families transferred per second: "
+                  f"{self.prefetcher.num_families_transferred / (cur_time - self.get_families_start_time)} \n")
+
+            print("Phase 3: pre-extraction")
+            print(f"\tpre-funcX messages: {self.pre_launch_counter + self.prefetcher.orch_reader_q.qsize()}")
+            print(f"\tin-funcX messages: {self.num_extracting_tasks}\n")
+
+            print("Phase 4: polling")
+            print(f"\t Successes: {self.success_returns}")
+            print(f"\t Failures: {self.failed_returns}\n")
+
+            n_pulled = self.prefetcher.next_prefetch_queue.qsize()
+            n_pf_batch = self.prefetcher.pf_msgs_pulled_since_last_batch
+            n_pf = self.prefetcher.num_families_mid_transfer
+            n_awaiting_fx = self.pre_launch_counter + self.prefetcher.orch_reader_q.qsize()
+            n_in_fx = self.num_extracting_tasks
+            n_success = self.success_returns
+
+            total_tracked = n_success + n_in_fx + n_awaiting_fx + n_pf + n_pf_batch + n_pulled
+
+            print(f"\n** TASK LOCATION BREAKDOWN **\n"
+                  f"--Pulled: {n_pulled}\n"
+                  f"--In pf batching: {n_pf_batch}\n"
+                  f"--Prefetching: {n_pf}\n" 
+                  f"--Awaiting extraction: {n_awaiting_fx}\n"
+                  f"--In extraction: {n_in_fx}\n"
+                  f"--Completed: {n_success}\n"
+                  f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}")
+
+            self.last_checked = time.time()
+
+    def poll_batch_chunks(self, sublist, headers):
+        status_thing = remote_poll_batch(sublist, headers)
+        self.num_poll_reqs += 1
+        self.status_things.put(status_thing)
+        time.sleep(1)  # TODO: MIGHT WANT TO TAKE THIS OUT. JUST SEEING IF THIS FIXES funcX SCALE-UP.
+        return
+
+    def poll_extractions_and_stats(self):
+        # success_returns = 0
         mod_not_found = 0
-        failed_returns = 0
+        # failed_returns = 0
         type_errors = 0
 
         self.poll_status = "RUNNING"
 
         while True:
+
+            # This will attempt to print stats on every iteration.
+            #   Note: internally, this will only execute max every 5 seconds.
+            self.print_stats()
+
             if self.task_dict["active"].empty():
 
                 if self.send_status == "SUCCEEDED":
@@ -450,94 +545,130 @@ class Orchestrator:
                 tids_to_poll.append(ex_id)
 
             t_last_poll = time.time()
+
             # Send off task_ids to poll, retrieve a bunch of statuses.
-            status_thing = remote_poll_batch(task_ids=tids_to_poll, headers=self.fx_headers)
+            tid_sublists = create_list_chunks(tids_to_poll, 100)  # TODO: should definitely be an arg.
 
-            if "exception_caught" in status_thing:
-                print(f"Caught funcX error: {status_thing['exception_caught']}")
-                print(f"Putting the tasks back into active queue for retry")
+            polling_threads = []
 
-                for reject_tid in tids_to_poll:
-                    self.task_dict["active"].put(reject_tid)
+            for tid_sublist in tid_sublists:
 
-                print(f"Pausing for 20 seconds...")
-                self.pause_q_consume = True
-                time.sleep(20)
-                continue
-            else:
-                self.pause_q_consume = False
+                # If there's an actual thing in the list...
+                if len(tid_sublist) > 0:
 
-            for tid in status_thing:
-                if "result" in status_thing[tid]:
-                    res = self.fx_ser.deserialize(status_thing[tid]['result'])
+                    thr = threading.Thread(target=self.poll_batch_chunks, args=(tid_sublist, self.fx_headers))
+                    thr.start()
+                    polling_threads.append(thr)
 
-                    if "family_batch" in res:
-                        family_batch = res["family_batch"]
-                        unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+            # Now we should wait for our fan-out threads to fan-in
+            for thread in polling_threads:
+                thread.join()
 
-                        # TODO: make this a regular feature for matio (so this code isn't necessary...)
-                        if 'event' in unpacked_metadata:
-                            family_batch = unpacked_metadata['event']['family_batch']
-                            unpacked_metadata = family_batch.to_dict()
+            print(f"Total poll requests: {self.num_poll_reqs}")
 
-                        # leave this in. We have the I/O to print this (great for debugging)
-                        print(unpacked_metadata)
+            while not self.status_things.empty():
 
-                        json_mdata = json.dumps(unpacked_metadata, cls=NumpyEncoder)
-                        print(json_mdata)
+                status_thing = self.status_things.get()
 
-                        try:
-                            self.to_validate_q.put({"Id": str(self.file_count),
-                                                    "MessageBody": json_mdata})
-                            self.file_count += 1
-                        except TypeError as e1:
-                            print(f"Type error: {e1}")
-                            type_errors += 1
-                            print(f"Total type errors: {type_errors}")
-                    else:
-                        print(f"[Poller]: \"family_batch\" not in res!")
+                print(f"Status thing: {status_thing}")
 
-                    success_returns += 1
-                    self.logger.debug(f"Success Counter: {success_returns}")
-                    self.logger.debug(f"Failure Counter: {failed_returns}")
-                    self.logger.debug(f"Received response: {res}")
+                if "exception_caught" in status_thing:
+                    print(f"Caught funcX error: {status_thing['exception_caught']}")
+                    print(f"Putting the tasks back into active queue for retry")
 
-                    # TODO: return group_ids so that we may mark accordingly.
-                    if type(res) is not dict:
-                        print(f"Res is not dict: {res}")
-                        continue
+                    for reject_tid in tids_to_poll:
+                        self.task_dict["active"].put(reject_tid)
 
-                    elif 'transfer_time' in res:
-                        if res['transfer_time'] > 0:
-                            self.t_transfer += res['transfer_time']
-                            self.n_fams_transferred += 1
-                            print(f"Avg. Transfer time: {self.t_transfer/self.n_fams_transferred}")
-
-                    # This just means fixing Google Drive extractors...
-                    elif 'trans_time' in res:
-                        if res['trans_time'] > 0:
-                            self.t_transfer += res['trans_time']
-                            self.n_fams_transferred += 1
-                            print(f"Avg. Transfer time: {self.t_transfer/self.n_fams_transferred}")
-
-                elif "exception" in status_thing[tid]:
-                    exc = self.fx_ser.deserialize(status_thing[tid]['exception'])
-                    try:
-                        exc.reraise()
-                    except ModuleNotFoundError:
-                        mod_not_found += 1
-                        print(f"Num. ModuleNotFound: {mod_not_found}")
-
-                    except Exception as e:
-                        print(f"Caught exception: {e}")
-                        print("Continuing!")
-                        pass
-
-                    failed_returns += 1
-                    print(f"Exception caught: {exc}")
-
+                    print(f"Pausing for 20 seconds...")
+                    self.pause_q_consume = True
+                    time.sleep(20)
+                    continue
                 else:
-                    self.task_dict["active"].put(tid)
+                    self.pause_q_consume = False
+
+                for tid in status_thing:
+                    task_obj = status_thing[tid]
+
+                    if "result" in task_obj:
+                        res = self.fx_ser.deserialize(task_obj['result'])
+
+                        # Decrement number of tasks being extracted!
+                        self.num_extracting_tasks -= 1
+
+                        if "family_batch" in res:
+                            family_batch = res["family_batch"]
+                            unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+
+                            # TODO: make this a regular feature for matio (so this code isn't necessary...)
+                            if 'event' in unpacked_metadata:
+                                family_batch = unpacked_metadata['event']['family_batch']
+                                unpacked_metadata = family_batch.to_dict()
+                                unpacked_metadata['dataset'] = self.dataset_mdata
+
+                            print(f"[DEBUG] Unpacked metadata: {unpacked_metadata}")
+
+                            if self.prefetch_remote:
+                                total_family_size = 0
+                                for family in family_batch.families:
+                                    total_family_size += self.prefetcher.get_family_size(family.to_dict())
+
+                                self.prefetcher.orch_unextracted_bytes -= total_family_size
+
+                            json_mdata = json.dumps(unpacked_metadata, cls=NumpyEncoder)
+
+                            try:
+                                self.to_validate_q.put({"Id": str(self.file_count),
+                                                        "MessageBody": json_mdata})
+                                self.file_count += 1
+                            except TypeError as e1:
+                                print(f"Type error: {e1}")
+                                type_errors += 1
+                                print(f"Total type errors: {type_errors}")
+                        else:
+                            print(f"[Poller]: \"family_batch\" not in res!")
+
+                        self.success_returns += 1
+                        self.logger.debug(f"Success Counter: {self.success_returns}")
+                        self.logger.debug(f"Failure Counter: {self.failed_returns}")
+
+                        # Leave this in. Great for debugging and we have the IO for it.
+                        self.logger.debug(f"Received response: {res}")
+
+                        if type(res) is not dict:
+                            print(f"Res is not dict: {res}")
+                            continue
+
+                        elif 'transfer_time' in res:
+                            if res['transfer_time'] > 0:
+                                self.t_transfer += res['transfer_time']
+                                self.n_fams_transferred += 1
+                                print(f"Avg. Transfer time: {self.t_transfer/self.n_fams_transferred}")
+
+                        # This just means fixing Google Drive extractors...
+                        elif 'trans_time' in res:
+                            if res['trans_time'] > 0:
+                                self.t_transfer += res['trans_time']
+                                self.n_fams_transferred += 1
+                                print(f"Avg. Transfer time: {self.t_transfer/self.n_fams_transferred}")
+
+                    elif "exception" in task_obj:
+                        exc = self.fx_ser.deserialize(task_obj['exception'])
+                        try:
+                            exc.reraise()
+                        except ModuleNotFoundError:
+                            mod_not_found += 1
+                            print(f"Num. ModuleNotFound: {mod_not_found}")
+
+                        except Exception as e:
+                            print(f"Caught exception: {e}")
+                            print("Continuing!")
+                            pass
+
+                        self.failed_returns += 1
+                        print(f"Exception caught: {exc}")
+
+                    else:
+                        self.task_dict["active"].put(tid)
 
             t_since_last_poll = time.time() - t_last_poll
             t_poll_gap = self.poll_gap_s - t_since_last_poll
