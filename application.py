@@ -143,7 +143,8 @@ def extract_mdata():
             mdata_store_path = r["mdata_store_path"]
             print(f"Received {r['repo_type']} data!")
             extractor_finder = "matio"
-            prefetch_remote = True  # TODO: bump this out to the client.
+            print("SETTING PREFETCH REMOTE")
+            prefetch_remote = r["prefetch_remote"]
 
             data_prefetch_path = r['data_prefetch_path']
 
