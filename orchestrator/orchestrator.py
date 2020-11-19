@@ -629,8 +629,6 @@ class Orchestrator:
                             print(f"[Poller]: \"family_batch\" not in res!")
 
                         self.success_returns += 1
-                        self.logger.debug(f"Success Counter: {self.success_returns}")
-                        self.logger.debug(f"Failure Counter: {self.failed_returns}")
 
                         # Leave this in. Great for debugging and we have the IO for it.
                         self.logger.debug(f"Received response: {res}")
