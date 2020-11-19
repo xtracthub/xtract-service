@@ -52,14 +52,6 @@ class GlobusPrefetcher:
 
         self.get_globus_tc(self.transfer_token)
 
-        # Get rid of log file if it already exists. # TODO: be better about this.
-        if os.path.exists("folder_size.csv"):
-            os.remove("folder_size.csv")
-
-        # Now create a fresh file here.
-        with open("folder_size.csv", "w") as g:
-            g.close()
-
         self.orch_reader_q = Queue()
 
         # Puppet variables. The orchestrator will edit these.
@@ -110,8 +102,8 @@ class GlobusPrefetcher:
                     self.orch_reader_q.put(json.dumps(family))
                     self.num_families_mid_transfer -= 1
 
-                print(f"SLEEPING??? ")
-                time.sleep(0.5)  # TODO: why is this sleep here?
+                # Sleep is here to avoid pressure on the Globus service in case of 'not done'.
+                time.sleep(0.5)
 
             if self.transfer_check_queue.empty():
 
@@ -124,7 +116,7 @@ class GlobusPrefetcher:
 
     def get_new_families(self):
 
-        # Grab 10 from queue.
+        # Grab n tasks at a timefrom the internal 'to-prefetch' queue.
         i = 0
         families_to_pf = []
 

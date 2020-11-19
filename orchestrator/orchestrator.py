@@ -73,6 +73,7 @@ class Orchestrator:
 
         # Batch size we use to send tasks to funcx.
         self.fx_batch_size = 100
+        self.n_fx_task_sublists = 100
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
         self.max_extracting_tasks = 1000
@@ -414,7 +415,7 @@ class Orchestrator:
                 if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
 
                     # If GET about to die, then the next step is that prefetcher should die.
-                    # TODO: Technically a race condition here since there are n concurrent threads.
+                    # TODO: *Technically* a race condition here since there are n concurrent threads.
                     # TODO: Should wait until this is the LAST such thread.
                     self.prefetcher.kill_prefetcher = True
 
@@ -431,7 +432,7 @@ class Orchestrator:
                     Entries=del_list)
 
             if not deleted_messages and not found_messages:
-                print("[GET] FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
+                self.logger.info("[GET] FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
                 self.get_families_status = "IDLE"
 
             if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
@@ -508,9 +509,7 @@ class Orchestrator:
         return
 
     def poll_extractions_and_stats(self):
-        # success_returns = 0
         mod_not_found = 0
-        # failed_returns = 0
         type_errors = 0
 
         self.poll_status = "RUNNING"
@@ -626,7 +625,7 @@ class Orchestrator:
                                 type_errors += 1
                                 print(f"Total type errors: {type_errors}")
                         else:
-                            print(f"[Poller]: \"family_batch\" not in res!")
+                            self.logger.error(f"[Poller]: \"family_batch\" not in res!")
 
                         self.success_returns += 1
 
