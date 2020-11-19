@@ -148,6 +148,18 @@ class Orchestrator:
         self.commit_threads = 1
         self.get_family_threads = 20
 
+        print(f"ARE WE PREFETCHING? {self.prefetch_remote}")
+        if self.prefetch_remote:
+            self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
+                                               crawl_id=self.crawl_id,
+                                               data_source=self.source_endpoint,
+                                               data_dest=self.dest_endpoint,
+                                               data_path=self.data_prefetch_path,
+                                               max_gb=5)  # TODO: bounce this out.
+
+            prefetch_thread = threading.Thread(target=self.prefetcher.main_poller_loop, args=())
+            prefetch_thread.start()
+
         for i in range(0, self.commit_threads):
             thr = threading.Thread(target=self.validate_enqueue_loop, args=(i,))
             self.thr_ls.append(thr)
@@ -162,18 +174,6 @@ class Orchestrator:
             print(f"Successfully started the get_next_families() thread number {i} ")
 
         # If configured to be a data 'prefetch' scenario, then we want to go get it.
-
-        print(f"ARE WE PREFETCHING? {self.prefetch_remote}")
-        if self.prefetch_remote:
-            self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
-                                               crawl_id=self.crawl_id,
-                                               data_source=self.source_endpoint,
-                                               data_dest=self.dest_endpoint,
-                                               data_path=self.data_prefetch_path,
-                                               max_gb=5)  # TODO: bounce this out.
-
-            prefetch_thread = threading.Thread(target=self.prefetcher.main_poller_loop, args=())
-            prefetch_thread.start()
 
     def validate_enqueue_loop(self, thr_id):
 
