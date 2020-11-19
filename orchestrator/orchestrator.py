@@ -163,7 +163,8 @@ class Orchestrator:
 
         # If configured to be a data 'prefetch' scenario, then we want to go get it.
 
-        if prefetch_remote:
+        print(f"ARE WE PREFETCHING? {self.prefetch_remote}")
+        if self.prefetch_remote:
             self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
                                                crawl_id=self.crawl_id,
                                                data_source=self.source_endpoint,
