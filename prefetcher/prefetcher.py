@@ -1,9 +1,9 @@
 
+
 from queue import Queue
 import globus_sdk
 import json
 import time
-import os
 import threading
 
 
@@ -51,14 +51,6 @@ class GlobusPrefetcher:
         self.bytes_pf_completed = 0  # This goes before they become 'bytes_orch_unextracted'
 
         self.get_globus_tc(self.transfer_token)
-
-        # Get rid of log file if it already exists. # TODO: be better about this.
-        if os.path.exists("folder_size.csv"):
-            os.remove("folder_size.csv")
-
-        # Now create a fresh file here.
-        with open("folder_size.csv", "w") as g:
-            g.close()
 
         self.orch_reader_q = Queue()
 
@@ -110,8 +102,8 @@ class GlobusPrefetcher:
                     self.orch_reader_q.put(json.dumps(family))
                     self.num_families_mid_transfer -= 1
 
-                print(f"SLEEPING??? ")
-                time.sleep(0.5)  # TODO: why is this sleep here?
+                # Sleep is here to avoid pressure on the Globus service in case of 'not done'.
+                time.sleep(0.5)
 
             if self.transfer_check_queue.empty():
 
@@ -124,7 +116,7 @@ class GlobusPrefetcher:
 
     def get_new_families(self):
 
-        # Grab 10 from queue.
+        # Grab n tasks at a timefrom the internal 'to-prefetch' queue.
         i = 0
         families_to_pf = []
 
@@ -208,14 +200,19 @@ class GlobusPrefetcher:
             else:
                 print(f"[PF] Directory full with {eff_dir_size / 1024 / 1024 / 1024} GB. Sleeping for 5s...")
                 print(self.orch_unextracted_bytes)
-                print(self.bytes_pf_in_flight)
+                print(self.bytes_pf_in_flight)  # TODO: in-flight.
                 print(self.bytes_pf_completed)
                 time.sleep(5)
 
-            # If we have a full batch OR it's the last batch in the job...
-            if self.current_batch_bytes >= self.block_size or \
-                    (self.last_batch and len(self.current_batch) > 0) or\
-                    len(self.current_batch) > self.max_files_in_batch:
+            # The following are the conditions in which we send more work:
+            # 1. batch_size_full: We have filled up our block and it it now time to send more data.
+            batch_size_full = self.current_batch_bytes >= self.block_size
+            # 2. last_batch: Means we have a too-small batch, but no new work is coming.
+            last_batch = self.last_batch and len(self.current_batch) > 0
+            # 3. batch_n_files_full: We have filled up the maximum number of files for 1 batch.
+            batch_n_files_full = len(self.current_batch) > self.max_files_in_batch
+
+            if batch_size_full or last_batch or batch_n_files_full:
                 print("[PF] Generating a batch transfer object...")
                 self.pf_msgs_pulled_since_last_batch = 0
 
