@@ -71,6 +71,9 @@ class Orchestrator:
         self.num_poll_reqs = 0
         self.get_families_status = "STARTING"
 
+        # This is here for testing. Only want to test 50k files? Set this to 50k.
+        self.task_cap_until_termination = 55000
+
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         # Batch size we use to send tasks to funcx.
@@ -367,6 +370,9 @@ class Orchestrator:
         while True:
             # Getting this var to avoid flooding ourselves with SQS messages we can't process
             # num_pulled_but_not_pfing = self.prefetcher.next_prefetch_queue.qsize()
+
+            if self.num_families_fetched >= self.task_cap_until_termination:
+                print(f"HIT CAP ON NUMBER OF TASKS. Terminating...")
 
             # Do some queue pause checks (if too many current uncompleted tasks)
             if self.num_extracting_tasks > self.max_extracting_tasks:
