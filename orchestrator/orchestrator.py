@@ -459,6 +459,7 @@ class Orchestrator:
 
     def unpack_returned_family_batch(self, family_batch):
         fam_batch_dict = family_batch.to_dict()
+
         return fam_batch_dict
 
     def update_and_print_stats(self):
@@ -610,10 +611,13 @@ class Orchestrator:
                             if self.prefetch_remote:
                                 total_family_size = 0
                                 for family in family_batch.families:
-                                    family['metadata']["t_funcx_req_received"] = time.time()
+                                    # family['metadata']["t_funcx_req_received"] = time.time()
                                     total_family_size += self.prefetcher.get_family_size(family.to_dict())
 
                                 self.prefetcher.orch_unextracted_bytes -= total_family_size
+
+                            for family in unpacked_metadata['families']:
+                                family['metadata']["t_funcx_req_received"] = time.time()
 
                             json_mdata = json.dumps(unpacked_metadata, cls=NumpyEncoder)
 
