@@ -21,7 +21,7 @@ def remote_extract_batch(items_to_batch, ep_id, headers):
 
     try:
         resp_dict = json.loads(resp.content)
-        print(f"RESPONSE: {resp_dict}")
+        # print(f"RESPONSE: {resp_dict}")
 
     except Exception: # json.JSONDecodeError:  # TODO: bring back.
         error_str = f"Batch response is not valid JSON: {resp.content}"
