@@ -72,7 +72,7 @@ class Orchestrator:
         self.get_families_status = "STARTING"
 
         # This is here for testing. Only want to test 50k files? Set this to 50k.
-        self.task_cap_until_termination = 55000
+        self.task_cap_until_termination = 61000
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
@@ -373,6 +373,9 @@ class Orchestrator:
 
             if self.num_families_fetched >= self.task_cap_until_termination:
                 print(f"HIT CAP ON NUMBER OF TASKS. Terminating...")
+                # Here we also tell the prefetcher that it's time to start terminating.
+                self.prefetcher.last_batch = True
+                return
 
             # Do some queue pause checks (if too many current uncompleted tasks)
             if self.num_extracting_tasks > self.max_extracting_tasks:
