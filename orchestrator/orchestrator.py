@@ -81,7 +81,7 @@ class Orchestrator:
         self.max_extracting_tasks = 1000
         self.num_extracting_tasks = 0
 
-        self.max_pre_prefetch = 15000
+        self.max_pre_prefetch = 15000  # TODO: Integrate this to actually fix timing bug.
 
         self.status_things = Queue()
 
@@ -160,7 +160,7 @@ class Orchestrator:
                                                data_source=self.source_endpoint,
                                                data_dest=self.dest_endpoint,
                                                data_path=self.data_prefetch_path,
-                                               max_gb=5)  # TODO: bounce this out.
+                                               max_gb=500)  # TODO: bounce this out.
             self.logger.info("Prefetcher successfully launched!")
 
             prefetch_thread = threading.Thread(target=self.prefetcher.main_poller_loop, args=())
