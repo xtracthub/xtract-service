@@ -17,6 +17,8 @@ from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
 from orchestrator.orch_utils.utils import create_list_chunks
 
+# TODO: Python garbage collection!
+
 
 class Orchestrator:
 
@@ -73,10 +75,13 @@ class Orchestrator:
 
         # Batch size we use to send tasks to funcx.
         self.fx_batch_size = 100
+        self.n_fx_task_sublists = 100
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
         self.max_extracting_tasks = 1000
         self.num_extracting_tasks = 0
+
+        self.max_pre_prefetch = 15000
 
         self.status_things = Queue()
 
@@ -111,7 +116,7 @@ class Orchestrator:
             '%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)  # TODO: let's make this configurable.
 
         # This creates the extraction and validation queues on the Simple Queue Service.
         self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"  # TODO: env var.
@@ -148,14 +153,15 @@ class Orchestrator:
         self.commit_threads = 1
         self.get_family_threads = 20
 
-        print(f"ARE WE PREFETCHING? {self.prefetch_remote}")
         if self.prefetch_remote:
+            self.logger.info("Launching prefetcher...")
             self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
                                                crawl_id=self.crawl_id,
                                                data_source=self.source_endpoint,
                                                data_dest=self.dest_endpoint,
                                                data_path=self.data_prefetch_path,
                                                max_gb=5)  # TODO: bounce this out.
+            self.logger.info("Prefetcher successfully launched!")
 
             prefetch_thread = threading.Thread(target=self.prefetcher.main_poller_loop, args=())
             prefetch_thread.start()
@@ -165,25 +171,19 @@ class Orchestrator:
             self.thr_ls.append(thr)
             thr.start()
             self.sqs_push_threads[i] = True
-        print(f"Successfully started {len(self.sqs_push_threads)} SQS push threads!")
+        self.logger.info(f"Successfully started {len(self.sqs_push_threads)} SQS push threads!")
 
         for i in range(0, self.get_family_threads):
-            print(f"Attempting to start get_next_families() as its own thread... ")
+            self.logger.info(f"Attempting to start get_next_families() as its own thread [{i}]... ")
             consumer_thr = threading.Thread(target=self.get_next_families_loop, args=())
             consumer_thr.start()
             print(f"Successfully started the get_next_families() thread number {i} ")
-
-        # If configured to be a data 'prefetch' scenario, then we want to go get it.
 
     def validate_enqueue_loop(self, thr_id):
 
         self.logger.debug("[VALIDATE] In validation enqueue loop!")
         while True:
             insertables = []
-
-            self.logger.debug(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
-            print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
-            print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
 
             # If empty, then we want to return.
             if self.to_validate_q.empty():
@@ -198,10 +198,10 @@ class Orchestrator:
                         self.commit_completed = True
                         self.poll_status = "COMPLETED"
                         self.extract_end = time.time()
-                        print(f"Thread {thr_id} is terminating!")
+                        self.logger.info(f"Thread {thr_id} is terminating!")
                         return 0
 
-                print("[Validate]: sleeping for 5 seconds... ")
+                self.logger.info("[Validate]: sleeping for 5 seconds... ")
                 time.sleep(5)
                 continue
 
@@ -209,11 +209,10 @@ class Orchestrator:
 
             # Remove up to n elements from queue, where n is current_batch.
             current_batch = 1
-            while not self.to_validate_q.empty() and current_batch < 10:
+            while not self.to_validate_q.empty() and current_batch < 8:  # TODO: manual downsize so fits on Q.
                 item_to_add = self.to_validate_q.get()
                 insertables.append(item_to_add)
                 current_batch += 1
-            print(f"[VALIDATE] Current insertables: {str(insertables)[0:50]} . . .")
 
             try:
                 ta = time.time()
@@ -259,13 +258,13 @@ class Orchestrator:
                         if self.prefetch_remote and self.prefetch_status in ["SUCCEEDED", "FAILED"]:
 
                             self.send_status = "SUCCEEDED"
-                            print("[SEND] Queue still empty -- terminating!")
+                            self.logger.info("[SEND] Queue still empty -- terminating!")
 
                             # this should terminate thread, because there is nothing to process and queue empty
                             return
 
                     else:  # Something snuck in during the race condition... process it!
-                        print("[SEND] Discovered final output despite crawl termination. Processing...")
+                        self.logger.info("[SEND] Discovered final output despite crawl termination. Processing...")
                         time.sleep(0.5)  # This is a multi-minute task and only is reached due to starvation.
 
             # Cast list to FamilyBatch
@@ -319,12 +318,11 @@ class Orchestrator:
                 task_ids = remote_extract_batch(self.current_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
                 self.num_send_reqs += 1
                 self.pre_launch_counter -= len(self.current_batch)
-                print(f"Total send requests: {self.num_send_reqs}")
 
                 if type(task_ids) is dict:
-                    print(f"Caught funcX error: {task_ids['exception_caught']}")
-                    print(f"Putting the tasks back into active queue for retry")
-    
+                    self.logger.exception(f"Caught funcX error: {task_ids['exception_caught']}. \n"
+                                          f"Putting the tasks back into active queue for retry")
+
                     for reject_fam_batch in self.current_batch:
 
                         fam_batch_dict = reject_fam_batch['event']['family_batch']
@@ -332,7 +330,7 @@ class Orchestrator:
                         for reject_fam in fam_batch_dict['families']:
                             self.families_to_process.put(json.dumps(reject_fam))
     
-                    print(f"Pausing for 10 seconds...")
+                    self.logger.info(f"Pausing for 10 seconds...")
                     time.sleep(10)
                     continue
 
@@ -344,9 +342,10 @@ class Orchestrator:
                 self.current_batch = []
 
     def launch_poll(self):
-        print("POLLER IS STARTING!!!!")
+        self.logger.info("Launching poller...")
         po_thr = threading.Thread(target=self.poll_extractions_and_stats, args=())
         po_thr.start()
+        self.logger.info("Poller successfully launched!")
 
     def get_next_families_loop(self):
         """
@@ -366,15 +365,22 @@ class Orchestrator:
         final_kill_check = False
 
         while True:
+            # Getting this var to avoid flooding ourselves with SQS messages we can't process
+            # num_pulled_but_not_pfing = self.prefetcher.next_prefetch_queue.qsize()
 
             # Do some queue pause checks (if too many current uncompleted tasks)
             if self.num_extracting_tasks > self.max_extracting_tasks:
                 self.pause_q_consume = True
-                print(f"[GET] Num. active tasks ({self.num_extracting_tasks}) "
+                self.logger.info(f"[GET] Num. active tasks ({self.num_extracting_tasks}) "
                       f"above threshold. Pausing SQS consumption...")
 
+            # elif num_pulled_but_not_pfing >= self.max_extracting_tasks:
+            #     self.pause_q_consume = True
+            #     self.logger.info(f"[GET] Num. pre- prefetching tasks ({self.num_extracting_tasks}) "
+            #                      f"above threshold. Pausing SQS consumption...")
+
             if self.pause_q_consume:
-                print("[GET] Pausing pull of new families. Sleeping for 20 seconds...")
+                self.logger.info("[GET] Pausing pull of new families. Sleeping for 20 seconds...")
                 time.sleep(20)
                 continue
 
@@ -394,7 +400,6 @@ class Orchestrator:
                 for message in sqs_response["Messages"]:
                     self.num_families_fetched += 1
                     message_body = message["Body"]
-                    # print(f"Message: {message_body}")
 
                     # IF WE ARE NOT PREFETCHING, place directly into processing queue.
                     if not self.prefetch_remote:
@@ -414,12 +419,12 @@ class Orchestrator:
                 if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
 
                     # If GET about to die, then the next step is that prefetcher should die.
-                    # TODO: Technically a race condition here since there are n concurrent threads.
+                    # TODO: *Technically* a race condition here since there are n concurrent threads.
                     # TODO: Should wait until this is the LAST such thread.
                     self.prefetcher.kill_prefetcher = True
 
-                    print(f"[GET] Crawl successful and no messages in queue to get...")
-                    print("[GET] Terminating...")
+                    self.logger.info(f"[GET] Crawl successful and no messages in queue to get...")
+                    self.logger.info("[GET] Terminating...")
                     return
                 else:
                     final_kill_check = False
@@ -431,7 +436,7 @@ class Orchestrator:
                     Entries=del_list)
 
             if not deleted_messages and not found_messages:
-                print("[GET] FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
+                self.logger.info("[GET] FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
                 self.get_families_status = "IDLE"
 
             if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
@@ -450,20 +455,13 @@ class Orchestrator:
         fam_batch_dict = family_batch.to_dict()
         return fam_batch_dict
 
-    def print_stats(self):
+    def update_and_print_stats(self):
         # STAT CHECK: if we haven't updated stats in 5 seconds, then we update.
         cur_time = time.time()
         if cur_time - self.last_checked > 5:
             total_bytes = self.prefetcher.orch_unextracted_bytes + \
                           self.prefetcher.bytes_pf_completed + \
                           self.prefetcher.bytes_pf_in_flight
-
-            print("********** EXTRACTION STATISTICS **********")
-
-            print("Phase 1: Fetch crawl tasks from SQS...")
-            print(f"\tTotal messages pulled: {self.num_families_fetched}")
-            files_fetched_per_second = self.num_families_fetched / (cur_time - self.get_families_start_time)
-            print(f"\tSQS messages per second: {files_fetched_per_second}\n")
 
             print("Phase 2: prefetch")
             print(f"\t Eff. dir size (GB): {total_bytes / 1024 / 1024 / 1024} | "
@@ -479,9 +477,12 @@ class Orchestrator:
             print("Phase 4: polling")
             print(f"\t Successes: {self.success_returns}")
             print(f"\t Failures: {self.failed_returns}\n")
+            self.logger.debug(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
 
             n_pulled = self.prefetcher.next_prefetch_queue.qsize()
+            n_pulled_per_sec = self.num_families_fetched / (cur_time - self.get_families_start_time)
             n_pf_batch = self.prefetcher.pf_msgs_pulled_since_last_batch
+            n_families_pf_per_sec = self.prefetcher.num_families_transferred / (cur_time - self.get_families_start_time)
             n_pf = self.prefetcher.num_families_mid_transfer
             n_awaiting_fx = self.pre_launch_counter + self.prefetcher.orch_reader_q.qsize()
             n_in_fx = self.num_extracting_tasks
@@ -489,16 +490,21 @@ class Orchestrator:
 
             total_tracked = n_success + n_in_fx + n_awaiting_fx + n_pf + n_pf_batch + n_pulled
 
-            print(f"\n** TASK LOCATION BREAKDOWN **\n"
-                  f"--Pulled: {n_pulled}\n"
-                  f"--In pf batching: {n_pf_batch}\n"
-                  f"--Prefetching: {n_pf}\n" 
-                  f"--Awaiting extraction: {n_awaiting_fx}\n"
-                  f"--In extraction: {n_in_fx}\n"
-                  f"--Completed: {n_success}\n"
-                  f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}")
+            self.logger.info(f"\n** TASK LOCATION BREAKDOWN **\n"
+                             f"--Pulled: {n_pulled}\t|\t({n_pulled_per_sec}/s)\n"
+                             f"--In pf batching: {n_pf_batch}\n"
+                             f"--Prefetching: {n_pf}\t|\t({n_families_pf_per_sec})\n" 
+                             f"--Awaiting extraction: {n_awaiting_fx}\n"
+                             f"--In extraction: {n_in_fx}\n"
+                             f"--Completed: {n_success}\n"
+                             f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}")
+
+            if self.prefetch_remote:
+                self.logger.info(f"")
 
             self.last_checked = time.time()
+            print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
+            print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
 
     def poll_batch_chunks(self, sublist, headers):
         status_thing = remote_poll_batch(sublist, headers)
@@ -508,9 +514,7 @@ class Orchestrator:
         return
 
     def poll_extractions_and_stats(self):
-        # success_returns = 0
         mod_not_found = 0
-        # failed_returns = 0
         type_errors = 0
 
         self.poll_status = "RUNNING"
@@ -519,7 +523,7 @@ class Orchestrator:
 
             # This will attempt to print stats on every iteration.
             #   Note: internally, this will only execute max every 5 seconds.
-            self.print_stats()
+            self.update_and_print_stats()
 
             if self.task_dict["active"].empty():
 
@@ -537,7 +541,7 @@ class Orchestrator:
 
             # Here we pull all values from active task queue to create a batch of them!
             num_elem = self.task_dict["active"].qsize()
-            print(f"[POLL] Size active queue: {num_elem}")
+            print(f"[POLL] Size active queue: {num_elem}")  # TODO: need to shush this.
             tids_to_poll = []  # the batch
 
             for i in range(0, num_elem):
@@ -548,7 +552,7 @@ class Orchestrator:
             t_last_poll = time.time()
 
             # Send off task_ids to poll, retrieve a bunch of statuses.
-            tid_sublists = create_list_chunks(tids_to_poll, 100)  # TODO: should definitely be an arg.
+            tid_sublists = create_list_chunks(tids_to_poll, self.n_fx_task_sublists)
 
             polling_threads = []
 
@@ -565,17 +569,17 @@ class Orchestrator:
             for thread in polling_threads:
                 thread.join()
 
-            print(f"Total poll requests: {self.num_poll_reqs}")
+            self.logger.info(f"Total poll requests: {self.num_poll_reqs}")
 
             while not self.status_things.empty():
 
                 status_thing = self.status_things.get()
 
-                print(f"Status thing: {status_thing}")
+                # print(f"Status thing: {status_thing}")  <-- gotta get rid of this junk.
 
                 if "exception_caught" in status_thing:
-                    print(f"Caught funcX error: {status_thing['exception_caught']}")
-                    print(f"Putting the tasks back into active queue for retry")
+                    self.logger.exception(f"Caught funcX error: {status_thing['exception_caught']}")
+                    self.logger.exception(f"Putting the tasks back into active queue for retry")
 
                     for reject_tid in tids_to_poll:
                         self.task_dict["active"].put(reject_tid)
@@ -606,7 +610,7 @@ class Orchestrator:
                                 unpacked_metadata = family_batch.to_dict()
                                 unpacked_metadata['dataset'] = self.dataset_mdata
 
-                            print(f"[DEBUG] Unpacked metadata: {unpacked_metadata}")
+                            # print(f"[DEBUG] Unpacked metadata: {unpacked_metadata}")  <-- this needs to go.
 
                             if self.prefetch_remote:
                                 total_family_size = 0
@@ -622,21 +626,19 @@ class Orchestrator:
                                                         "MessageBody": json_mdata})
                                 self.file_count += 1
                             except TypeError as e1:
-                                print(f"Type error: {e1}")
+                                self.logger.exception(f"Type error: {e1}")
                                 type_errors += 1
-                                print(f"Total type errors: {type_errors}")
+                                self.logger.exception(f"Total type errors: {type_errors}")
                         else:
-                            print(f"[Poller]: \"family_batch\" not in res!")
+                            self.logger.error(f"[Poller]: \"family_batch\" not in res!")
 
                         self.success_returns += 1
-                        self.logger.debug(f"Success Counter: {self.success_returns}")
-                        self.logger.debug(f"Failure Counter: {self.failed_returns}")
 
                         # Leave this in. Great for debugging and we have the IO for it.
                         self.logger.debug(f"Received response: {res}")
 
                         if type(res) is not dict:
-                            print(f"Res is not dict: {res}")
+                            self.logger.exception(f"Res is not dict: {res}")
                             continue
 
                         elif 'transfer_time' in res:
@@ -658,15 +660,15 @@ class Orchestrator:
                             exc.reraise()
                         except ModuleNotFoundError:
                             mod_not_found += 1
-                            print(f"Num. ModuleNotFound: {mod_not_found}")
+                            self.logger.exception(f"Num. ModuleNotFound: {mod_not_found}")
 
                         except Exception as e:
-                            print(f"Caught exception: {e}")
-                            print("Continuing!")
+                            self.logger.exception(f"Caught exception: {e}")
+                            self.logger.exception("Continuing!")
                             pass
 
                         self.failed_returns += 1
-                        print(f"Exception caught: {exc}")
+                        self.logger.exception(f"Exception caught: {exc}")
 
                     else:
                         self.task_dict["active"].put(tid)
