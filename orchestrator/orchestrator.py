@@ -74,11 +74,11 @@ class Orchestrator:
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         # Batch size we use to send tasks to funcx.
-        self.fx_batch_size = 100
+        self.fx_batch_size = 500
         self.n_fx_task_sublists = 100
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
-        self.max_extracting_tasks = 1000
+        self.max_extracting_tasks = 2000
         self.num_extracting_tasks = 0
 
         self.max_pre_prefetch = 15000  # TODO: Integrate this to actually fix timing bug.
@@ -463,17 +463,6 @@ class Orchestrator:
                           self.prefetcher.bytes_pf_completed + \
                           self.prefetcher.bytes_pf_in_flight
 
-            print("Phase 2: prefetch")
-            print(f"\t Eff. dir size (GB): {total_bytes / 1024 / 1024 / 1024} | "
-                  f"\tNew Pulled Messages {self.prefetcher.pf_msgs_pulled_since_last_batch}")
-            print(f"\t N Transfer Tasks: {self.prefetcher.num_transfers}")
-            print(f"\t Families transferred per second: "
-                  f"{self.prefetcher.num_families_transferred / (cur_time - self.get_families_start_time)} \n")
-
-            print("Phase 3: pre-extraction")
-            print(f"\tpre-funcX messages: {self.pre_launch_counter + self.prefetcher.orch_reader_q.qsize()}")
-            print(f"\tin-funcX messages: {self.num_extracting_tasks}\n")
-
             print("Phase 4: polling")
             print(f"\t Successes: {self.success_returns}")
             print(f"\t Failures: {self.failed_returns}\n")
@@ -500,10 +489,10 @@ class Orchestrator:
                              f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}")
 
             if self.prefetch_remote:
-                self.logger.info(f"")
+                print(f"\t Eff. dir size (GB): {total_bytes / 1024 / 1024 / 1024}")
+                print(f"\t N Transfer Tasks: {self.prefetcher.num_transfers}")
 
             self.last_checked = time.time()
-            print(f"[GET] Elapsed Send Batch time: {self.t_send_batch}")
             print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
 
     def poll_batch_chunks(self, sublist, headers):
@@ -615,6 +604,7 @@ class Orchestrator:
                             if self.prefetch_remote:
                                 total_family_size = 0
                                 for family in family_batch.families:
+                                    family['metadata']["t_funcx_req_received"] = time.time()
                                     total_family_size += self.prefetcher.get_family_size(family.to_dict())
 
                                 self.prefetcher.orch_unextracted_bytes -= total_family_size
