@@ -1,5 +1,6 @@
 
 import os
+import sys
 import json
 import time
 import boto3
@@ -67,8 +68,7 @@ class Orchestrator:
         self.failed_returns = 0
 
         self.poll_gap_s = 5
-        self.num_send_reqs = 0
-        self.num_poll_reqs = 0
+
         self.get_families_status = "STARTING"
 
         # This is here for testing. Only want to test 50k files? Set this to 50k.
@@ -79,6 +79,15 @@ class Orchestrator:
         # Batch size we use to send tasks to funcx.
         self.fx_batch_size = 200
         self.n_fx_task_sublists = 100
+
+        # Want to store attributes about funcX requests/responses.
+        self.tot_fx_send_payload_size = 0
+        self.tot_fx_poll_payload_size = 0
+        self.tot_fx_poll_result_size = 0
+        self.num_send_reqs = 0
+        self.num_poll_reqs = 0
+        self.t_first_funcx_invoke = None
+        self.max_result_size = 0
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
         self.max_extracting_tasks = 2000
@@ -318,6 +327,17 @@ class Orchestrator:
                                                "func_id": ex_func_id})
 
             if len(self.current_batch) > 0:
+                if self.t_first_funcx_invoke is None:
+                    self.t_first_funcx_invoke = time.time()
+
+                req_size = 0
+                for item in self.current_batch:
+                    req_size += sys.getsizeof(item)
+                    req_size += 2 * sys.getsizeof(self.funcx_eid)  # need size of fx ep and function id.
+                req_size += sys.getsizeof(self.fx_headers)
+
+                self.tot_fx_send_payload_size += req_size
+
                 task_ids = remote_extract_batch(self.current_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
                 self.num_send_reqs += 1
                 self.pre_launch_counter -= len(self.current_batch)
@@ -496,11 +516,20 @@ class Orchestrator:
                              f"--Awaiting extraction: {n_awaiting_fx}\n"
                              f"--In extraction: {n_in_fx}\n"
                              f"--Completed: {n_success}\n"
-                             f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}")
+                             f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}\n")
 
             if self.prefetch_remote:
                 print(f"\t Eff. dir size (GB): {total_bytes / 1024 / 1024 / 1024}")
                 print(f"\t N Transfer Tasks: {self.prefetcher.num_transfers}")
+
+            if self.num_send_reqs > 0 and self.num_poll_reqs > 0 and n_success > 0:
+                self.logger.info(f"\n** funcX Stats **\n"
+                                 f"Num. Send Requests: {self.num_send_reqs}\t|\t({time.time() - self.t_first_funcx_invoke})\n"
+                                 f"Num. Poll Requests: {self.num_poll_reqs}\t|\t()\n"
+                                 f"Avg. Send Request Size: {self.tot_fx_send_payload_size / self.num_send_reqs}\n"
+                                 f"Avg. Poll Request Size: {self.tot_fx_poll_payload_size / self.num_poll_reqs}\n"
+                                 f"Avg. Result Size: {self.tot_fx_poll_result_size / n_success}\n"  
+                                 f"Max Result Size: {self.max_result_size}\n")
 
             self.last_checked = time.time()
             print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
@@ -559,6 +588,8 @@ class Orchestrator:
 
                 # If there's an actual thing in the list...
                 if len(tid_sublist) > 0:
+                    self.tot_fx_poll_payload_size += sys.getsizeof(tid_sublist)
+                    self.tot_fx_poll_payload_size += sys.getsizeof(self.fx_headers) * len(tid_sublist)
 
                     thr = threading.Thread(target=self.poll_batch_chunks, args=(tid_sublist, self.fx_headers))
                     thr.start()
@@ -603,6 +634,10 @@ class Orchestrator:
                             family_batch = res["family_batch"]
                             unpacked_metadata = self.unpack_returned_family_batch(family_batch)
 
+                            print(unpacked_metadata)
+
+
+
                             # TODO: make this a regular feature for matio (so this code isn't necessary...)
                             if 'event' in unpacked_metadata:
                                 family_batch = unpacked_metadata['event']['family_batch']
@@ -623,6 +658,13 @@ class Orchestrator:
                                 family['metadata']["t_funcx_req_received"] = time.time()
 
                             json_mdata = json.dumps(unpacked_metadata, cls=NumpyEncoder)
+
+                            result_size = sys.getsizeof(json_mdata)
+
+                            self.tot_fx_poll_result_size += result_size
+
+                            if result_size > self.max_result_size:
+                                self.max_result_size = result_size
 
                             try:
                                 self.to_validate_q.put({"Id": str(self.file_count),
