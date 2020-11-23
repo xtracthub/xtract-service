@@ -248,7 +248,7 @@ class GlobusPrefetcher:
 
                 transfer_result = self.tc.submit_transfer(tdata)
                 self.num_transfers += 1
-                print(f"Transfer result: {transfer_result}")
+                # print(f"Transfer result: {transfer_result}")
                 gl_task_id = transfer_result['task_id']
                 self.transfer_check_queue.put(gl_task_id)
 
