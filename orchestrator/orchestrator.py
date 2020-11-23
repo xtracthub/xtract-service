@@ -74,7 +74,7 @@ class Orchestrator:
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         # Batch size we use to send tasks to funcx.
-        self.fx_batch_size = 500
+        self.fx_batch_size = 200
         self.n_fx_task_sublists = 100
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
