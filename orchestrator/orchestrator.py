@@ -77,7 +77,7 @@ class Orchestrator:
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         # Batch size we use to send tasks to funcx.
-        self.fx_batch_size = 200
+        self.fx_batch_size = 2000
         self.n_fx_task_sublists = 100
 
         # Want to store attributes about funcX requests/responses.
@@ -191,6 +191,35 @@ class Orchestrator:
             consumer_thr.start()
             print(f"Successfully started the get_next_families() thread number {i} ")
 
+    def send_subbatch_thread(self, sub_batch):
+        batch_send_t = time.time()
+        task_ids = remote_extract_batch(sub_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
+        batch_recv_t = time.time()
+
+        # print(f"Time to send batch: {batch_recv_t - batch_send_t}")
+
+        self.num_send_reqs += 1
+        self.pre_launch_counter -= len(sub_batch)
+
+        if type(task_ids) is dict:
+            self.logger.exception(f"Caught funcX error: {task_ids['exception_caught']}. \n"
+                                  f"Putting the tasks back into active queue for retry")
+
+            for reject_fam_batch in self.current_batch:
+
+                fam_batch_dict = reject_fam_batch['event']['family_batch']
+
+                for reject_fam in fam_batch_dict['families']:
+                    self.families_to_process.put(json.dumps(reject_fam))
+
+            self.logger.info(f"Pausing for 10 seconds...")
+            time.sleep(10)
+            # continue
+
+        for task_id in task_ids:
+            self.task_dict["active"].put(task_id)
+            self.num_extracting_tasks += 1
+
     def validate_enqueue_loop(self, thr_id):
 
         self.logger.debug("[VALIDATE] In validation enqueue loop!")
@@ -239,8 +268,12 @@ class Orchestrator:
     def send_families_loop(self):
 
         self.send_status = "RUNNING"
+        last_send = time.time()
 
         while True:
+
+            # print(f"Time since last send: {last_send - time.time()}")
+            last_send = time.time()
 
             if self.prefetch_remote:
                 while not self.prefetcher.orch_reader_q.empty():
@@ -338,31 +371,19 @@ class Orchestrator:
 
                 self.tot_fx_send_payload_size += req_size
 
-                task_ids = remote_extract_batch(self.current_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
-                self.num_send_reqs += 1
-                self.pre_launch_counter -= len(self.current_batch)
+            sub_batches = create_list_chunks(self.current_batch, 250)
+            send_threads = []
+            for subbatch in sub_batches:
+                # print(subbatch)
+                send_thr = threading.Thread(target=self.send_subbatch_thread, args=(subbatch,))
+                send_thr.start()
+                send_threads.append(send_thr)
 
-                if type(task_ids) is dict:
-                    self.logger.exception(f"Caught funcX error: {task_ids['exception_caught']}. \n"
-                                          f"Putting the tasks back into active queue for retry")
+            for thr in send_threads:
+                thr.join()
 
-                    for reject_fam_batch in self.current_batch:
-
-                        fam_batch_dict = reject_fam_batch['event']['family_batch']
-
-                        for reject_fam in fam_batch_dict['families']:
-                            self.families_to_process.put(json.dumps(reject_fam))
-    
-                    self.logger.info(f"Pausing for 10 seconds...")
-                    time.sleep(10)
-                    continue
-
-                for task_id in task_ids:
-                    self.task_dict["active"].put(task_id)
-                    self.num_extracting_tasks += 1
-
-                # Empty the batch! Everything in here has been sent :)
-                self.current_batch = []
+            # Empty the batch! Everything in here has been sent :)
+            self.current_batch = []
 
     def launch_poll(self):
         self.logger.info("Launching poller...")
@@ -402,11 +423,6 @@ class Orchestrator:
                 self.pause_q_consume = True
                 self.logger.info(f"[GET] Num. active tasks ({self.num_extracting_tasks}) "
                       f"above threshold. Pausing SQS consumption...")
-
-            # elif num_pulled_but_not_pfing >= self.max_extracting_tasks:
-            #     self.pause_q_consume = True
-            #     self.logger.info(f"[GET] Num. pre- prefetching tasks ({self.num_extracting_tasks}) "
-            #                      f"above threshold. Pausing SQS consumption...")
 
             if self.pause_q_consume:
                 self.logger.info("[GET] Pausing pull of new families. Sleeping for 20 seconds...")
