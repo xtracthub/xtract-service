@@ -46,8 +46,6 @@ def matio_extract(event):
     is_local = True
     should_delete = True
 
-    # TODO: potentially remove this if we definitely don't need for FamilyBatch.
-
     if type(all_families) == dict:
         family_batch = FamilyBatch()
         for family in all_families["families"]:
@@ -61,7 +59,7 @@ def matio_extract(event):
     filename_to_path_map = dict()
     batch_thruple_ls = []
 
-    base_url = None  # TODO: add function to apply base_url
+    base_url = None
     for family in all_families.families:
         family_id = family.family_id
         fam_files = family.files
@@ -71,7 +69,6 @@ def matio_extract(event):
             base_url = file_obj["base_url"]
             filename = base_url + file_obj["path"]
 
-            # TODO: Likely need to take this out for processing.
             # if not is_local:
             local_filename = filename.split('/')[-1]
             # else:
@@ -107,7 +104,6 @@ def matio_extract(event):
 
                 filename = file_obj["base_url"] + file_obj["path"]
 
-                # TODO: Come further examine if this is the right way to do things.
                 if is_local:
                     actual_group_paths.append(filename)
                 else:
