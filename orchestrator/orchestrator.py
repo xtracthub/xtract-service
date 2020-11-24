@@ -275,6 +275,12 @@ class Orchestrator:
             # print(f"Time since last send: {last_send - time.time()}")
             last_send = time.time()
 
+            if self.num_extracting_tasks > self.max_extracting_tasks:
+                self.logger.info(f"[SECOND] Num. active tasks ({self.num_extracting_tasks}) "
+                                 f"above threshold. Sleeping for 1 second and continuing...")
+                time.sleep(1)
+                continue
+
             if self.prefetch_remote:
                 while not self.prefetcher.orch_reader_q.empty():
                     family = self.prefetcher.orch_reader_q.get()
