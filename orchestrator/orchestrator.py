@@ -90,7 +90,7 @@ class Orchestrator:
         self.max_result_size = 0
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
-        self.max_extracting_tasks = 10000
+        self.max_extracting_tasks = 5000
         self.num_extracting_tasks = 0
 
         self.max_pre_prefetch = 15000  # TODO: Integrate this to actually fix timing bug.
