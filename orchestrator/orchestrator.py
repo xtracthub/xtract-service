@@ -76,9 +76,9 @@ class Orchestrator:
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
-        # Batch size we use to send tasks to funcx.
+        # Batch size we use to send tasks to funcx.  (and the subbatch size)
         self.fx_batch_size = 2000
-        self.n_fx_task_sublists = 100
+        self.fx_task_sublist_size = 500
 
         # Want to store attributes about funcX requests/responses.
         self.tot_fx_send_payload_size = 0
@@ -192,7 +192,8 @@ class Orchestrator:
             print(f"Successfully started the get_next_families() thread number {i} ")
 
     def send_subbatch_thread(self, sub_batch):
-        batch_send_t = time.time()
+        batch_send_t = time.time
+        print(f"SIZE OF SUBBATCH: {len(sub_batch)}")
         task_ids = remote_extract_batch(sub_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
         batch_recv_t = time.time()
 
@@ -377,13 +378,18 @@ class Orchestrator:
 
                 self.tot_fx_send_payload_size += req_size
 
-            sub_batches = create_list_chunks(self.current_batch, 250)
+            sub_batches = create_list_chunks(self.current_batch, self.fx_task_sublist_size)
+
+            # print(f"Total sub_batches: {len(sub_batches)}")
+
             send_threads = []
+            i = 0
             for subbatch in sub_batches:
-                # print(subbatch)
                 send_thr = threading.Thread(target=self.send_subbatch_thread, args=(subbatch,))
                 send_thr.start()
                 send_threads.append(send_thr)
+                i += 1
+            print(f"Spun up {i} task-send threads!")
 
             for thr in send_threads:
                 thr.join()
@@ -602,10 +608,11 @@ class Orchestrator:
             t_last_poll = time.time()
 
             # Send off task_ids to poll, retrieve a bunch of statuses.
-            tid_sublists = create_list_chunks(tids_to_poll, self.n_fx_task_sublists)
+            tid_sublists = create_list_chunks(tids_to_poll, self.fx_task_sublist_size)
 
             polling_threads = []
 
+            i = 0
             for tid_sublist in tid_sublists:
 
                 # If there's an actual thing in the list...
@@ -616,12 +623,13 @@ class Orchestrator:
                     thr = threading.Thread(target=self.poll_batch_chunks, args=(tid_sublist, self.fx_headers))
                     thr.start()
                     polling_threads.append(thr)
+                    i += 1
+            print(f"[POLL] Spun up {i} polling threads!")
 
             # Now we should wait for our fan-out threads to fan-in
             for thread in polling_threads:
                 thread.join()
 
-            self.logger.info(f"Total poll requests: {self.num_poll_reqs}")
 
             while not self.status_things.empty():
 
@@ -655,10 +663,6 @@ class Orchestrator:
                         if "family_batch" in res:
                             family_batch = res["family_batch"]
                             unpacked_metadata = self.unpack_returned_family_batch(family_batch)
-
-                            # print(unpacked_metadata)
-
-
 
                             # TODO: make this a regular feature for matio (so this code isn't necessary...)
                             if 'event' in unpacked_metadata:
