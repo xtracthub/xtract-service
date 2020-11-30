@@ -621,7 +621,7 @@ class Orchestrator:
             for tid_sublist in tid_sublists:  # TODO: put a cap on this (if i>10, break (for example)
 
                 # If there's an actual thing in the list...
-                if len(tid_sublist) > 0:
+                if len(tid_sublist) > 0 and i < 15:
                     self.tot_fx_poll_payload_size += sys.getsizeof(tid_sublist)
                     self.tot_fx_poll_payload_size += sys.getsizeof(self.fx_headers) * len(tid_sublist)
 
