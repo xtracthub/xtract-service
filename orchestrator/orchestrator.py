@@ -510,7 +510,6 @@ class Orchestrator:
 
     def unpack_returned_family_batch(self, family_batch):
         fam_batch_dict = family_batch.to_dict()
-
         return fam_batch_dict
 
     def update_and_print_stats(self):
@@ -562,10 +561,13 @@ class Orchestrator:
             self.last_checked = time.time()
             print(f"[GET] Elapsed Extract time: {time.time() - self.t_crawl_start}")
 
-    def poll_batch_chunks(self, sublist, headers):
+    def poll_batch_chunks(self, thr_num, sublist, headers):
         status_thing = remote_poll_batch(sublist, headers)
         self.num_poll_reqs += 1
-        self.status_things.put(status_thing)
+
+        status_tup = (thr_num, status_thing)
+
+        self.status_things.put(status_tup)
         time.sleep(1)  # TODO: MIGHT WANT TO TAKE THIS OUT. JUST SEEING IF THIS FIXES funcX SCALE-UP.
         return
 
@@ -609,39 +611,46 @@ class Orchestrator:
 
             # Send off task_ids to poll, retrieve a bunch of statuses.
             tid_sublists = create_list_chunks(tids_to_poll, self.fx_task_sublist_size)
+            # TODO: ^^ this'll need to be a dictionary of some kind so we can track.
 
             polling_threads = []
 
+            thr_to_sublist_map = dict()
+
             i = 0
-            for tid_sublist in tid_sublists:
+            for tid_sublist in tid_sublists:  # TODO: put a cap on this (if i>10, break (for example)
 
                 # If there's an actual thing in the list...
                 if len(tid_sublist) > 0:
                     self.tot_fx_poll_payload_size += sys.getsizeof(tid_sublist)
                     self.tot_fx_poll_payload_size += sys.getsizeof(self.fx_headers) * len(tid_sublist)
 
-                    thr = threading.Thread(target=self.poll_batch_chunks, args=(tid_sublist, self.fx_headers))
+                    thr = threading.Thread(target=self.poll_batch_chunks, args=(i, tid_sublist, self.fx_headers))
                     thr.start()
                     polling_threads.append(thr)
+
+                    # NEW STEP: add the thread ID to the dict
+                    thr_to_sublist_map[i] = tid_sublist
                     i += 1
+
             print(f"[POLL] Spun up {i} polling threads!")
 
             # Now we should wait for our fan-out threads to fan-in
             for thread in polling_threads:
                 thread.join()
 
-
+            # TODO: here is where we can fix this
+            # TODO: Create tuples in status things that's a tuple with tid_sublist (OR THREAD ID)
+            #  that the status thing is about.
             while not self.status_things.empty():
 
-                status_thing = self.status_things.get()
-
-                # print(f"Status thing: {status_thing}")  <-- gotta get rid of this junk.
+                thr_id, status_thing = self.status_things.get()
 
                 if "exception_caught" in status_thing:
                     self.logger.exception(f"Caught funcX error: {status_thing['exception_caught']}")
                     self.logger.exception(f"Putting the tasks back into active queue for retry")
 
-                    for reject_tid in tids_to_poll:
+                    for reject_tid in thr_to_sublist_map[thr_id]:
                         self.task_dict["active"].put(reject_tid)
 
                     print(f"Pausing for 20 seconds...")

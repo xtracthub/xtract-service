@@ -22,7 +22,7 @@ class GlobusPrefetcher:
         self.data_path = data_path
 
         self.max_gb = max_gb
-        self.max_files_in_batch = 10000
+        self.max_files_in_batch = 1000
 
         self.last_batch = False
         bytes_in_gb = 1024 * 1024 * 1024
@@ -226,6 +226,7 @@ class GlobusPrefetcher:
                     # Create a directory (named by family_id) into which we want to place our families.
                     # TODO: hardcoding.
                     fam_dir = '/project2/chard/skluzacek/data_to_process/{}'.format(family_to_trans['family_id'])
+                    # fam_dir = ''
 
                     for file_obj in family_to_trans['files']:
                         file_path = file_obj['path']
@@ -248,7 +249,7 @@ class GlobusPrefetcher:
 
                 transfer_result = self.tc.submit_transfer(tdata)
                 self.num_transfers += 1
-                # print(f"Transfer result: {transfer_result}")
+
                 gl_task_id = transfer_result['task_id']
                 self.transfer_check_queue.put(gl_task_id)
 
