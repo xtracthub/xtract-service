@@ -22,7 +22,7 @@ class GlobusPrefetcher:
         self.data_path = data_path
 
         self.max_gb = max_gb
-        self.max_files_in_batch = 1000
+        self.max_files_in_batch = 10000
 
         self.last_batch = False
         bytes_in_gb = 1024 * 1024 * 1024
