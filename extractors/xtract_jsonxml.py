@@ -1,7 +1,7 @@
 from extractors.extractor import Extractor
 
 
-class JsonXMLXtractor(Extractor):
+class JsonXMLExtractor(Extractor):
 
     def __init__(self):
         super().__init__(extr_id=None,
