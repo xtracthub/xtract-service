@@ -22,8 +22,6 @@ def matio_extract(event):
     :return metadata (dict) -- metadata as gotten from the materials_io library:
     """
 
-    # return "Hello,world!"
-
     import os
     import sys
     import time
@@ -44,7 +42,10 @@ def matio_extract(event):
     all_families = event['family_batch']
 
     is_local = True
-    should_delete = True
+    should_delete = False
+
+
+    # return "HERE"
 
     if type(all_families) == dict:
         family_batch = FamilyBatch()
@@ -92,7 +93,7 @@ def matio_extract(event):
     else:
         down_start_t = down_end_t = 0
 
-    # This extracts the metadata for each group in each family.
+    # This extracts the metadata for each group in each family.ZZ
     for family in all_families.families:
 
         for gid in family.groups:
@@ -119,6 +120,7 @@ def matio_extract(event):
         if should_delete:
             # Cleanup the clutter -- will not need file again since family includes all groups
             shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
+
     t1 = time.time()
 
     return {"family_batch": all_families,

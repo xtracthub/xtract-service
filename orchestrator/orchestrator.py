@@ -389,7 +389,8 @@ class Orchestrator:
                 send_thr.start()
                 send_threads.append(send_thr)
                 i += 1
-            print(f"Spun up {i} task-send threads!")
+            if i > 0:
+                print(f"Spun up {i} task-send threads!")
 
             for thr in send_threads:
                 thr.join()
@@ -678,8 +679,6 @@ class Orchestrator:
                                 family_batch = unpacked_metadata['event']['family_batch']
                                 unpacked_metadata = family_batch.to_dict()
                                 unpacked_metadata['dataset'] = self.dataset_mdata
-
-                            # print(f"[DEBUG] Unpacked metadata: {unpacked_metadata}")  <-- this needs to go.
 
                             if self.prefetch_remote:
                                 total_family_size = 0
