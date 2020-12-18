@@ -5,10 +5,10 @@ import boto3
 import json
 import csv
 
-crawl_id = "7aff79a5-3536-4cc8-9092-37769056141c"
+crawl_id = "f023ace7-a127-434a-bfaa-15f4e734ed2b"
 
 
-total_messages = 200000
+total_messages = 212369900
 
 
 client = boto3.client('sqs',
@@ -32,6 +32,8 @@ with open("crawl_data.csv", "w") as f:
 
     for i in range(math.ceil(total_messages/10)):
 
+        if i % 1000 == 0: 
+            print(i) 
         # print(i)
         # TODO:  Pull from the crawl_id queue.
         sqs_response = client.receive_message(
@@ -44,7 +46,8 @@ with open("crawl_data.csv", "w") as f:
         if len(sqs_response["Messages"]) > 0:
 
             for i in range(len(sqs_response["Messages"])):
-
+                #if i%1000 == 0: 
+                #    print(i)
                 # print(i)
                 message = sqs_response["Messages"][i]
 
@@ -59,7 +62,7 @@ with open("crawl_data.csv", "w") as f:
                 new_msg = {"Id": id, "MessageBody": body}
                 message_batch.append(new_msg)
                 family = json.loads(body)
-                print(family)
+                #print(family)
 
                 crawl_timestamp = family['metadata']['crawl_timestamp']
                 family_id = family['family_id']
@@ -75,24 +78,16 @@ with open("crawl_data.csv", "w") as f:
                     # print(file_size)
 
 
-                print(total_file_size)
-                print(total_files)
+                #print(total_file_size)
+                #print(total_files)
 
                 writer.writerow([family_id, crawl_timestamp, total_files, total_file_size])
 
                 # exit()
 
-            del_info = {'ReceiptHandle': message["ReceiptHandle"],
-                        'Id': message["MessageId"]}
-            delete_batch.append(del_info)
-
-
-
-            #response1 = client.send_message_batch(QueueUrl=test_queue_url,
-            #                                      Entries=message_batch)
-
-            #response2 = client.send_message_batch(QueueUrl=val_queue_url,
-            #                                      Entries=message_batch)
+                del_info = {'ReceiptHandle': message["ReceiptHandle"],
+                            'Id': message["MessageId"]}
+                delete_batch.append(del_info)
 
             # We need to delete from the real queue because otherwise we'll continuously select same file
             response = client.delete_message_batch(
