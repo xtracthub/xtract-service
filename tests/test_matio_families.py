@@ -23,10 +23,6 @@ base_path = "/MDF/mdf_connect/prod/data/foo_v1/Ag2Al.hP2/"
 
 # TODO: Need 2 level xtract-matio.
 
-# fam_batch.add_family(fam_2)
-
-# TODO: Get creds for both Globus and Google here.
-# Get the Headers....
 
 print("Starting NativeClient processing...")
 client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
