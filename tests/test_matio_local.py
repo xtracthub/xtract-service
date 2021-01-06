@@ -13,12 +13,19 @@ import json
 
 import threading
 
-
 from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
 
+# HERE IS WHERE WE SET THE SYSTEM #
+system = "theta"
 
-map = mapping['xtract-matio::midway2']
+map = None
+if system == 'midway2':
+    map = mapping['xtract-matio::midway2']
+
+elif system == 'theta':
+    map = mapping['xtract-matio::theta']
+
 base_url = ""
 
 base_path = map['data_path']
@@ -62,7 +69,11 @@ class test_orch():
     def path_converter(self, family_id, old_path):
         path_ls = old_path.split('/')
         file_name = path_ls[-1]
-        new_path = f"/project2/chard/skluzacek/{family_id}/{file_name}"
+        new_path = None
+        if system == "midway2":
+            new_path = f"/project2/chard/skluzacek/{family_id}/{file_name}"
+        elif system == "theta":
+            new_path = f"/projects/CSC249ADCD01/skluzacek/data_to_process/{family_id}/{file_name}"
         return new_path
 
     def preproc_fam_batches(self):
