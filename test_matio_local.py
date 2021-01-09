@@ -41,7 +41,7 @@ batch_size = 20
 class test_orch():
     def __init__(self):
         self.current_tasks_on_ep = 0
-        self.max_tasks_on_ep = 5000
+        self.max_tasks_on_ep = 200000
         self.fxc = FuncXClient()
 
         self.funcx_batches = Queue()
@@ -57,7 +57,7 @@ class test_orch():
 
         self.fam_batches = []
 
-        big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
+        big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_200k.json"
 
         with open(big_json, 'r') as f:
             self.fam_list = json.load(f)
