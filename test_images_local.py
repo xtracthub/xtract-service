@@ -18,7 +18,7 @@ from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "midway2"
+system = "theta"
 
 map = None
 if system == 'midway2':
@@ -168,8 +168,12 @@ class test_orch():
                 time.sleep(0.5)
                 continue
 
+            num_tids = 0
             for tid in res:
                 self.polling_queue.put(tid)
+                num_tids += 1
+
+            print(f"Put {num_tids} tids into polling queue! ")
 
             time.sleep(1)
 
@@ -195,6 +199,8 @@ class test_orch():
             for item in res:
 
                 # print(res[item])
+
+                # print(res[item])
                 if 'result' in res[item]:
                     print(res[item])
                     # self.successes += 1
@@ -208,8 +214,8 @@ class test_orch():
 
                     # NOTE -- we're doing nothing with the returned metadata here.
 
-                # elif 'exception' in res[item]:
-                #     res[item]['exception'].reraise()
+                elif 'exception' in res[item]:
+                    res[item]['exception'].reraise()
 
                 elif 'status' in res[item]:
                     self.polling_queue.put(item)
