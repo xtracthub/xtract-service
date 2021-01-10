@@ -26,6 +26,14 @@ def images_extract(event):
 
     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
+    sys.path.insert(1, '/app')
+
+    # return "Made it here 2"
+
+    import xtract_images_main
+
+    # return ("HEY")
+
     def min_hash(fpath):
 
         """
@@ -120,7 +128,10 @@ def images_extract(event):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
         import tensorflow as tf
 
+        # return "Made it here"
         resnet = tf.keras.applications.resnet50.ResNet50(weights='imagenet')
+        # resnet = tf.keras.models.load_model('/app/resnet50_weights_tf_dim_ordering_tf_kernels.h5')
+
 
         out_layer = resnet.layers[-2]
         identity = tf.keras.layers.Lambda(lambda x: x)(out_layer.output)
@@ -156,7 +167,6 @@ def images_extract(event):
         #     return None, None
 
 
-    import logging
     import sys
     import pickle as pkl
     import base64
@@ -164,13 +174,7 @@ def images_extract(event):
     # logging.error("Testing")
     # return "Made it here!"
 
-
     t0 = time.time()
-    sys.path.insert(1, '/app')
-
-    # return "Made it here 2"
-
-    import xtract_images_main
 
     try:
         import cv2
@@ -186,38 +190,54 @@ def images_extract(event):
     family_batch = event["family_batch"]
     creds = event["creds"]
 
-    downloader = GoogleDriveDownloader(auth_creds=creds)
+    download_file = event["download_file"]
 
-    # TODO: Put time info into the downloader/extractor objects.
-    ta = time.time()
-    try:
-        downloader.batch_fetch(family_batch=family_batch)
-    except Exception as e:
-        return e
-    tb = time.time()
+    if download_file:
 
-    file_paths = downloader.success_files
-    # return file_paths
+        downloader = GoogleDriveDownloader(auth_creds=creds)
 
-    if len(file_paths) == 0:
-        return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
-                'err_msg': "unable to download files"}
+        # TODO: Put time info into the downloader/extractor objects.
+        ta = time.time()
+        try:
+            downloader.batch_fetch(family_batch=family_batch)
+        except Exception as e:
+            return e
+        tb = time.time()
 
+        file_paths = downloader.success_files
+        # return file_paths
+
+        if len(file_paths) == 0:
+            return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
+                    'err_msg': "unable to download files"}
+
+    # return "HEREZO"
     for family in family_batch.families:
 
+        # return "NICE AND EASY. "
         img_path = family.files[0]['path']
+
+        # return "IS THIS THE INDEX ISSUE"
 
         new_mdata = xtract_images_main.extract_image('predict', img_path)
 
-        new_mdata["min_hash"] = base64.b64encode(pkl.dumps(min_hash(img_path))).decode('ascii')
-        vec_rep, labels = finalize_im_rep(img_path)  # TODO: was fname
 
-        new_mdata['image_vector'] = vec_rep
-        new_mdata['image_objects'] = labels
+        # TODO: BRING THESE BACK FOR MIDWAY.
+        # new_mdata["min_hash"] = base64.b64encode(pkl.dumps(min_hash(img_path))).decode('ascii')
+        # vec_rep, labels = finalize_im_rep(img_path)  # TODO: was fname
+
+        # new_mdata['image_vector'] = vec_rep
+        # new_mdata['image_objects'] = labels
         family.metadata = new_mdata
+
+        # return new_mdata
 
     t1 = time.time()
 
-    [os.remove(file_path) for file_path in downloader.success_files]
+    if download_file:
+        [os.remove(file_path) for file_path in downloader.success_files]
+    else:
+        # This is the transfer time.
+        ta = tb = 0
 
     return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
