@@ -7,17 +7,28 @@ from test_utils.native_app_login import globus_native_auth_login, do_google_logi
 
 from queue import Queue
 
+from funcx import FuncXClient
+
 img_extractor = ImageExtractor()
-img_funcid = img_extractor.register_function()
+# img_funcid = img_extractor.register_function()
 
 # Image collection
-img_1 = "1RbSdH_nI0EHvxFswpl1Qss7CyWXBHo-o"  # SC19 SCC photo
-img_2 = "0B5nDSpS9a_3kQ0VaUFU4cGhZa3lnTWZoV2NLclVSejRaQVRV"  # clock photo
+# img_1 = "1RbSdH_nI0EHvxFswpl1Qss7CyWXBHo-o"  # SC19 SCC photo
+# img_2 = "0B5nDSpS9a_3kQ0VaUFU4cGhZa3lnTWZoV2NLclVSejRaQVRV"  # clock photo
+
+fxc = FuncXClient()
+
+container_uuid = fxc.register_container('xtract-images.img', 'singularity')
+
+fn_uuid = fxc.register_function(test,
+                                # ep_id, # TODO: We do not need ep id here
+                                container_uuid=container_uuid,
+                                description="New sum function defined without string spec")
 
 fam_1 = Family()
 fam_2 = Family()
-fam_1.add_group(files=[{"path": img_1, "is_gdoc": False, "mimeType": "image/jpg", "metadata": {}}], parser='image')
-fam_2.add_group(files=[{"path": img_2, "is_gdoc": False, "mimeType": "image/jpg", "metadata": {}}], parser='image')
+# fam_1.add_group(files=[{"path": img_1, "is_gdoc": False, "mimeType": "image/jpg", "metadata": {}}], parser='image')
+# fam_2.add_group(files=[{"path": img_2, "is_gdoc": False, "mimeType": "image/jpg", "metadata": {}}], parser='image')
 
 fam_batch = FamilyBatch()
 fam_batch.add_family(fam_1)
@@ -33,7 +44,7 @@ task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Que
 
 for i in range(1, 30):
     task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch, 'creds': creds},
-                                                fx_eid="68bade94-bf58-4a7a-bfeb-9c6a61fa5443",
+                                                fx_eid="7faf21be-4667-447c-a96d-4dbe14875cf1",
                                                 headers=headers)
     task_dict["active"].put(task_id)
 
