@@ -15,9 +15,16 @@ import threading
 
 from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
+import logging
+
+# logging.basicConfig(filename='app3.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s')
+# logging.info("WHAT")
+
+with open("timer_file.txt", 'w') as f:
+    f.close()
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "midway2"
+system = "theta"
 
 map = None
 if system == 'midway2':
@@ -34,9 +41,11 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
-map_size = 25
-batch_size = 20
+map_size = 5
+batch_size = 100
 
+
+file_cutoff = 1120
 
 class test_orch():
     def __init__(self):
@@ -57,7 +66,7 @@ class test_orch():
 
         self.fam_batches = []
 
-        big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_200k.json"
+        big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         with open(big_json, 'r') as f:
             self.fam_list = json.load(f)
@@ -77,7 +86,14 @@ class test_orch():
         return new_path
 
     def preproc_fam_batches(self):
+
+        fam_count = 0
         for fam in self.fam_list:
+            fam_count += 1
+
+            if fam_count > file_cutoff:
+                print("HIT WEAK SCALING FILE CUTOFF -- BREAK! ")
+                break
 
             fam_batch = FamilyBatch()
 
@@ -103,6 +119,8 @@ class test_orch():
 
         img_extractor = MatioExtractor()
 
+        print(f"Container type: {container_type}")
+        print(f"Location: {location}")
         self.fn_uuid = img_extractor.register_function(container_type=container_type, location=location,
                                                   ep_id=ep_id, group="a31d8dce-5d0a-11ea-afea-0a53601d30b5")
 
@@ -169,11 +187,20 @@ class test_orch():
             res = self.fxc.get_batch_status(current_tid_batch)
             self.num_poll_reqs += 1
 
+
             for item in res:
+
                 if 'result' in res[item]:
-                    # self.successes += 1
-                    print(res[item]['result'])
+
                     ret_fam_batch = res[item]['result']['family_batch']
+
+                    timer = res[item]['result']['total_time']
+
+                    with open('timer_file.txt', 'a') as g:
+                        g.write(str(timer) + "\n")
+
+                    # print(timer)
+                    # logging.info(timer)
 
                     fam_len = len(ret_fam_batch.families)
                     self.successes += fam_len
@@ -182,8 +209,13 @@ class test_orch():
 
                     # NOTE -- we're doing nothing with the returned metadata here.
 
+                elif 'exception' in res[item]:
+                    res[item]['exception'].reraise()
+
                 elif 'status' in res[item]:
                     self.polling_queue.put(item)
+
+
                 else:
                     print("*********ERROR *************")
                     self.failures += 1
@@ -205,12 +237,12 @@ class test_orch():
 
 perf_orch = test_orch()
 
-for i in range(14):
+for i in range(7):
     thr = threading.Thread(target=perf_orch.send_batches_thr_loop, args=())
     thr.start()
     print(f"Started the {i}th task push thread...")
 
-for i in range(6):
+for i in range(5):
     thr = threading.Thread(target=perf_orch.polling_loop, args=())
     thr.start()
     print(f"Started the {i}th result thread...")
