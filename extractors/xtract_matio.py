@@ -35,6 +35,8 @@ def matio_extract(event):
 
     sys.path.insert(1, '/')
 
+
+    # return os.environ['container_version']
     from xtract_matio_main import extract_matio
     # from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
 

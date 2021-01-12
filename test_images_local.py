@@ -18,7 +18,7 @@ from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "theta"
+system = "midway2"
 
 map = None
 if system == 'midway2':
@@ -35,14 +35,14 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
-map_size = 25
-batch_size = 20
+map_size = 2
+batch_size = 10
 
 
 class test_orch():
     def __init__(self):
         self.current_tasks_on_ep = 0
-        self.max_tasks_on_ep = 5000
+        self.max_tasks_on_ep = 90000
         self.fxc = FuncXClient()
 
         self.funcx_batches = Queue()
