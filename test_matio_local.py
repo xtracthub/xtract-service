@@ -17,7 +17,7 @@ from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "theta"
+system = "midway2"
 
 map = None
 if system == 'midway2':
@@ -157,6 +157,7 @@ class test_orch():
             for i in range(500):  # TODO: 1000 might be too big?
                 if self.polling_queue.empty():
                     print("Polling queue empty. Creating batch!")
+                    time.sleep(3)
                     break
                 else:
                     tid = self.polling_queue.get()
@@ -209,7 +210,7 @@ for i in range(14):
     thr.start()
     print(f"Started the {i}th task push thread...")
 
-for i in range(8):
+for i in range(6):
     thr = threading.Thread(target=perf_orch.polling_loop, args=())
     thr.start()
     print(f"Started the {i}th result thread...")
