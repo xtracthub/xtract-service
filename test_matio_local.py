@@ -15,10 +15,7 @@ import threading
 
 from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
-import logging
 
-# logging.basicConfig(filename='app3.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s')
-# logging.info("WHAT")
 
 with open("timer_file.txt", 'w') as f:
     f.close()
@@ -41,11 +38,12 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
-map_size = 5
+map_size = 4
 batch_size = 100
 
 
 file_cutoff = 1120
+
 
 class test_orch():
     def __init__(self):
@@ -64,12 +62,18 @@ class test_orch():
         self.successes = 0
         self.failures = 0
 
+        self.family_queue = Queue()
+
         self.fam_batches = []
 
         big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         with open(big_json, 'r') as f:
             self.fam_list = json.load(f)
+
+        # Transfer the stored list to a queue to promote good concurrency while making batches.
+        for item in self.fam_list:
+            self.family_queue.put(item)
 
         self.start_time = time.time()
 
@@ -88,16 +92,16 @@ class test_orch():
     def preproc_fam_batches(self):
 
         fam_count = 0
-        for fam in self.fam_list:
-            fam_count += 1
-
-            if fam_count > file_cutoff:
-                print("HIT WEAK SCALING FILE CUTOFF -- BREAK! ")
-                break
+        # while we have files and haven't exceeded the weak scaling threshold (file_cutoff)
+        while not self.family_queue.empty() and fam_count < file_cutoff:
 
             fam_batch = FamilyBatch()
 
-            while len(fam_batch.families) < batch_size:
+            # Keep making batch until
+            while len(fam_batch.families) < map_size and not self.family_queue.empty() and fam_count < file_cutoff:
+
+                fam_count += 1
+                fam = self.family_queue.get()
 
                 # First convert to the correct paths
                 for file_obj in fam['files']:
@@ -119,10 +123,30 @@ class test_orch():
 
         img_extractor = MatioExtractor()
 
+        # This check makes sure our batches are the correct size to avoid the January 2021 disaster of having vastly
+        #  incorrect numbers of batches.
+        #
+        #  Here we are checking that the number of families we are processing is LESS than the total number of
+        #   batches times the batch size (e.g., the last batch can be full or empty), and the number of families
+        #   is GREATER than the case where our last map is missing.
+        #
+        #
+        #  This leaves a very small window for error. Could use modulus to be more exact.
+        try:
+            assert len(self.fam_batches) * (map_size-1) <= fam_count <= len(self.fam_batches) * map_size
+        except AssertionError as e:
+            print(f"Caught {e}")
+            print(f"Number of batches: {len(self.fam_batches)}")
+            print(f"Family Count: {fam_count}")
+            # break
+
         print(f"Container type: {container_type}")
         print(f"Location: {location}")
         self.fn_uuid = img_extractor.register_function(container_type=container_type, location=location,
                                                   ep_id=ep_id, group="a31d8dce-5d0a-11ea-afea-0a53601d30b5")
+
+        print("boingo")
+        exit()
 
         current_batch = []
         for fam_batch in self.fam_batches:
