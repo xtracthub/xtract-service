@@ -3,6 +3,7 @@ from funcx import FuncXClient
 
 from extractors.xtract_matio import matio_extract
 from extractors.xtract_matio import MatioExtractor
+from objsize import get_deep_size
 
 from extractors.utils.mappings import mapping
 
@@ -10,8 +11,11 @@ from queue import Queue
 
 import time
 import json
+import math
+import csv
 
 import threading
+
 
 from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
@@ -22,6 +26,10 @@ with open("timer_file.txt", 'w') as f:
 
 # HERE IS WHERE WE SET THE SYSTEM #
 system = "theta"
+
+
+# 10**6 = 1mb
+soft_batch_bytes_max = 10**6
 
 map = None
 if system == 'midway2':
@@ -38,17 +46,17 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
-map_size = 4
-batch_size = 100
+map_size = 10
+batch_size = 25
 
 
-file_cutoff = 1120
+file_cutoff = 20000
 
 
 class test_orch():
     def __init__(self):
         self.current_tasks_on_ep = 0
-        self.max_tasks_on_ep = 200000
+        self.max_tasks_on_ep = file_cutoff # IF SET TO FILE_CUTOFF, THEN THIS IS THE MAX.
         self.fxc = FuncXClient()
 
         self.funcx_batches = Queue()
@@ -71,6 +79,8 @@ class test_orch():
         with open(big_json, 'r') as f:
             self.fam_list = json.load(f)
 
+        print(f"Number of famlilies in fam_list: {len(self.fam_list)}")
+
         # Transfer the stored list to a queue to promote good concurrency while making batches.
         for item in self.fam_list:
             self.family_queue.put(item)
@@ -92,10 +102,16 @@ class test_orch():
     def preproc_fam_batches(self):
 
         fam_count = 0
+
+        # Just create an empty one out here so Python doesn't yell at me.
+        fam_batch = FamilyBatch()
+
+        num_overloads = 0
         # while we have files and haven't exceeded the weak scaling threshold (file_cutoff)
         while not self.family_queue.empty() and fam_count < file_cutoff:
 
             fam_batch = FamilyBatch()
+            total_fam_batch_size = 0
 
             # Keep making batch until
             while len(fam_batch.families) < map_size and not self.family_queue.empty() and fam_count < file_cutoff:
@@ -103,11 +119,14 @@ class test_orch():
                 fam_count += 1
                 fam = self.family_queue.get()
 
+                total_family_size = 0
                 # First convert to the correct paths
                 for file_obj in fam['files']:
                     old_path = file_obj['path']
                     new_path = self.path_converter(fam['family_id'], old_path)
                     file_obj['path'] = new_path
+                    file_size = file_obj['metadata']['physical']['size']
+                    total_family_size += file_size
 
                 for group in fam['groups']:
                     for file_obj in group['files']:
@@ -117,11 +136,41 @@ class test_orch():
 
                 empty_fam = Family()
                 empty_fam.from_dict(fam)
+
+                # We will ONLY handle the SIZE issue in here.
+
+                # So if this last file would put us over the top,
+                if total_fam_batch_size + total_family_size > soft_batch_bytes_max:
+                    num_overloads += 1
+                    print(f"Num overloads {num_overloads}")
+                    # then we append the old batch,
+                    self.fam_batches.append(fam_batch)
+
+                    # empty the old one
+                    fam_batch = FamilyBatch()
+                    total_fam_batch_size = total_family_size
+
+                    assert(len(fam_batch.families) == 0)
+
+                # and then continue (here we either add to our prior fam_batch OR the new one).
                 fam_batch.add_family(empty_fam)
+
+            assert len(fam_batch.families) <= map_size
 
             self.fam_batches.append(fam_batch)
 
         img_extractor = MatioExtractor()
+
+
+        # TODO: ADDING TEST. Making sure we have all of our files here.
+        num_families = 0
+        for item in self.fam_batches:
+            num_families += len(item.families)
+
+        print(num_families)
+        exit()
+
+        # exit()
 
         # This check makes sure our batches are the correct size to avoid the January 2021 disaster of having vastly
         #  incorrect numbers of batches.
@@ -132,47 +181,82 @@ class test_orch():
         #
         #
         #  This leaves a very small window for error. Could use modulus to be more exact.
-        try:
-            assert len(self.fam_batches) * (map_size-1) <= fam_count <= len(self.fam_batches) * map_size
-        except AssertionError as e:
-            print(f"Caught {e}")
-            print(f"Number of batches: {len(self.fam_batches)}")
-            print(f"Family Count: {fam_count}")
-            # break
+
+        # TODO: Bring this back (but use for grouping by num. files)
+
+        # try:
+        #     assert len(self.fam_batches) * (map_size-1) <= fam_count <= len(self.fam_batches) * map_size
+        # except AssertionError as e:
+        #     print(f"Caught {e} after creating client batches...")
+        #     print(f"Number of batches: {len(self.fam_batches)}")
+        #     print(f"Family Count: {fam_count}")
+        #
+        #     print("Cannot continue. Exiting...")
+        #     exit()
 
         print(f"Container type: {container_type}")
         print(f"Location: {location}")
         self.fn_uuid = img_extractor.register_function(container_type=container_type, location=location,
                                                   ep_id=ep_id, group="a31d8dce-5d0a-11ea-afea-0a53601d30b5")
 
-        print("boingo")
-        exit()
-
+        # funcX batching. Here we take the 'user' FamilyBatch objects and put them into a batch we send to funcX.
+        num_fx_batches = 0
         current_batch = []
+
+        print(f"Number of family batches: {len(self.fam_batches)}")
         for fam_batch in self.fam_batches:
+
+            # print(len(current_batch))
+            # print(batch_size)
+
             if len(current_batch) < batch_size:
                 current_batch.append(fam_batch)
             else:
+                print("Marking batch!")
+                print(len(current_batch))
                 self.funcx_batches.put(current_batch)
                 current_batch = [fam_batch]
+                num_fx_batches += 1
 
         # Grab the stragglers.
         if len(current_batch) > 0:
+            print("Marking batch!")
             self.funcx_batches.put(current_batch)
+            num_fx_batches += 1
+
+        # See same description as above (map example) for explanation.
+        try:
+            theor_full_batches = math.ceil(len(self.fam_batches) / batch_size)
+
+            # print(f"Theoretical full batches: {}")
+            assert theor_full_batches == num_fx_batches
+        except AssertionError as e:
+            print(f"Caught {e} after creating funcX batches...")
+            print(f"Number of batches: {self.funcx_batches.qsize()}")
+            print(f"Family Count: {num_fx_batches}")
+
+            print("Cannot continue. Exiting...")
+            exit()
 
     # TODO: let the failures fail.
     def send_batches_thr_loop(self):
 
+        # While there are still batches to send.
+        #  Note that this should not be 'limiting' as we do that in preprocessing.
         while not self.funcx_batches.empty():
 
+            # current_tasks_on_ep = tasks_sent - tasks_received
             if self.current_tasks_on_ep > self.max_tasks_on_ep:
                 print(f"There are {self.current_tasks_on_ep}. Sleeping...")
                 time.sleep(5)
                 continue
 
+            # Grab one
             batch = self.funcx_batches.get()
             fx_batch = self.fxc.create_batch()
 
+            # Now we formally pull down each funcX batch and add each of its elements to an fx_batch.
+            # TODO: could do this before putting in list.
             for item in batch:
 
                 fam_batch_size = len(item.families)
@@ -180,12 +264,14 @@ class test_orch():
                 fx_batch.add({'family_batch': item}, endpoint_id=ep_id, function_id=self.fn_uuid)
                 self.current_tasks_on_ep += fam_batch_size
 
-            try:
-                res = self.fxc.batch_run(fx_batch)
-                self.num_send_reqs += 1
-            except:
-                time.sleep(0.5)
-                continue
+            # try:
+            # TODO: bring this back when we figure out what errors it's causing.
+            res = self.fxc.batch_run(fx_batch)
+            self.num_send_reqs += 1
+            # except Exception as e:
+            #     print("WE CAUGHT AN EXCEPTION WHILE SENDING. ")
+            #     time.sleep(0.5)
+            #     continue
 
             for tid in res:
                 self.polling_queue.put(tid)
@@ -211,20 +297,44 @@ class test_orch():
             res = self.fxc.get_batch_status(current_tid_batch)
             self.num_poll_reqs += 1
 
-
             for item in res:
 
+                # print(res[item])
                 if 'result' in res[item]:
 
                     ret_fam_batch = res[item]['result']['family_batch']
 
                     timer = res[item]['result']['total_time']
 
-                    with open('timer_file.txt', 'a') as g:
-                        g.write(str(timer) + "\n")
+                    family_file_size = 0
+                    bad_extract_time = 0
+                    good_extract_time = 0
 
-                    # print(timer)
-                    # logging.info(timer)
+
+                    family_mdata_size = get_deep_size(ret_fam_batch)
+
+                    for family in ret_fam_batch.families:
+                        for file in family.files:
+                            family_file_size += file['metadata']['physical']['size']
+
+                        for gid in family.groups:
+                            g_mdata = family.groups[gid].metadata
+                            if g_mdata['matio'] != {} and g_mdata['matio'] is not None:
+                                good_extract_time += g_mdata['extract time']
+                            else:
+                                bad_extract_time = g_mdata['extract time']
+
+                    # TODO: These are at the family_batch level.
+                    import_time = res[item]['result']["import_time"]
+                    family_fetch_time = res[item]['result']["family_fetch_time"]
+                    file_unpack_time = res[item]['result']["file_unpack_time"]
+                    full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
+
+                    with open('timer_file.txt', 'a') as g:
+                        csv_writer = csv.writer(g)
+                        csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
+                                             bad_extract_time, import_time, family_fetch_time, file_unpack_time,
+                                             full_extraction_loop_time])
 
                     fam_len = len(ret_fam_batch.families)
                     self.successes += fam_len
