@@ -3,6 +3,7 @@ from funcx import FuncXClient
 
 from extractors.xtract_matio import matio_extract
 from extractors.xtract_matio import MatioExtractor
+# from extractors.xtract_nothing import NothingExtractor
 from objsize import get_deep_size
 
 from extractors.utils.mappings import mapping
@@ -25,11 +26,13 @@ with open("timer_file.txt", 'w') as f:
     f.close()
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "theta"
+system = "midway2"
+
 
 
 # 10**6 = 1mb
 soft_batch_bytes_max = 10**6
+soft_batch_bytes_max = 0
 
 map = None
 if system == 'midway2':
@@ -46,11 +49,11 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
-map_size = 10
-batch_size = 25
+map_size = 16
+batch_size = 16
 
 
-file_cutoff = 20000
+file_cutoff = 200000
 
 
 class test_orch():
@@ -74,7 +77,7 @@ class test_orch():
 
         self.fam_batches = []
 
-        big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
+        big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_200k.json"
 
         with open(big_json, 'r') as f:
             self.fam_list = json.load(f)
@@ -139,18 +142,20 @@ class test_orch():
 
                 # We will ONLY handle the SIZE issue in here.
 
-                # So if this last file would put us over the top,
-                if total_fam_batch_size + total_family_size > soft_batch_bytes_max:
-                    num_overloads += 1
-                    print(f"Num overloads {num_overloads}")
-                    # then we append the old batch,
-                    self.fam_batches.append(fam_batch)
+                if soft_batch_bytes_max > 0:
+                    # So if this last file would put us over the top,
+                    if total_fam_batch_size + total_family_size > soft_batch_bytes_max:
+                        num_overloads += 1
+                        print(f"Num overloads {num_overloads}")
+                        # then we append the old batch (if not empty),
+                        if len(fam_batch.families) > 0:
+                            self.fam_batches.append(fam_batch)
 
-                    # empty the old one
-                    fam_batch = FamilyBatch()
-                    total_fam_batch_size = total_family_size
+                        # empty the old one
+                        fam_batch = FamilyBatch()
+                        total_fam_batch_size = total_family_size
 
-                    assert(len(fam_batch.families) == 0)
+                        assert(len(fam_batch.families) == 0)
 
                 # and then continue (here we either add to our prior fam_batch OR the new one).
                 fam_batch.add_family(empty_fam)
@@ -159,6 +164,7 @@ class test_orch():
 
             self.fam_batches.append(fam_batch)
 
+        # img_extractor = NothingExtractor()
         img_extractor = MatioExtractor()
 
 
@@ -168,7 +174,7 @@ class test_orch():
             num_families += len(item.families)
 
         print(num_families)
-        exit()
+        # exit()
 
         # exit()
 
@@ -212,8 +218,8 @@ class test_orch():
             if len(current_batch) < batch_size:
                 current_batch.append(fam_batch)
             else:
-                print("Marking batch!")
-                print(len(current_batch))
+                # print("Marking batch!")
+                # print(len(current_batch))
                 self.funcx_batches.put(current_batch)
                 current_batch = [fam_batch]
                 num_fx_batches += 1
@@ -310,6 +316,7 @@ class test_orch():
                     bad_extract_time = 0
                     good_extract_time = 0
 
+                    good_parsers = ""
 
                     family_mdata_size = get_deep_size(ret_fam_batch)
 
@@ -319,7 +326,9 @@ class test_orch():
 
                         for gid in family.groups:
                             g_mdata = family.groups[gid].metadata
+
                             if g_mdata['matio'] != {} and g_mdata['matio'] is not None:
+                                good_parsers = good_parsers + g_mdata['parser']
                                 good_extract_time += g_mdata['extract time']
                             else:
                                 bad_extract_time = g_mdata['extract time']
@@ -334,7 +343,7 @@ class test_orch():
                         csv_writer = csv.writer(g)
                         csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
                                              bad_extract_time, import_time, family_fetch_time, file_unpack_time,
-                                             full_extraction_loop_time])
+                                             full_extraction_loop_time, good_parsers])
 
                     fam_len = len(ret_fam_batch.families)
                     self.successes += fam_len
@@ -371,12 +380,12 @@ class test_orch():
 
 perf_orch = test_orch()
 
-for i in range(7):
+for i in range(10):
     thr = threading.Thread(target=perf_orch.send_batches_thr_loop, args=())
     thr.start()
     print(f"Started the {i}th task push thread...")
 
-for i in range(5):
+for i in range(6):
     thr = threading.Thread(target=perf_orch.polling_loop, args=())
     thr.start()
     print(f"Started the {i}th result thread...")
