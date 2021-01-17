@@ -35,8 +35,8 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
-map_size = 2
-batch_size = 10
+map_size = 1
+batch_size = 1
 
 
 class test_orch():
