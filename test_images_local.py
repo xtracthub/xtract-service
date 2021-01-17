@@ -93,7 +93,7 @@ class test_orch():
 
             fam_batch = FamilyBatch()
             # print(len(fam_batch.families))
-            while len(fam_batch.families) < batch_size:
+            while len(fam_batch.families) < map_size:
 
                 if self.image_path_list.empty():
                     break
@@ -139,6 +139,20 @@ class test_orch():
         # Grab the stragglers.
         if len(current_batch) > 0:
             self.funcx_batches.put(current_batch)
+
+        print("Let me see")
+
+        batch_counter = 0
+        # while not self.funcx_batches.empty():
+        #     funcx_batch = self.funcx_batches.get()
+        #     batch_counter += 1
+        #     for batch in funcx_batch:
+        #         print(len(batch.families))
+        #
+        # print(batch_counter)
+        #
+        #
+        # exit()
 
     # TODO: let the failures fail.
     def send_batches_thr_loop(self):
