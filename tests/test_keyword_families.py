@@ -27,7 +27,6 @@ fam_2.add_group(files=[{"path": tab_2, "is_gdoc": False, "mimeType": "applicatio
 
 # Full version of file throwing error
 
-
 # fam_2.add_group = {'files': [{'path': '1eTSkC46GUN4z-6mhFTJHsE9Z9EpmllMpCzdm-LLpuCQ', 'metadata': {'id': '1eTSkC46GUN4z-6mhFTJHsE9Z9EpmllMpCzdm-LLpuCQ', 'name': 'DCSL Info Session 1/24', 'mimeType': 'application/vnd.google-apps.presentation', 'webViewLink': 'https://docs.google.com/presentation/d/1eTSkC46GUN4z-6mhFTJHsE9Z9EpmllMpCzdm-LLpuCQ/edit?usp=drivesdk', 'shared': True, 'size': 0, 'is_gdoc': True, 'user_is_owner': False, 'shared_user_ids': ['03530326841615676301', '03711339970616793712', '09490290160418701680', '14453663582181058099', '09932392942899452680', '02136978862942460576', '12120473023176343867', '08122454148025534369'], 'parent': '1Qx9X7LzkMLdrEZNKZDTgQvjaZgxdqQBx', 'last_modified': 1591778133.558, 'extension': '', 'extractor': 'text'}, 'is_gdoc': True, 'mimeType': None, 'file_id': '2ed94934-2e41-49eb-a33f-ebe6698ee5ca'}, {'path': '1MEgpv9BO3yPbX0MPFy617OxM_SeIcIHp03DL3suQ7ZM', 'metadata': {'id': '1MEgpv9BO3yPbX0MPFy617OxM_SeIcIHp03DL3suQ7ZM', 'name': 'Learning Agreement | CDAC Summer Lab', 'mimeType': 'application/vnd.google-apps.document', 'webViewLink': 'https://docs.google.com/document/d/1MEgpv9BO3yPbX0MPFy617OxM_SeIcIHp03DL3suQ7ZM/edit?usp=drivesdk', 'shared': True, 'size': 0, 'is_gdoc': True, 'user_is_owner': False, 'shared_user_ids': ['03530326841615676301', '14453663582181058099', '09932392942899452680', '02136978862942460576', '12120473023176343867', '08122454148025534369'], 'parent': '1hVe6F5v_YduMMycSYKAR2BD7aEVDek0P', 'last_modified': 1591766119.419, 'extension': '', 'extractor': 'text'}, 'is_gdoc': True, 'mimeType': 'text/plain', 'file_id': '5d04e8a3-22eb-4d81-a4d5-60b84c327155'}]}
 fam_2.add_group = {'files': [{'path': '1eTSkC46GUN4z-6mhFTJHsE9Z9EpmllMpCzdm-LLpuCQ',
                               'metadata': {},
@@ -38,7 +37,6 @@ fam_2.add_group = {'files': [{'path': '1eTSkC46GUN4z-6mhFTJHsE9Z9EpmllMpCzdm-LLp
                               'metadata': {},
                               'is_gdoc': True, 'mimeType': 'text/plain',
                               'file_id': '5d04e8a3-22eb-4d81-a4d5-60b84c327155'}]}
-
 
 fam_batch = FamilyBatch()
 fam_batch.add_family(fam_1)
@@ -54,7 +52,7 @@ print(f"Function ID: {img_funcid}")
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
 for i in range(1, 30):
     task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch, 'creds': creds},
-                                                fx_eid="68bade94-bf58-4a7a-bfeb-9c6a61fa5443",
+                                                fx_eid="c640f461-7402-4a60-a6c9-f82cd17a8a40",
                                                 headers=headers)
     task_dict["active"].put(task_id)
 
@@ -94,6 +92,5 @@ while True:
             print(e)
             exception_count += 1
             print(f"Exception count: {exception_count}")
-
     else:
         task_dict["active"].put(cur_tid)

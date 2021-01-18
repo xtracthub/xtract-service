@@ -22,9 +22,11 @@ def matio_extract(event):
     :return metadata (dict) -- metadata as gotten from the materials_io library:
     """
 
+    import time
+
+    import_start = time.time()
     import os
     import sys
-    import time
     import shutil
 
     from xtract_sdk.downloaders.globus_https import GlobusHttpsDownloader
@@ -36,9 +38,9 @@ def matio_extract(event):
     sys.path.insert(1, '/')
 
 
-    # return os.environ['container_version']
     from xtract_matio_main import extract_matio
-    # from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
+
+    import_end = time.time()
 
     # A list of file paths
     all_families = event['family_batch']
@@ -47,8 +49,7 @@ def matio_extract(event):
     should_delete = False
 
 
-    # return "HERE"
-
+    load_family_start_t = time.time()
     if type(all_families) == dict:
         family_batch = FamilyBatch()
         for family in all_families["families"]:
@@ -57,6 +58,10 @@ def matio_extract(event):
             family_batch.add_family(fam)
         all_families = family_batch
 
+    load_family_end_t = time.time()
+
+
+    get_files_start_t = time.time()
     # This collects all of the files for all of the families.
     file_counter = 0
     filename_to_path_map = dict()
@@ -84,6 +89,8 @@ def matio_extract(event):
             batch_thruple_ls.append(batch_thruple)
             file_counter += 1
 
+    get_files_end_t = time.time()
+
     if not is_local:
         down_start_t = time.time()
         downloader = GlobusHttpsDownloader()
@@ -95,6 +102,7 @@ def matio_extract(event):
     else:
         down_start_t = down_end_t = 0
 
+    extract_iter_start_t = time.time()
     # This extracts the metadata for each group in each family.ZZ
     for family in all_families.families:
 
@@ -123,11 +131,17 @@ def matio_extract(event):
             # Cleanup the clutter -- will not need file again since family includes all groups
             shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
 
+    extract_iter_end_time = time.time()
+
     t1 = time.time()
 
     return {"family_batch": all_families,
             "container_version": os.environ["container_version"],
             "transfer_time": down_end_t - down_start_t,
+            "import_time": import_end - import_start,
+            "family_fetch_time": load_family_end_t - load_family_start_t,
+            "file_unpack_time": get_files_end_t - get_files_start_t,
+            "full_extract_loop_time": extract_iter_end_time - extract_iter_start_t,
             "total_time": t1 - t0
             }
 
