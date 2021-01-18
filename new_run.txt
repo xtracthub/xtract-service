@@ -1,0 +1,536 @@
+The function has been updated! Please copy/paste the following code into 11c85e7a-4000-4378-a265-d97e2dc8b460 function class:
+
+11c85e7a-4000-4378-a265-d97e2dc8b460
+Started the 0th task push thread...
+Polling queue empty. Creating batch!
+Started the 0th result thread...
+*********************************
+Num successes: 0
+Num failures: 0
+Only 400 tasks at endpoint. 
+Number of send requests: 0
+Number of poll requests: 0
+*********************************
+Elapsed time: 192.9654939174652
+Batch is empty. Sleeping... 
+*********************************
+Num successes: 0
+Num failures: 0
+Only 1200 tasks at endpoint. 
+Number of send requests: 3
+Number of poll requests: 0
+*********************************
+Elapsed time: 197.97064638137817
+Polling queue empty. Creating batch!
+*********************************
+Num successes: 0
+Num failures: 0
+Only 2800 tasks at endpoint. 
+Number of send requests: 6
+Number of poll requests: 1
+*********************************
+Elapsed time: 202.97572088241577
+Polling queue empty. Creating batch!
+*********************************
+Num successes: 0
+Num failures: 0
+Only 4000 tasks at endpoint. 
+Number of send requests: 10
+Number of poll requests: 2
+*********************************
+Elapsed time: 207.98079323768616
+Polling queue empty. Creating batch!
+Polling queue empty. Creating batch!
+*********************************
+Num successes: 0
+Num failures: 0
+Only 5200 tasks at endpoint. 
+Number of send requests: 13
+Number of poll requests: 4
+*********************************
+Elapsed time: 212.98591709136963
+Polling queue empty. Creating batch!
+*********************************
+Num successes: 0
+Num failures: 0
+Only 6400 tasks at endpoint. 
+Number of send requests: 16
+Number of poll requests: 5
+*********************************
+Elapsed time: 217.99105978012085
+Polling queue empty. Creating batch!
+Polling queue empty. Creating batch!
+*********************************
+Num successes: 0
+Num failures: 0
+Only 8000 tasks at endpoint. 
+Number of send requests: 19
+Number of poll requests: 7
+*********************************
+Elapsed time: 222.99616193771362
+Polling queue empty. Creating batch!
+*********************************
+Num successes: 0
+Num failures: 0
+Only 9200 tasks at endpoint. 
+Number of send requests: 23
+Number of poll requests: 8
+*********************************
+Elapsed time: 228.001238822937
+Polling queue empty. Creating batch!
+*********************************
+Num successes: 0
+Num failures: 0
+Only 10400 tasks at endpoint. 
+Number of send requests: 26
+Number of poll requests: 10
+*********************************
+Elapsed time: 233.00635933876038
+*********************************
+Num successes: 0
+Num failures: 0
+Only 12000 tasks at endpoint. 
+Number of send requests: 29
+Number of poll requests: 1492
+*********************************
+Elapsed time: 238.01657032966614
+*********************************
+Num successes: 0
+Num failures: 0
+Only 13200 tasks at endpoint. 
+Number of send requests: 32
+Number of poll requests: 3118
+*********************************
+Elapsed time: 243.02676939964294
+*********************************
+Num successes: 0
+Num failures: 0
+Only 14400 tasks at endpoint. 
+Number of send requests: 36
+Number of poll requests: 4588
+*********************************
+Elapsed time: 248.03697729110718
+*********************************
+Num successes: 0
+Num failures: 0
+Only 15600 tasks at endpoint. 
+Number of send requests: 39
+Number of poll requests: 6161
+*********************************
+Elapsed time: 253.0472514629364
+*********************************
+Num successes: 0
+Num failures: 0
+Only 16800 tasks at endpoint. 
+Number of send requests: 42
+Number of poll requests: 7768
+*********************************
+Elapsed time: 258.05750274658203
+*********************************
+Num successes: 0
+Num failures: 0
+Only 18220 tasks at endpoint. 
+Number of send requests: 45
+Number of poll requests: 9380
+*********************************
+Elapsed time: 263.07428789138794
+*********************************
+Num successes: 0
+Num failures: 0
+Only 19600 tasks at endpoint. 
+Number of send requests: 48
+Number of poll requests: 11024
+*********************************
+Elapsed time: 268.0844655036926
+*********************************
+Num successes: 0
+Num failures: 0
+Only 20800 tasks at endpoint. 
+Number of send requests: 52
+Number of poll requests: 12617
+*********************************
+Elapsed time: 273.08957147598267
+*********************************
+Num successes: 0
+Num failures: 0
+Only 22000 tasks at endpoint. 
+Number of send requests: 55
+Number of poll requests: 14239
+*********************************
+Elapsed time: 278.0998592376709
+*********************************
+Num successes: 0
+Num failures: 0
+Only 23600 tasks at endpoint. 
+Number of send requests: 58
+Number of poll requests: 15891
+*********************************
+Elapsed time: 283.11008501052856
+*********************************
+Num successes: 0
+Num failures: 0
+Only 24800 tasks at endpoint. 
+Number of send requests: 61
+Number of poll requests: 17553
+*********************************
+Elapsed time: 288.12025356292725
+*********************************
+Num successes: 0
+Num failures: 0
+Only 26000 tasks at endpoint. 
+Number of send requests: 65
+Number of poll requests: 19016
+*********************************
+Elapsed time: 293.1253833770752
+*********************************
+Num successes: 0
+Num failures: 0
+Only 26800 tasks at endpoint. 
+Number of send requests: 66
+Number of poll requests: 20186
+*********************************
+Elapsed time: 298.13562774658203
+*********************************
+Num successes: 0
+Num failures: 0
+Only 28000 tasks at endpoint. 
+Number of send requests: 70
+Number of poll requests: 21744
+*********************************
+Elapsed time: 303.14069509506226
+*********************************
+Num successes: 0
+Num failures: 0
+Only 29200 tasks at endpoint. 
+Number of send requests: 73
+Number of poll requests: 23282
+*********************************
+Elapsed time: 308.1509065628052
+*********************************
+Num successes: 0
+Num failures: 0
+Only 30400 tasks at endpoint. 
+Number of send requests: 76
+Number of poll requests: 24865
+*********************************
+Elapsed time: 313.1611738204956
+*********************************
+Num successes: 0
+Num failures: 0
+Only 31600 tasks at endpoint. 
+Number of send requests: 79
+Number of poll requests: 26448
+*********************************
+Elapsed time: 318.17143058776855
+*********************************
+Num successes: 0
+Num failures: 0
+Only 33200 tasks at endpoint. 
+Number of send requests: 82
+Number of poll requests: 28027
+*********************************
+Elapsed time: 323.1816532611847
+*********************************
+Num successes: 0
+Num failures: 0
+Only 34400 tasks at endpoint. 
+Number of send requests: 85
+Number of poll requests: 29655
+*********************************
+Elapsed time: 328.1918635368347
+*********************************
+Num successes: 0
+Num failures: 0
+Only 35600 tasks at endpoint. 
+Number of send requests: 89
+Number of poll requests: 31177
+*********************************
+Elapsed time: 333.2021253108978
+*********************************
+Num successes: 0
+Num failures: 0
+Only 36800 tasks at endpoint. 
+Number of send requests: 92
+Number of poll requests: 32833
+*********************************
+Elapsed time: 338.2123899459839
+*********************************
+Num successes: 0
+Num failures: 0
+Only 38000 tasks at endpoint. 
+Number of send requests: 95
+Number of poll requests: 34485
+*********************************
+Elapsed time: 343.22262358665466
+*********************************
+Num successes: 0
+Num failures: 0
+Only 39600 tasks at endpoint. 
+Number of send requests: 98
+Number of poll requests: 36122
+*********************************
+Elapsed time: 348.23278999328613
+*********************************
+Num successes: 0
+Num failures: 0
+Only 40800 tasks at endpoint. 
+Number of send requests: 101
+Number of poll requests: 37772
+*********************************
+Elapsed time: 353.2397611141205
+*********************************
+Num successes: 0
+Num failures: 0
+Only 41600 tasks at endpoint. 
+Number of send requests: 104
+Number of poll requests: 39388
+*********************************
+Elapsed time: 358.24996876716614
+*********************************
+Num successes: 0
+Num failures: 0
+Only 42800 tasks at endpoint. 
+Number of send requests: 107
+Number of poll requests: 41011
+*********************************
+Elapsed time: 363.2602002620697
+*********************************
+Num successes: 0
+Num failures: 0
+Only 44000 tasks at endpoint. 
+Number of send requests: 110
+Number of poll requests: 42648
+*********************************
+Elapsed time: 368.2704815864563
+*********************************
+Num successes: 0
+Num failures: 0
+Only 45200 tasks at endpoint. 
+Number of send requests: 113
+Number of poll requests: 44291
+*********************************
+Elapsed time: 373.2860600948334
+*********************************
+Num successes: 0
+Num failures: 0
+Only 46800 tasks at endpoint. 
+Number of send requests: 116
+Number of poll requests: 45877
+*********************************
+Elapsed time: 378.29626989364624
+*********************************
+Num successes: 0
+Num failures: 0
+Only 48000 tasks at endpoint. 
+Number of send requests: 119
+Number of poll requests: 47483
+*********************************
+Elapsed time: 383.3065037727356
+*********************************
+Num successes: 0
+Num failures: 0
+Only 49200 tasks at endpoint. 
+Number of send requests: 123
+Number of poll requests: 49082
+*********************************
+Elapsed time: 388.31158566474915
+*********************************
+Num successes: 0
+Num failures: 0
+Only 50400 tasks at endpoint. 
+Number of send requests: 126
+Number of poll requests: 50660
+*********************************
+Elapsed time: 393.3218491077423
+*********************************
+Num successes: 0
+Num failures: 0
+Only 51600 tasks at endpoint. 
+Number of send requests: 129
+Number of poll requests: 52292
+*********************************
+Elapsed time: 398.332102060318
+*********************************
+Num successes: 0
+Num failures: 0
+Only 53200 tasks at endpoint. 
+Number of send requests: 132
+Number of poll requests: 53917
+*********************************
+Elapsed time: 403.3423056602478
+*********************************
+Num successes: 0
+Num failures: 0
+Only 54400 tasks at endpoint. 
+Number of send requests: 135
+Number of poll requests: 55561
+*********************************
+Elapsed time: 408.3525848388672
+*********************************
+Num successes: 0
+Num failures: 0
+Only 55600 tasks at endpoint. 
+Number of send requests: 139
+Number of poll requests: 57017
+*********************************
+Elapsed time: 413.3628704547882
+*********************************
+Num successes: 0
+Num failures: 0
+Only 56800 tasks at endpoint. 
+Number of send requests: 142
+Number of poll requests: 58600
+*********************************
+Elapsed time: 418.37313294410706
+*********************************
+Num successes: 0
+Num failures: 0
+Only 58000 tasks at endpoint. 
+Number of send requests: 145
+Number of poll requests: 60150
+*********************************
+Elapsed time: 423.38339376449585
+*********************************
+Num successes: 0
+Num failures: 0
+Only 59600 tasks at endpoint. 
+Number of send requests: 148
+Number of poll requests: 61757
+*********************************
+Elapsed time: 428.38819456100464
+*********************************
+Num successes: 0
+Num failures: 0
+Only 60800 tasks at endpoint. 
+Number of send requests: 151
+Number of poll requests: 63370
+*********************************
+Elapsed time: 433.3984818458557
+*********************************
+Num successes: 0
+Num failures: 0
+Only 62000 tasks at endpoint. 
+Number of send requests: 155
+Number of poll requests: 64940
+*********************************
+Elapsed time: 438.40357756614685
+*********************************
+Num successes: 0
+Num failures: 0
+Only 63200 tasks at endpoint. 
+Number of send requests: 158
+Number of poll requests: 66422
+*********************************
+Elapsed time: 443.41384625434875
+*********************************
+Num successes: 0
+Num failures: 0
+Only 64400 tasks at endpoint. 
+Number of send requests: 161
+Number of poll requests: 68045
+*********************************
+Elapsed time: 448.4241328239441
+*********************************
+Num successes: 0
+Num failures: 0
+Only 65840 tasks at endpoint. 
+Number of send requests: 164
+Number of poll requests: 69672
+*********************************
+Elapsed time: 453.4368522167206
+*********************************
+Num successes: 0
+Num failures: 0
+Only 67200 tasks at endpoint. 
+Number of send requests: 167
+Number of poll requests: 71312
+*********************************
+Elapsed time: 458.44711685180664
+*********************************
+Num successes: 0
+Num failures: 0
+Only 68400 tasks at endpoint. 
+Number of send requests: 171
+Number of poll requests: 72870
+*********************************
+Elapsed time: 463.45267605781555
+*********************************
+Num successes: 0
+Num failures: 0
+Only 69600 tasks at endpoint. 
+Number of send requests: 174
+Number of poll requests: 74507
+*********************************
+Elapsed time: 468.4629535675049
+*********************************
+Num successes: 0
+Num failures: 0
+Only 71200 tasks at endpoint. 
+Number of send requests: 177
+Number of poll requests: 76122
+*********************************
+Elapsed time: 473.47324109077454
+*********************************
+Num successes: 0
+Num failures: 0
+Only 72400 tasks at endpoint. 
+Number of send requests: 180
+Number of poll requests: 77699
+*********************************
+Elapsed time: 478.4834613800049
+*********************************
+Num successes: 0
+Num failures: 0
+Only 73600 tasks at endpoint. 
+Number of send requests: 183
+Number of poll requests: 79311
+*********************************
+Elapsed time: 483.49373722076416
+*********************************
+Num successes: 0
+Num failures: 0
+Only 74800 tasks at endpoint. 
+Number of send requests: 186
+Number of poll requests: 80897
+*********************************
+Elapsed time: 488.5039975643158
+*********************************
+Num successes: 0
+Num failures: 0
+Only 76000 tasks at endpoint. 
+Number of send requests: 190
+Number of poll requests: 82351
+*********************************
+Elapsed time: 493.5091288089752
+*********************************
+Num successes: 0
+Num failures: 0
+Only 77200 tasks at endpoint. 
+Number of send requests: 193
+Number of poll requests: 83840
+*********************************
+Elapsed time: 498.5193943977356
+*********************************
+Num successes: 0
+Num failures: 0
+Only 78660 tasks at endpoint. 
+Number of send requests: 196
+Number of poll requests: 85452
+*********************************
+Elapsed time: 503.5264422893524
+*********************************
+Num successes: 0
+Num failures: 0
+Only 80000 tasks at endpoint. 
+Number of send requests: 199
+Number of poll requests: 87077
+*********************************
+Elapsed time: 508.53666520118713
+*********************************
+Num successes: 0
+Num failures: 0
+Only 81200 tasks at endpoint. 
+Number of send requests: 203
+Number of poll requests: 88622
+*********************************
+Elapsed time: 513.541793346405

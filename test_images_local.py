@@ -18,7 +18,7 @@ from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "midway2"
+system = "theta"
 
 map = None
 if system == 'midway2':
@@ -35,14 +35,16 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
-map_size = 1
-batch_size = 1
+map_size = 16
+batch_size = 16
+
+max_tasks = 80000
 
 
 class test_orch():
     def __init__(self):
         self.current_tasks_on_ep = 0
-        self.max_tasks_on_ep = 90000
+        self.max_tasks_on_ep = 80000
         self.fxc = FuncXClient()
 
         self.funcx_batches = Queue()
@@ -87,7 +89,7 @@ class test_orch():
         return new_path
 
     def preproc_fam_batches(self):
-
+        total_tasks = 0 
         print("PREPROCESSING!")
         while not self.image_path_list.empty():
 
@@ -119,6 +121,7 @@ class test_orch():
                 print("ADDING FAMILY TO FAM BATCH")
                 fam_batch.add_family(empty_fam)
 
+            #if total_tasks > max_tasks: 
             self.fam_batches.append(fam_batch)
 
         img_extractor = ImageExtractor()
@@ -189,7 +192,7 @@ class test_orch():
 
             print(f"Put {num_tids} tids into polling queue! ")
 
-            time.sleep(1)
+            # time.sleep(1)
 
     def polling_loop(self):
         while True:
