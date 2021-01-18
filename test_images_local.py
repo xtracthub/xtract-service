@@ -21,9 +21,6 @@ from xtract_sdk.packagers.family_batch import FamilyBatch
 
 system = "theta"
 
-
-
-
 map = None
 if system == 'midway2':
     map = mapping['xtract-matio::midway2']
