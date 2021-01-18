@@ -7,6 +7,7 @@ mapping = {
          'ep_id': '7faf21be-4667-447c-a96d-4dbe14875cf1',
          'data_path': '/project2/chard/skluzacek/inposoutcars/'},
     'xtract-matio::theta':
+
         {'func_uuid': 'abec00cf-efd3-492e-a0c3-5c659dd06cdd',  # TODO: update this.
          'location': '/projects/CSC249ADCD01/skluzacek/containers/xtract-matio.img',
          'container_type': 'singularity',

@@ -26,7 +26,11 @@ with open("timer_file.txt", 'w') as f:
     f.close()
 
 # HERE IS WHERE WE SET THE SYSTEM #
+<<<<<<< HEAD
 system = "theta"
+
+
+
 
 
 
@@ -49,11 +53,19 @@ location = map['location']
 ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
+
 map_size = 2
 batch_size = 16
 
 
-file_cutoff = 100000
+
+
+
+
+
+
+file_cutoff = 200000
+
 
 
 class test_orch():
@@ -77,7 +89,11 @@ class test_orch():
 
         self.fam_batches = []
 
+
         big_json = "/home/ubuntu/old-xtract-service-2/experiments/tyler_200k.json"
+
+        # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_200k.json"
+
 
         with open(big_json, 'r') as f:
             self.fam_list = json.load(f)
@@ -282,15 +298,23 @@ class test_orch():
             for tid in res:
                 self.polling_queue.put(tid)
 
+
             # import random 
             # time.sleep(random.randint(1,3))
             time.sleep(0.5)
+
+
+
 
     def polling_loop(self):
         while True:
 
             current_tid_batch = []
+
             for i in range(100):  # TODO: 1000 might be too big?
+
+
+
                 if self.polling_queue.empty():
                     print("Polling queue empty. Creating batch!")
                     time.sleep(3)
@@ -336,17 +360,27 @@ class test_orch():
                                 bad_extract_time = g_mdata['extract time']
 
                     # TODO: These are at the family_batch level.
+
                     # import_time = res[item]['result']["import_time"]
                     # family_fetch_time = res[item]['result']["family_fetch_time"]
                     # file_unpack_time = res[item]['result']["file_unpack_time"]
                     # full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
-                    """
+
+
+
+
+
+
+
+
                     with open('timer_file.txt', 'a') as g:
                         csv_writer = csv.writer(g)
                         csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
                                              bad_extract_time, import_time, family_fetch_time, file_unpack_time,
                                              full_extraction_loop_time, good_parsers])
-                    """
+
+
+
                     fam_len = len(ret_fam_batch.families)
                     self.successes += fam_len
 
@@ -365,9 +399,12 @@ class test_orch():
                     print("*********ERROR *************")
                     self.failures += 1
                     print(res)
+
                 #import random
 
-            time.sleep(1)
+
+
+
 
     def stats_loop(self):
         while True:
@@ -384,6 +421,7 @@ class test_orch():
 
 
 perf_orch = test_orch()
+
 
 for i in range(7):
     thr = threading.Thread(target=perf_orch.send_batches_thr_loop, args=())

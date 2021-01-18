@@ -43,7 +43,11 @@ crawl_queue = response["QueueUrl"]
 
 num_families_fetched = 0
 families_fetched = Queue()
+
 while num_families_fetched < 3000000:
+
+
+
 
     sqs_response = client.receive_message(  # TODO: properly try/except this block.
                 QueueUrl=crawl_queue,
