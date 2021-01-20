@@ -7,7 +7,7 @@ class MatioExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         func_id="ae23f090-5a3e-4ef1-9285-31c751abd1a9",
+                         func_id="71639b5b-ef94-41bd-87b9-18b9f7b2fb72",
                          extr_name="xtract-matio",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest")
@@ -37,6 +37,8 @@ def matio_extract(event):
 
     sys.path.insert(1, '/')
 
+    # return "Hello? "
+
 
     from xtract_matio_main import extract_matio
 
@@ -47,7 +49,6 @@ def matio_extract(event):
 
     is_local = True
     should_delete = False
-
 
     load_family_start_t = time.time()
     if type(all_families) == dict:
@@ -127,9 +128,9 @@ def matio_extract(event):
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t
             family.groups[gid].metadata = new_mdata
 
-        if should_delete:
-            # Cleanup the clutter -- will not need file again since family includes all groups
-            shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
+        # if should_delete:
+        #     # Cleanup the clutter -- will not need file again since family includes all groups
+        #     shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
 
     extract_iter_end_time = time.time()
 

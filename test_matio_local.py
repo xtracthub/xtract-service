@@ -26,7 +26,7 @@ with open("timer_file.txt", 'w') as f:
     f.close()
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "theta"
+system = "midway2"
 
 # 10**6 = 1mb
 soft_batch_bytes_max = 10**6
@@ -318,6 +318,8 @@ class test_orch():
 
                 # print(res[item])
                 if 'result' in res[item]:
+
+                    #print(res[item]['result'])
 
                     ret_fam_batch = res[item]['result']['family_batch']
 

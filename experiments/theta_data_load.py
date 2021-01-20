@@ -6,22 +6,24 @@ import time
 import csv
 import os
 from queue import Queue
-from tests.test_utils.native_app_login import globus_native_auth_login
+import threading
+
+# from tests.test_utils.native_app_login import globus_native_auth_login
 
 # Get auth creds
 
-headers = globus_native_auth_login()
+# headers = globus_native_auth_login()
 
 # Connect to AWS
-crawl_id = "6f2defa8-e2d8-437a-b4da-fe35dc0ac7ac"
+crawl_id = "a36bd106-5f4e-489b-9d48-77ec46813433"
 
-source_eid = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
-dest_eid = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
+# source_eid = "e38ee745-6d04-11e5-ba46-22000b92c6ec"
+# dest_eid = "af7bda53-6d04-11e5-ba46-22000b92c6ec"
 
 
 # Connect to Globus
-authorizer = globus_sdk.AccessTokenAuthorizer(headers['Transfer'])
-tc = globus_sdk.TransferClient(authorizer=authorizer)
+# authorizer = globus_sdk.AccessTokenAuthorizer(headers['Transfer'])
+# tc = globus_sdk.TransferClient(authorizer=authorizer)
 
 # connect to enormous crawl queue and pull down 200k families.
 # This creates the extraction and validation queues on the Simple Queue Service.
@@ -42,12 +44,11 @@ response = client.get_queue_url(
 crawl_queue = response["QueueUrl"]
 
 num_families_fetched = 0
-families_fetched = Queue()
-
-while num_families_fetched < 3000000:
+families_fetched = []
 
 
 
+while num_families_fetched < 2500000:
 
     sqs_response = client.receive_message(  # TODO: properly try/except this block.
                 QueueUrl=crawl_queue,
@@ -60,7 +61,8 @@ while num_families_fetched < 3000000:
 
     if ("Messages" in sqs_response) and (len(sqs_response["Messages"]) > 0):
 
-        print(num_families_fetched)
+        if num_families_fetched % 10000 == 0:
+            print(num_families_fetched)
         get_families_status = "ACTIVE"
         for message in sqs_response["Messages"]:
             num_families_fetched += 1
@@ -68,22 +70,26 @@ while num_families_fetched < 3000000:
 
             family = json.loads(message_body)
             # print(family)
-            families_fetched.put(family)
+            # family_id = family['family_id']
+
+
+            families_fetched.append(family)
 
             del_list.append({'ReceiptHandle': message["ReceiptHandle"],
                              'Id': message["MessageId"]})
 
         # Step 2. Delete the messages from SQS.
+        """
         if len(del_list) > 0:
             client.delete_message_batch(
                 QueueUrl=crawl_queue,
                 Entries=del_list)
-
+        """
 time_to_quit = False
-total_families_processed = 0
-print("Moving into transfer phase... ")
+# total_families_processed = 0
+# print("Moving into transfer phase... ")
 
-
+"""
 all_families = []
 while True:
 
@@ -121,10 +127,10 @@ while True:
     print(f"TRANSFERRING!...{total_families_processed}")
     tc.submit_transfer(tdata)
     time.sleep(5)
-
+"""
 print("Writing data to file")
-with open("tyler_200k.json", "w") as f:
-    json.dump(all_families, f)
+with open("tyler_all_files.json", "w") as f:
+    json.dump(families_fetched, f)
 
 
 

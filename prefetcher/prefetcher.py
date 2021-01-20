@@ -22,13 +22,13 @@ class GlobusPrefetcher:
         self.data_path = data_path
 
         self.max_gb = max_gb
-        self.max_files_in_batch = 10000
+        self.max_files_in_batch = 5000
 
         self.last_batch = False
         bytes_in_gb = 1024 * 1024 * 1024
 
         self.max_bytes = bytes_in_gb * max_gb
-        self.block_size = self.max_bytes / 20
+        self.block_size = self.max_bytes / 10
 
         self.client = None
         self.tc = None
@@ -79,6 +79,7 @@ class GlobusPrefetcher:
         # TODO: this is also a thread that needs to be killed!
 
         gl_task_tmp_ls = []
+        num_completed = 0
 
         while True:
             gl_tid = self.transfer_check_queue.get()
@@ -88,13 +89,22 @@ class GlobusPrefetcher:
                 gl_task_tmp_ls.append(gl_tid)
             else:
 
+                # num_completed += 1
+
+                arrival_time = time.time()
+
                 fids = self.transfer_map[gl_tid]
+
+                print(f"[PF] NUMBER OF FIDS RETURNED: {len(fids)}")
 
                 for fid in fids:
 
+                    num_completed += 1
+                    print(f"Num PF completed: {num_completed}")
+
                     family = self.family_map[fid]
                     fam_size = self.get_family_size(family)
-                    family['metadata']["pf_transfer_completed"] = time.time()
+                    family['metadata']["pf_transfer_completed"] = arrival_time
 
                     self.bytes_pf_in_flight -= fam_size
                     self.bytes_pf_completed += fam_size
@@ -103,7 +113,7 @@ class GlobusPrefetcher:
                     self.num_families_mid_transfer -= 1
 
                 # Sleep is here to avoid pressure on the Globus service in case of 'not done'.
-                time.sleep(0.5)
+                # time.sleep(0.25)
 
             if self.transfer_check_queue.empty():
 
@@ -120,7 +130,7 @@ class GlobusPrefetcher:
         i = 0
         families_to_pf = []
 
-        while i < 1000 and not self.next_prefetch_queue.empty():
+        while i < self.max_files_in_batch and not self.next_prefetch_queue.empty():
             i += 1
             pf_family = self.next_prefetch_queue.get()
             families_to_pf.append(pf_family)
@@ -212,7 +222,9 @@ class GlobusPrefetcher:
             # 3. batch_n_files_full: We have filled up the maximum number of files for 1 batch.
             batch_n_files_full = len(self.current_batch) > self.max_files_in_batch
 
-            if batch_size_full or last_batch or batch_n_files_full:
+
+            if batch_n_files_full or last_batch:
+                # if batch_size_full or last_batch or batch_n_files_full:  # TODO: BRING THIS BACK TO TRY SIZES AGAIN.
                 print("[PF] Generating a batch transfer object...")
                 self.pf_msgs_pulled_since_last_batch = 0
 

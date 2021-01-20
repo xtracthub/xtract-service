@@ -1,5 +1,6 @@
 
 import os
+import csv
 import sys
 import json
 import time
@@ -18,15 +19,17 @@ from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
 from extractors import xtract_images, xtract_tabular, xtract_matio, xtract_keyword
 from orchestrator.orch_utils.utils import create_list_chunks
 
+
 # TODO: Python garbage collection!
-
-
 class Orchestrator:
 
     def __init__(self, crawl_id, headers, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
                  extractor_finder='gdrive', prefetch_remote=False,
                  data_prefetch_path=None, dataset_mdata=None):
+
+        # TODO -- fix this.
+        self.crawl_type = 'from_file'
 
         self.crawl_id = crawl_id
 
@@ -67,17 +70,20 @@ class Orchestrator:
         self.success_returns = 0
         self.failed_returns = 0
 
+        self.to_send_queue = Queue()
+
         self.poll_gap_s = 5
 
         self.get_families_status = "STARTING"
 
         # This is here for testing. Only want to test 50k files? Set this to 50k.
-        self.task_cap_until_termination = 61000
+        self.task_cap_until_termination = 10002
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
         # Batch size we use to send tasks to funcx.  (and the subbatch size)
-        self.fx_batch_size = 2000
+        self.map_size = 8
+        self.fx_batch_size = 16
         self.fx_task_sublist_size = 500
 
         # Want to store attributes about funcX requests/responses.
@@ -90,7 +96,7 @@ class Orchestrator:
         self.max_result_size = 0
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
-        self.max_extracting_tasks = 5000
+        self.max_extracting_tasks = 51000
         self.num_extracting_tasks = 0
 
         self.max_pre_prefetch = 15000  # TODO: Integrate this to actually fix timing bug.
@@ -185,41 +191,77 @@ class Orchestrator:
             self.sqs_push_threads[i] = True
         self.logger.info(f"Successfully started {len(self.sqs_push_threads)} SQS push threads!")
 
-        for i in range(0, self.get_family_threads):
-            self.logger.info(f"Attempting to start get_next_families() as its own thread [{i}]... ")
-            consumer_thr = threading.Thread(target=self.get_next_families_loop, args=())
-            consumer_thr.start()
-            print(f"Successfully started the get_next_families() thread number {i} ")
+        if self.crawl_type != 'from_file':
+            for i in range(0, self.get_family_threads):
+                self.logger.info(f"Attempting to start get_next_families() as its own thread [{i}]... ")
+                consumer_thr = threading.Thread(target=self.get_next_families_loop, args=())
+                consumer_thr.start()
+                print(f"Successfully started the get_next_families() thread number {i} ")
+        else:
+            print("ATTEMPTING TO LAUNCH **FILE** CRAWL THREAD. ")
+            file_crawl_thr = threading.Thread(target=self.read_next_families_from_file_loop, args=())
+            file_crawl_thr.start()
+            print("Successfully started the **FILE** CRAWL thread!")
 
-    def send_subbatch_thread(self, sub_batch):
-        batch_send_t = time.time
-        print(f"SIZE OF SUBBATCH: {len(sub_batch)}")
-        task_ids = remote_extract_batch(sub_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
-        batch_recv_t = time.time()
+        for i in range(0, 15):
+            fx_push_thr = threading.Thread(target=self.send_subbatch_thread, args=())
+            fx_push_thr.start()
+        print("Successfully spun up {i} send threads!")
 
-        # print(f"Time to send batch: {batch_recv_t - batch_send_t}")
+        with open("cpe_times.csv", 'w') as f:
+            f.close()
 
-        self.num_send_reqs += 1
-        self.pre_launch_counter -= len(sub_batch)
+    def send_subbatch_thread(self):
 
-        if type(task_ids) is dict:
-            self.logger.exception(f"Caught funcX error: {task_ids['exception_caught']}. \n"
-                                  f"Putting the tasks back into active queue for retry")
+        # TODO: THIS IS NEW. HUNGRY STANDALONE THREADPOOL THAT SENDS ALL TASKS.
+        # TODO: SHOULD TERMINATE WHEN COMPLETED <-- do after paper deadline.
 
-            for reject_fam_batch in self.current_batch:
+        while True:
 
-                fam_batch_dict = reject_fam_batch['event']['family_batch']
+            sub_batch = []
+            for i in range(10):
 
-                for reject_fam in fam_batch_dict['families']:
-                    self.families_to_process.put(json.dumps(reject_fam))
+                if self.to_send_queue.empty():
+                    break
 
-            self.logger.info(f"Pausing for 10 seconds...")
-            time.sleep(10)
-            # continue
+                # I believe this is a blocking call.
+                part_batch = self.to_send_queue.get()
+                sub_batch.extend(part_batch)
 
-        for task_id in task_ids:
-            self.task_dict["active"].put(task_id)
-            self.num_extracting_tasks += 1
+            if len(sub_batch) == 0:
+                time.sleep(0.5)
+                continue
+
+            batch_send_t = time.time()
+            print(f"SIZE OF SUBBATCH: {len(sub_batch)}")
+            task_ids = remote_extract_batch(sub_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
+            batch_recv_t = time.time()
+
+            print(f"Time to send batch: {batch_recv_t - batch_send_t}")
+
+            self.num_send_reqs += 1
+            self.pre_launch_counter -= len(sub_batch)
+
+            if type(task_ids) is dict:
+                self.logger.exception(f"Caught funcX error: {task_ids['exception_caught']}. \n"
+                                      f"Putting the tasks back into active queue for retry")
+
+                for reject_fam_batch in self.current_batch:
+
+                    fam_batch_dict = reject_fam_batch['event']['family_batch']
+
+                    for reject_fam in fam_batch_dict['families']:
+                        self.families_to_process.put(json.dumps(reject_fam))
+
+                self.logger.info(f"Pausing for 10 seconds...")
+                ## time.sleep(10)
+                # continue
+
+            for task_id in task_ids:
+                self.task_dict["active"].put(task_id)
+                self.num_extracting_tasks += 1
+
+            time.sleep(0.5)
 
     def validate_enqueue_loop(self, thr_id):
 
@@ -253,18 +295,45 @@ class Orchestrator:
             current_batch = 1
             while not self.to_validate_q.empty() and current_batch < 8:  # TODO: manual downsize so fits on Q.
                 item_to_add = self.to_validate_q.get()
+
+                # TODO: THIS IS PULLING THINGS BEFORE THEY GET TO VALIDATE QUEUE.
+
                 insertables.append(item_to_add)
                 current_batch += 1
+            with open("cpe_times.csv", 'a') as f:
 
-            try:
-                ta = time.time()
-                self.client.send_message_batch(QueueUrl=self.validation_queue_url,
-                                               Entries=insertables)
-                tb = time.time()
-                self.t_send_batch += tb-ta
+                csv_writer = csv.writer(f)
 
-            except Exception as e:  # TODO: too vague
-                print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
+                for item in insertables:
+
+                    fam_batch = json.loads(item['MessageBody'])
+                    # fam_batch = jsonitem #json.loads(item)
+
+                    for family in fam_batch['families']:
+                        # print(family)
+                        # crawl_timestamp = family['metadata']['crawl_timestamp']
+                        pf_timestamp = family['metadata']['pf_transfer_completed']
+                        fx_timestamp = family['metadata']['t_funcx_req_received']
+
+                        total_file_size = 0
+
+                        all_files = family['files']
+                        total_files = len(all_files)
+                        for file_obj in all_files:
+                            total_file_size += file_obj['metadata']['physical']['size']
+
+                        csv_writer.writerow(['x', 0, pf_timestamp, fx_timestamp, total_files, total_file_size])
+
+
+            # try:
+            #     ta = time.time()
+            #     self.client.send_message_batch(QueueUrl=self.validation_queue_url,
+            #                                    Entries=insertables)
+            #     tb = time.time()
+            #     self.t_send_batch += tb-ta
+            #
+            # except Exception as e:  # TODO: too vague
+            #     print(f"WAS UNABLE TO PROPERLY CONNECT to SQS QUEUE: {e}")
 
     def send_families_loop(self):
 
@@ -319,8 +388,12 @@ class Orchestrator:
                         self.logger.info("[SEND] Discovered final output despite crawl termination. Processing...")
                         time.sleep(0.5)  # This is a multi-minute task and only is reached due to starvation.
 
+            # self.map_size =
             # Cast list to FamilyBatch
+
+            family_batch = FamilyBatch()
             for family in family_list:
+
 
                 # Get extractor out of each group
                 if self.extractor_finder == 'matio':
@@ -355,8 +428,24 @@ class Orchestrator:
                 ex_func_id = mapping['xtract-matio::midway2']['func_uuid']
 
                 # Putting into family batch -- we use funcX batching now, but no use rewriting...
-                family_batch = FamilyBatch()
+                # family_batch = FamilyBatch()
                 family_batch.add_family(xtr_fam_obj)
+                # print(f"Length of family batch: {len(family_batch.families)}")
+
+                if len(family_batch.families) >= self.map_size:
+
+                    if d_type == "gdrive":
+                        self.current_batch.append({"event": {"family_batch": family_batch,
+                                                             "creds": self.gdrive_token[0]},
+                                                   "func_id": ex_func_id})
+                    elif d_type == "HTTPS":
+                        self.current_batch.append({"event": {"family_batch": family_batch.to_dict()},
+                                                   "func_id": ex_func_id})
+
+                    family_batch = FamilyBatch()
+
+            # Catch any tasks currently in the map and append them to the batch
+            if len(family_batch.families) > 0:
 
                 if d_type == "gdrive":
                     self.current_batch.append({"event": {"family_batch": family_batch,
@@ -366,6 +455,7 @@ class Orchestrator:
                     self.current_batch.append({"event": {"family_batch": family_batch.to_dict()},
                                                "func_id": ex_func_id})
 
+            # Now take that straggling family batch and append it.
             if len(self.current_batch) > 0:
                 if self.t_first_funcx_invoke is None:
                     self.t_first_funcx_invoke = time.time()
@@ -383,17 +473,23 @@ class Orchestrator:
             # print(f"Total sub_batches: {len(sub_batches)}")
 
             send_threads = []
-            i = 0
-            for subbatch in sub_batches:
-                send_thr = threading.Thread(target=self.send_subbatch_thread, args=(subbatch,))
-                send_thr.start()
-                send_threads.append(send_thr)
-                i += 1
-            if i > 0:
-                print(f"Spun up {i} task-send threads!")
 
-            for thr in send_threads:
-                thr.join()
+            # for sub_batch in sub_batches:
+
+            self.to_send_queue.put(self.current_batch)
+
+            # i = 0
+            # # TODO: THESE NEED TO BE STANDALONE THREADPOOL
+            # for subbatch in sub_batches:
+            #     send_thr = threading.Thread(target=self.send_subbatch_thread, args=(subbatch,))
+            #     send_thr.start()
+            #     send_threads.append(send_thr)
+            #     i += 1
+            # if i > 0:
+            #     print(f"Spun up {i} task-send threads!")
+            #
+            # for thr in send_threads:
+            #     thr.join()
 
             # Empty the batch! Everything in here has been sent :)
             self.current_batch = []
@@ -403,6 +499,30 @@ class Orchestrator:
         po_thr = threading.Thread(target=self.poll_extractions_and_stats, args=())
         po_thr.start()
         self.logger.info("Poller successfully launched!")
+
+    def read_next_families_from_file_loop(self):
+
+        # TODO: make this a loop that just reads 50k and quits.
+
+        with open('/Users/tylerskluzacek/PycharmProjects/xtracthub-service/experiments/tyler_200k.json', 'r') as f:
+            all_families = json.load(f)
+
+
+            num_fams = 0
+            for family in all_families:
+
+                self.prefetcher.next_prefetch_queue.put(json.dumps(family))
+
+                # break
+
+                num_fams += 1
+                if num_fams > self.task_cap_until_termination:
+                    break
+
+        # self.prefetcher.kill_prefetcher = True
+        self.prefetcher.last_batch = True
+        print("ENDING LOOP")
+
 
     def get_next_families_loop(self):
         """
@@ -673,6 +793,8 @@ class Orchestrator:
                         if "family_batch" in res:
                             family_batch = res["family_batch"]
                             unpacked_metadata = self.unpack_returned_family_batch(family_batch)
+
+                            # print(unpacked_metadata)
 
                             # TODO: make this a regular feature for matio (so this code isn't necessary...)
                             if 'event' in unpacked_metadata:
