@@ -136,6 +136,9 @@ class Orchestrator:
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)  # TODO: let's make this configurable.
 
+
+
+        """
         # This creates the extraction and validation queues on the Simple Queue Service.
         self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"  # TODO: env var.
         self.client = boto3.client('sqs',
@@ -163,6 +166,7 @@ class Orchestrator:
 
         self.crawl_queue = response["QueueUrl"]
 
+        """
         self.families_to_process = Queue()
         self.to_validate_q = Queue()
 
