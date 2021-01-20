@@ -51,7 +51,7 @@ ep_id = map['ep_id']
 map_size = 2
 batch_size = 16
 
-file_cutoff = 1000
+file_cutoff = 100000
 
 
 class test_orch():
@@ -75,9 +75,9 @@ class test_orch():
 
         self.fam_batches = []
 
-        # big_json = "/home/ubuntu/old-xtract-service-2/experiments/tyler_200k.json"
+        big_json = "/home/ubuntu/old-xtract-service-2/experiments/tyler_200k.json"
 
-        big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
+        # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
 
         with open(big_json, 'r') as f:

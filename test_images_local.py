@@ -40,7 +40,7 @@ ep_id = map['ep_id']
 map_size = 16
 batch_size = 16
 
-task_stop = 10000
+task_stop = 5000
 
 
 
