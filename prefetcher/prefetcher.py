@@ -95,12 +95,12 @@ class GlobusPrefetcher:
 
                 fids = self.transfer_map[gl_tid]
 
-                print(f"[PF] NUMBER OF FIDS RETURNED: {len(fids)}")
+                # print(f"[PF] NUMBER OF FIDS RETURNED: {len(fids)}")
 
                 for fid in fids:
 
                     num_completed += 1
-                    print(f"Num PF completed: {num_completed}")
+                    # print(f"Num PF completed: {num_completed}")
 
                     family = self.family_map[fid]
                     fam_size = self.get_family_size(family)

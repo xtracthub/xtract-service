@@ -77,7 +77,7 @@ class Orchestrator:
         self.get_families_status = "STARTING"
 
         # This is here for testing. Only want to test 50k files? Set this to 50k.
-        self.task_cap_until_termination = 10002
+        self.task_cap_until_termination = 50002
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
@@ -237,11 +237,11 @@ class Orchestrator:
                 continue
 
             batch_send_t = time.time()
-            print(f"SIZE OF SUBBATCH: {len(sub_batch)}")
+            # print(f"SIZE OF SUBBATCH: {len(sub_batch)}")
             task_ids = remote_extract_batch(sub_batch, ep_id=self.funcx_eid, headers=self.fx_headers)
             batch_recv_t = time.time()
 
-            print(f"Time to send batch: {batch_recv_t - batch_send_t}")
+            # print(f"Time to send batch: {batch_recv_t - batch_send_t}")
 
             self.num_send_reqs += 1
             self.pre_launch_counter -= len(sub_batch)
@@ -508,7 +508,8 @@ class Orchestrator:
 
         # TODO: make this a loop that just reads 50k and quits.
 
-        with open('/Users/tylerskluzacek/PycharmProjects/xtracthub-service/experiments/tyler_200k.json', 'r') as f:
+        #with open('/Users/tylerskluzacek/PycharmProjects/xtracthub-service/experiments/tyler_200k.json', 'r') as f:
+        with open('/home/ubuntu/old-xtract-service-2/experiments/tyler_200k.json', 'r') as f:
             all_families = json.load(f)
 
 
