@@ -26,7 +26,7 @@ with open("timer_file.txt", 'w') as f:
     f.close()
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "midway2"
+system = "theta"
 
 # 10**6 = 1mb
 soft_batch_bytes_max = 10**6
@@ -51,7 +51,7 @@ ep_id = map['ep_id']
 map_size = 2
 batch_size = 16
 
-file_cutoff = 100000
+file_cutoff = 5000
 
 
 class test_orch():
@@ -75,15 +75,19 @@ class test_orch():
 
         self.fam_batches = []
 
-        big_json = "/home/ubuntu/old-xtract-service-2/experiments/tyler_200k.json"
+        big_json = "/home/ubuntu/old_xtracthub-service/experiments/tyler_everything.json"
 
         # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
-
+        t0 = time.time() 
         with open(big_json, 'r') as f:
             self.fam_list = json.load(f)
 
         print(f"Number of famlilies in fam_list: {len(self.fam_list)}")
+        t1 = time.time()
+
+        print(f"Time to load families: {t1-t0}")
+        time.sleep(5) # Time to read!!!
 
         # Transfer the stored list to a queue to promote good concurrency while making batches.
         for item in self.fam_list:
@@ -100,7 +104,7 @@ class test_orch():
         if system == "midway2":
             new_path = f"/project2/chard/skluzacek/{family_id}/{file_name}"
         elif system == "theta":
-            new_path = f"/projects/CSC249ADCD01/skluzacek/data_to_process/{family_id}/{file_name}"
+            new_path = f"/projects/CSC249ADCD01/skluzacek/{old_path}"
         return new_path
 
     def preproc_fam_batches(self):
@@ -348,10 +352,10 @@ class test_orch():
 
                     # TODO: These are at the family_batch level.
 
-                    # import_time = res[item]['result']["import_time"]
-                    # family_fetch_time = res[item]['result']["family_fetch_time"]
-                    # file_unpack_time = res[item]['result']["file_unpack_time"]
-                    # full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
+                    import_time = res[item]['result']["import_time"]
+                    family_fetch_time = res[item]['result']["family_fetch_time"]
+                    file_unpack_time = res[item]['result']["file_unpack_time"]
+                    full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
 
 
 
@@ -360,11 +364,11 @@ class test_orch():
                     file_unpack_time = 0
                     full_extraction_loop_time = 0
 
-                    # with open('timer_file.txt', 'a') as g:
-                    #     csv_writer = csv.writer(g)
-                    #     csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
-                    #                          bad_extract_time, import_time, family_fetch_time, file_unpack_time,
-                    #                          full_extraction_loop_time, good_parsers])
+                    with open('timer_file.txt', 'a') as g:
+                        csv_writer = csv.writer(g)
+                        csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
+                                             bad_extract_time, import_time, family_fetch_time, file_unpack_time,
+                                             full_extraction_loop_time, good_parsers])
 
                     fam_len = len(ret_fam_batch.families)
                     self.successes += fam_len
@@ -376,15 +380,15 @@ class test_orch():
                 elif 'exception' in res[item]:
                     res[item]['exception'].reraise()
 
-                elif 'status' in res[item]:
+                else:
                     self.polling_queue.put(item)
-
+                """
 
                 else:
                     print("*********ERROR *************")
                     self.failures += 1
                     print(res)
-
+                """
 
     def stats_loop(self):
         while True:
