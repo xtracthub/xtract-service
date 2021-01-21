@@ -28,6 +28,8 @@ class Orchestrator:
                  extractor_finder='gdrive', prefetch_remote=False,
                  data_prefetch_path=None, dataset_mdata=None):
 
+        prefetch_remote = False
+
         # TODO -- fix this.
         self.crawl_type = 'from_file'
 
@@ -96,7 +98,7 @@ class Orchestrator:
         self.max_result_size = 0
 
         # Number (current and max) of number of tasks sent to funcX for extraction.
-        self.max_extracting_tasks = 51000
+        self.max_extracting_tasks = 5
         self.num_extracting_tasks = 0
 
         self.max_pre_prefetch = 15000  # TODO: Integrate this to actually fix timing bug.
@@ -398,7 +400,6 @@ class Orchestrator:
             family_batch = FamilyBatch()
             for family in family_list:
 
-
                 # Get extractor out of each group
                 if self.extractor_finder == 'matio':
                     d_type = "HTTPS"
@@ -508,15 +509,15 @@ class Orchestrator:
 
         # TODO: make this a loop that just reads 50k and quits.
 
-        #with open('/Users/tylerskluzacek/PycharmProjects/xtracthub-service/experiments/tyler_200k.json', 'r') as f:
-        with open('/home/ubuntu/old-xtract-service-2/experiments/tyler_200k.json', 'r') as f:
+        with open('/Users/tylerskluzacek/PycharmProjects/xtracthub-service/experiments/tyler_200k.json', 'r') as f:
+        # with open('/home/ubuntu/old-xtract-service-2/experiments/tyler_200k.json', 'r') as f:
             all_families = json.load(f)
 
 
             num_fams = 0
             for family in all_families:
 
-                self.prefetcher.next_prefetch_queue.put(json.dumps(family))
+                self.families_to_process.put(json.dumps(family))
 
                 # break
 
@@ -525,9 +526,9 @@ class Orchestrator:
                     break
 
         # self.prefetcher.kill_prefetcher = True
-        self.prefetcher.last_batch = True
+        # self.prefetcher.last_batch = True  # TODO: bring this back for prefetcher.
         print("ENDING LOOP")
-
+#
 
     def get_next_families_loop(self):
         """
@@ -642,37 +643,41 @@ class Orchestrator:
         # STAT CHECK: if we haven't updated stats in 5 seconds, then we update.
         cur_time = time.time()
         if cur_time - self.last_checked > 5:
-            total_bytes = self.prefetcher.orch_unextracted_bytes + \
-                          self.prefetcher.bytes_pf_completed + \
-                          self.prefetcher.bytes_pf_in_flight
+
+            # TODO: all the commented-out jazz here should really be 'if prefetch_remote'.
+            # total_bytes = self.prefetcher.orch_unextracted_bytes + \
+            #               self.prefetcher.bytes_pf_completed + \
+            #               self.prefetcher.bytes_pf_in_flight
 
             print("Phase 4: polling")
             print(f"\t Successes: {self.success_returns}")
             print(f"\t Failures: {self.failed_returns}\n")
             self.logger.debug(f"[VALIDATE] Length of validation queue: {self.to_validate_q.qsize()}")
 
-            n_pulled = self.prefetcher.next_prefetch_queue.qsize()
-            n_pulled_per_sec = self.num_families_fetched / (cur_time - self.get_families_start_time)
-            n_pf_batch = self.prefetcher.pf_msgs_pulled_since_last_batch
-            n_families_pf_per_sec = self.prefetcher.num_families_transferred / (cur_time - self.get_families_start_time)
-            n_pf = self.prefetcher.num_families_mid_transfer
-            n_awaiting_fx = self.pre_launch_counter + self.prefetcher.orch_reader_q.qsize()
+            # n_pulled = self.prefetcher.next_prefetch_queue.qsize()
+            # n_pulled_per_sec = self.num_families_fetched / (cur_time - self.get_families_start_time)
+            # n_pf_batch = self.prefetcher.pf_msgs_pulled_since_last_batch
+            # n_families_pf_per_sec = self.prefetcher.num_families_transferred / (cur_time - self.get_families_start_time)
+            # n_pf = self.prefetcher.num_families_mid_transfer
+            # n_awaiting_fx = self.pre_launch_counter + self.prefetcher.orch_reader_q.qsize()
             n_in_fx = self.num_extracting_tasks
             n_success = self.success_returns
 
-            total_tracked = n_success + n_in_fx + n_awaiting_fx + n_pf + n_pf_batch + n_pulled
+            # total_tracked = n_success + n_in_fx + n_awaiting_fx + n_pf + n_pf_batch + n_pulled
 
-            self.logger.info(f"\n** TASK LOCATION BREAKDOWN **\n"
-                             f"--Pulled: {n_pulled}\t|\t({n_pulled_per_sec}/s)\n"
-                             f"--In pf batching: {n_pf_batch}\n"
-                             f"--Prefetching: {n_pf}\t|\t({n_families_pf_per_sec})\n" 
-                             f"--Awaiting extraction: {n_awaiting_fx}\n"
-                             f"--In extraction: {n_in_fx}\n"
-                             f"--Completed: {n_success}\n"
-                             f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}\n")
+            # self.logger.info(f"\n** TASK LOCATION BREAKDOWN **\n"
+            #                  f"--Pulled: {n_pulled}\t|\t({n_pulled_per_sec}/s)\n"
+            #                  f"--In pf batching: {n_pf_batch}\n"
+            #                  f"--Prefetching: {n_pf}\t|\t({n_families_pf_per_sec})\n"
+            #                  f"--Awaiting extraction: {n_awaiting_fx}\n"
+            #                  f"--In extraction: {n_in_fx}\n"
+            #                  f"--Completed: {n_success}\n"
+            #                  f"\n-- Fetch-Track Delta: {self.num_families_fetched - total_tracked}\n")
+
+            print(f'')
 
             if self.prefetch_remote:
-                print(f"\t Eff. dir size (GB): {total_bytes / 1024 / 1024 / 1024}")
+                # print(f"\t Eff. dir size (GB): {total_bytes / 1024 / 1024 / 1024}")
                 print(f"\t N Transfer Tasks: {self.prefetcher.num_transfers}")
 
             if self.num_send_reqs > 0 and self.num_poll_reqs > 0 and n_success > 0:
