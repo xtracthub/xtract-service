@@ -52,7 +52,7 @@ map_size = 16
 batch_size = 20
 
 file_cutoff = 3000000
-max_outstanding_tasks = 100000
+max_outstanding_tasks = 50000
 
 class test_orch():
     def __init__(self):
@@ -83,7 +83,7 @@ class test_orch():
         import os
         print(os.getcwd())
 
-        # big_json = "../experiments/tyler_30k.json"
+        big_json = "../experiments/tyler_30k.json"
         # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         t0 = time.time() 
@@ -348,11 +348,16 @@ class test_orch():
 
                     #print(res[item]['result'])
 
-                    ret_fam_batch = res[item]['result']['family_batch']
+                    # ret_fam_batch = res[item]['result']['family_batch']
+                    ret_fam_batch = res[item]['result']
+
+                    num_finished = ret_fam_batch['finished']
+
+                    print(num_finished)
 
 
 
-                    timer = res[item]['result']['total_time']
+                    # timer = res[item]['result']['total_time']
 
                     family_file_size = 0
                     bad_extract_time = 0
@@ -360,49 +365,49 @@ class test_orch():
 
                     good_parsers = ""
 
-                    family_mdata_size = get_deep_size(ret_fam_batch)
+                    # family_mdata_size = get_deep_size(ret_fam_batch)
+                    #
+                    # for family in ret_fam_batch.families:
+                    #
+                    #     # print(family.metadata)
+                    #
+                    #     for file in family.files:
+                    #         family_file_size += file['metadata']['physical']['size']
+                    #
+                    #     for gid in family.groups:
+                    #         g_mdata = family.groups[gid].metadata
+                    #         # print(g_mdata)
+                    #
+                    #         if g_mdata['matio'] != {} and g_mdata['matio'] is not None:
+                    #             good_parsers = good_parsers + g_mdata['parser']
+                    #             good_extract_time += g_mdata['extract time']
+                    #         else:
+                    #             bad_extract_time = g_mdata['extract time']
+                    #
+                    #     # TODO: These are at the family_batch level.
+                    #
+                    #     import_time = res[item]['result']["import_time"]
+                    #     family_fetch_time = res[item]['result']["family_fetch_time"]
+                    #     file_unpack_time = res[item]['result']["file_unpack_time"]
+                    #     full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
 
-                    for family in ret_fam_batch.families:
-
-                        # print(family.metadata)
-
-                        for file in family.files:
-                            family_file_size += file['metadata']['physical']['size']
-
-                        for gid in family.groups:
-                            g_mdata = family.groups[gid].metadata
-                            # print(g_mdata)
-
-                            if g_mdata['matio'] != {} and g_mdata['matio'] is not None:
-                                good_parsers = good_parsers + g_mdata['parser']
-                                good_extract_time += g_mdata['extract time']
-                            else:
-                                bad_extract_time = g_mdata['extract time']
-
-                        # TODO: These are at the family_batch level.
-
-                        import_time = res[item]['result']["import_time"]
-                        family_fetch_time = res[item]['result']["family_fetch_time"]
-                        file_unpack_time = res[item]['result']["file_unpack_time"]
-                        full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
 
 
+                        # import_time = 0
+                        # family_fetch_time = 0
+                        # file_unpack_time = 0
+                        # full_extraction_loop_time = 0
+                        #
+                        # with open('timer_file.txt', 'a') as g:
+                        #     csv_writer = csv.writer(g)
+                        #     csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
+                        #                         bad_extract_time, import_time, family_fetch_time, file_unpack_time,
+                        #                         full_extraction_loop_time, good_parsers])
 
-                        import_time = 0
-                        family_fetch_time = 0
-                        file_unpack_time = 0
-                        full_extraction_loop_time = 0
+                    # fam_len = len(ret_fam_batch.families)
+                    self.successes += num_finished
 
-                        with open('timer_file.txt', 'a') as g:
-                            csv_writer = csv.writer(g)
-                            csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
-                                                bad_extract_time, import_time, family_fetch_time, file_unpack_time,
-                                                full_extraction_loop_time, good_parsers])
-
-                    fam_len = len(ret_fam_batch.families)
-                    self.successes += fam_len
-
-                    self.current_tasks_on_ep -= fam_len
+                    self.current_tasks_on_ep -= num_finished
 
                     # NOTE -- we're doing nothing with the returned metadata here.
 

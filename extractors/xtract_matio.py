@@ -23,6 +23,9 @@ def matio_extract(event):
     """
 
     import time
+    import json
+
+    import pickle as pkl
 
     import_start = time.time()
     import os
@@ -67,6 +70,8 @@ def matio_extract(event):
     file_counter = 0
     filename_to_path_map = dict()
     batch_thruple_ls = []
+
+    total_families = 0
 
     base_url = None
     for family in all_families.families:
@@ -128,6 +133,10 @@ def matio_extract(event):
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t
             family.groups[gid].metadata = new_mdata
 
+        with open(f"/projects/CSC249ADCD01/skluzacek/metadata/{family.family_id}", 'wb') as f:
+            pkl.dump(family, f)
+
+
         # if should_delete:
         #     # Cleanup the clutter -- will not need file again since family includes all groups
         #     shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
@@ -136,14 +145,16 @@ def matio_extract(event):
 
     t1 = time.time()
 
-    return {"family_batch": all_families,
-            "container_version": os.environ["container_version"],
-            "transfer_time": down_end_t - down_start_t,
-            "import_time": import_end - import_start,
-            "family_fetch_time": load_family_end_t - load_family_start_t,
-            "file_unpack_time": get_files_end_t - get_files_start_t,
-            "full_extract_loop_time": extract_iter_end_time - extract_iter_start_t,
-            "total_time": t1 - t0
-            }
+    return {'finished': len(all_families.families)}
+
+    # return {"family_batch": all_families,
+    #         "container_version": os.environ["container_version"],
+    #         "transfer_time": down_end_t - down_start_t,
+    #         "import_time": import_end - import_start,
+    #         "family_fetch_time": load_family_end_t - load_family_start_t,
+    #         "file_unpack_time": get_files_end_t - get_files_start_t,
+    #         "full_extract_loop_time": extract_iter_end_time - extract_iter_start_t,
+    #         "total_time": t1 - t0
+    #         }
 
 
