@@ -51,7 +51,7 @@ ep_id = map['ep_id']
 map_size = 2
 batch_size = 16
 
-file_cutoff = 5000
+file_cutoff = 30000
 
 
 class test_orch():
@@ -76,7 +76,12 @@ class test_orch():
         self.fam_batches = []
 
         big_json = "/home/ubuntu/old_xtracthub-service/experiments/tyler_everything.json"
+        # big_json = "/Users/tylerskluzacek/Desktop/tyler_everything.json"
 
+        import os
+        print(os.getcwd())
+
+        # big_json = "../experiments/tyler_30k.json"
         # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         t0 = time.time() 
@@ -104,7 +109,7 @@ class test_orch():
         if system == "midway2":
             new_path = f"/project2/chard/skluzacek/{family_id}/{file_name}"
         elif system == "theta":
-            new_path = f"/projects/CSC249ADCD01/skluzacek/{old_path}"
+            new_path = f"/projects/CSC249ADCD01/skluzacek{old_path}"  #TODO: change this for things
         return new_path
 
     def preproc_fam_batches(self):
@@ -302,8 +307,6 @@ class test_orch():
 
             for i in range(100):  # TODO: 1000 might be too big?
 
-
-
                 if self.polling_queue.empty():
                     print("Polling queue empty. Creating batch!")
                     time.sleep(3)
@@ -323,9 +326,13 @@ class test_orch():
                 # print(res[item])
                 if 'result' in res[item]:
 
+                    # print(res[item])
+
                     #print(res[item]['result'])
 
                     ret_fam_batch = res[item]['result']['family_batch']
+
+
 
                     timer = res[item]['result']['total_time']
 
@@ -338,11 +345,15 @@ class test_orch():
                     family_mdata_size = get_deep_size(ret_fam_batch)
 
                     for family in ret_fam_batch.families:
+
+                        # print(family.metadata)
+
                         for file in family.files:
                             family_file_size += file['metadata']['physical']['size']
 
                         for gid in family.groups:
                             g_mdata = family.groups[gid].metadata
+                            print(g_mdata)
 
                             if g_mdata['matio'] != {} and g_mdata['matio'] is not None:
                                 good_parsers = good_parsers + g_mdata['parser']
