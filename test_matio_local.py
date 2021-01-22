@@ -48,11 +48,11 @@ ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
 
-map_size = 2
-batch_size = 16
+map_size = 16
+batch_size = 20
 
-file_cutoff = 30000
-
+file_cutoff = 3000000
+max_outstanding_tasks = 100000
 
 class test_orch():
     def __init__(self):
@@ -70,6 +70,8 @@ class test_orch():
 
         self.successes = 0
         self.failures = 0
+
+        self.max_outstanding_tasks = max_outstanding_tasks
 
         self.family_queue = Queue()
 
@@ -179,11 +181,16 @@ class test_orch():
 
 
         # TODO: ADDING TEST. Making sure we have all of our files here.
+
+        ta = time.time()
         num_families = 0
         for item in self.fam_batches:
             num_families += len(item.families)
 
         print(num_families)
+        tb = time.time()
+        print(f"Time to move families: {tb-ta}") 
+        time.sleep(5)
         # exit()
 
         # exit()
@@ -262,7 +269,7 @@ class test_orch():
         while not self.funcx_batches.empty():
 
             # current_tasks_on_ep = tasks_sent - tasks_received
-            if self.current_tasks_on_ep > self.max_tasks_on_ep:
+            if self.current_tasks_on_ep > self.max_outstanding_tasks:
                 print(f"There are {self.current_tasks_on_ep}. Sleeping...")
                 time.sleep(5)
                 continue
@@ -282,6 +289,9 @@ class test_orch():
 
             # try:
             # TODO: bring this back when we figure out what errors it's causing.
+            import random 
+            x = random.randint(1,5)
+            time.sleep(x/2)
             res = self.fxc.batch_run(fx_batch)
             self.num_send_reqs += 1
             # except Exception as e:
@@ -295,7 +305,7 @@ class test_orch():
 
             # import random 
             # time.sleep(random.randint(1,3))
-            time.sleep(0.5)
+            # time.sleep(0.75)
 
 
 
@@ -305,7 +315,7 @@ class test_orch():
 
             current_tid_batch = []
 
-            for i in range(100):  # TODO: 1000 might be too big?
+            for i in range(500):  # TODO: 1000 might be too big?
 
                 if self.polling_queue.empty():
                     print("Polling queue empty. Creating batch!")
@@ -318,8 +328,16 @@ class test_orch():
             if len(current_tid_batch) == 0:
                 print("Batch is empty. Sleeping... ")
                 time.sleep(5)
+
+            time.sleep(0.5)
+
+            start_req = time.time()
             res = self.fxc.get_batch_status(current_tid_batch)
+            end_req = time.time()
             self.num_poll_reqs += 1
+
+            print(f"Time to process batch: {end_req-start_req}")
+            
 
             for item in res:
 
@@ -353,7 +371,7 @@ class test_orch():
 
                         for gid in family.groups:
                             g_mdata = family.groups[gid].metadata
-                            print(g_mdata)
+                            # print(g_mdata)
 
                             if g_mdata['matio'] != {} and g_mdata['matio'] is not None:
                                 good_parsers = good_parsers + g_mdata['parser']
@@ -361,25 +379,25 @@ class test_orch():
                             else:
                                 bad_extract_time = g_mdata['extract time']
 
-                    # TODO: These are at the family_batch level.
+                        # TODO: These are at the family_batch level.
 
-                    import_time = res[item]['result']["import_time"]
-                    family_fetch_time = res[item]['result']["family_fetch_time"]
-                    file_unpack_time = res[item]['result']["file_unpack_time"]
-                    full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
+                        import_time = res[item]['result']["import_time"]
+                        family_fetch_time = res[item]['result']["family_fetch_time"]
+                        file_unpack_time = res[item]['result']["file_unpack_time"]
+                        full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
 
 
 
-                    import_time = 0
-                    family_fetch_time = 0
-                    file_unpack_time = 0
-                    full_extraction_loop_time = 0
+                        import_time = 0
+                        family_fetch_time = 0
+                        file_unpack_time = 0
+                        full_extraction_loop_time = 0
 
-                    with open('timer_file.txt', 'a') as g:
-                        csv_writer = csv.writer(g)
-                        csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
-                                             bad_extract_time, import_time, family_fetch_time, file_unpack_time,
-                                             full_extraction_loop_time, good_parsers])
+                        with open('timer_file.txt', 'a') as g:
+                            csv_writer = csv.writer(g)
+                            csv_writer.writerow([timer, family_file_size, family_mdata_size, good_extract_time,
+                                                bad_extract_time, import_time, family_fetch_time, file_unpack_time,
+                                                full_extraction_loop_time, good_parsers])
 
                     fam_len = len(ret_fam_batch.families)
                     self.successes += fam_len
@@ -418,12 +436,12 @@ class test_orch():
 perf_orch = test_orch()
 
 
-for i in range(7):
+for i in range(12):
     thr = threading.Thread(target=perf_orch.send_batches_thr_loop, args=())
     thr.start()
     print(f"Started the {i}th task push thread...")
 
-for i in range(6):
+for i in range(14):
     thr = threading.Thread(target=perf_orch.polling_loop, args=())
     thr.start()
     print(f"Started the {i}th result thread...")
