@@ -13,5 +13,13 @@ mapping = {
          'container_type': 'singularity',
          'ep_id': 'c2da39df-5215-44e2-acf3-f936f9fb4073',
          'data_path': '/projects/CSC249ADCD01/skluzacek/'},
+
+    'xtract-matio::js':
+
+        {'func_uuid': 'abec00cf-efd3-492e-a0c3-5c659dd06cdd',  # TODO: update this.
+         'location': '/home/tskluzac/xtract-matio.img',
+         'container_type': 'singularity',
+         'ep_id': '5da324b8-e8de-43d1-b4ca-d8f1d96c2d9b',
+         'data_path': '/projects/CSC249ADCD01/skluzacek/'},
     'xtract-matio::riverk8s': "TODO",
 }

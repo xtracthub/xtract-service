@@ -22,11 +22,12 @@ from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
 
 
-with open("timer_file.txt", 'w') as f:
+with open("timer2.txt", 'w') as f:
     f.close()
 
 # HERE IS WHERE WE SET THE SYSTEM #
-system = "theta"
+# system = "js"
+system = "midway2"
 
 # 10**6 = 1mb
 soft_batch_bytes_max = 10**6
@@ -38,6 +39,9 @@ if system == 'midway2':
 
 elif system == 'theta':
     map = mapping['xtract-matio::theta']
+
+elif system == 'js':
+    map = mapping['xtract-matio::js']
 
 base_url = ""
 
@@ -51,8 +55,9 @@ ep_id = map['ep_id']
 map_size = 16
 batch_size = 20
 
-file_cutoff = 3000000
-max_outstanding_tasks = 50000
+file_cutoff = 100000
+max_outstanding_tasks = 100000  # 50000
+
 
 class test_orch():
     def __init__(self):
@@ -83,7 +88,8 @@ class test_orch():
         import os
         print(os.getcwd())
 
-        big_json = "../experiments/tyler_30k.json"
+        #big_json = "../experiments/tyler_30k.json"
+        big_json = "../experiments/tyler_20k.json"
         # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         t0 = time.time() 
@@ -112,6 +118,8 @@ class test_orch():
             new_path = f"/project2/chard/skluzacek/{family_id}/{file_name}"
         elif system == "theta":
             new_path = f"/projects/CSC249ADCD01/skluzacek{old_path}"  #TODO: change this for things
+        elif system == "js":
+            new_path = f"/home/tskluzac/{family_id}/{file_name}"
         return new_path
 
     def preproc_fam_batches(self):
@@ -392,7 +400,6 @@ class test_orch():
                     #     full_extraction_loop_time = res[item]['result']["full_extract_loop_time"]
 
 
-
                         # import_time = 0
                         # family_fetch_time = 0
                         # file_unpack_time = 0
@@ -405,6 +412,11 @@ class test_orch():
                         #                         full_extraction_loop_time, good_parsers])
 
                     # fam_len = len(ret_fam_batch.families)
+
+                    with open('timer2.txt', 'a') as g:
+                        csv_writer = csv.writer(g)
+                        csv_writer.writerow([time.time(), num_finished])
+
                     self.successes += num_finished
 
                     self.current_tasks_on_ep -= num_finished
@@ -453,3 +465,10 @@ for i in range(14):
 
 thr = threading.Thread(target=perf_orch.stats_loop, args=())
 thr.start()
+
+
+# 5000 at 569.6812839508057
+
+# 10000 at
+
+# 20000 at 2211

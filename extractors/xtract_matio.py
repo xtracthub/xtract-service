@@ -133,7 +133,9 @@ def matio_extract(event):
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t
             family.groups[gid].metadata = new_mdata
 
-        with open(f"/projects/CSC249ADCD01/skluzacek/metadata/{family.family_id}", 'wb') as f:
+        #with open(f"/projects/CSC249ADCD01/skluzacek/metadata/{family.family_id}", 'wb') as f:
+        with open(f"/home/tskluzac/metadata/{family.family_id}", 'wb') as f:
+            # with open(f"/project2/chard/skluzacek/metadata/{family.family_id}") as f:
             pkl.dump(family, f)
 
 
