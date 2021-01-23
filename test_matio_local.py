@@ -27,7 +27,7 @@ with open("timer2.txt", 'w') as f:
 
 # HERE IS WHERE WE SET THE SYSTEM #
 # system = "js"
-system = "midway2"
+system = "theta"
 
 # 10**6 = 1mb
 soft_batch_bytes_max = 10**6
@@ -55,7 +55,7 @@ ep_id = map['ep_id']
 map_size = 16
 batch_size = 20
 
-file_cutoff = 100000
+file_cutoff = 3000000
 max_outstanding_tasks = 100000  # 50000
 
 
@@ -89,7 +89,7 @@ class test_orch():
         print(os.getcwd())
 
         #big_json = "../experiments/tyler_30k.json"
-        big_json = "../experiments/tyler_20k.json"
+        # big_json = "../experiments/tyler_20k.json"
         # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         t0 = time.time() 
