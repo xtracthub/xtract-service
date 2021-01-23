@@ -59,6 +59,9 @@ file_cutoff = 3000000
 max_outstanding_tasks = 100000  # 50000
 
 
+# skip_n
+skip_n = 2079027
+
 class test_orch():
     def __init__(self):
         self.current_tasks_on_ep = 0
@@ -82,14 +85,14 @@ class test_orch():
 
         self.fam_batches = []
 
-        big_json = "/home/ubuntu/old_xtracthub-service/experiments/tyler_everything.json"
+        # big_json = "/home/ubuntu/old_xtracthub-service/experiments/tyler_everything.json"
         # big_json = "/Users/tylerskluzacek/Desktop/tyler_everything.json"
 
         import os
         print(os.getcwd())
 
         #big_json = "../experiments/tyler_30k.json"
-        # big_json = "../experiments/tyler_20k.json"
+        big_json = "../experiments/tyler_200k.json"
         # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         t0 = time.time() 
@@ -103,7 +106,10 @@ class test_orch():
         time.sleep(5) # Time to read!!!
 
         # Transfer the stored list to a queue to promote good concurrency while making batches.
+        i = 0  # TODO: added skip logic here!
         for item in self.fam_list:
+            if i < skip_n:
+                continue
             self.family_queue.put(item)
 
         self.start_time = time.time()
