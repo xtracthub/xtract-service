@@ -50,9 +50,9 @@ creds = do_google_login_flow()
 print(f"Function ID: {img_funcid}")
 
 task_dict = {"active": Queue(), "pending": Queue(), "results": [], "failed": Queue()}
-for i in range(1, 30):
+for i in range(1, 60):
     task_id = img_extractor.remote_extract_solo(event={'family_batch': fam_batch, 'creds': creds},
-                                                fx_eid="c640f461-7402-4a60-a6c9-f82cd17a8a40",
+                                                fx_eid="62963543-d474-4945-9de9-5e4f930bde8a",
                                                 headers=headers)
     task_dict["active"].put(task_id)
 

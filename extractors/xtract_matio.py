@@ -23,24 +23,17 @@ def matio_extract(event):
     """
 
     import time
-    import json
-
     import pickle as pkl
 
-    import_start = time.time()
     import os
     import sys
-    import shutil
 
     from xtract_sdk.downloaders.globus_https import GlobusHttpsDownloader
     from xtract_sdk.packagers.family import Family
     from xtract_sdk.packagers.family_batch import FamilyBatch
 
-    t0 = time.time()
-
+    # Enable using files stored at '/' in the container.
     sys.path.insert(1, '/')
-
-    # return "Hello? "
 
 
     from xtract_matio_main import extract_matio
@@ -53,7 +46,6 @@ def matio_extract(event):
     is_local = True
     should_delete = False
 
-    load_family_start_t = time.time()
     if type(all_families) == dict:
         family_batch = FamilyBatch()
         for family in all_families["families"]:
@@ -62,9 +54,8 @@ def matio_extract(event):
             family_batch.add_family(fam)
         all_families = family_batch
 
-    load_family_end_t = time.time()
 
-
+    """
     get_files_start_t = time.time()
     # This collects all of the files for all of the families.
     file_counter = 0
@@ -96,7 +87,7 @@ def matio_extract(event):
             file_counter += 1
 
     get_files_end_t = time.time()
-
+    """
     if not is_local:
         down_start_t = time.time()
         downloader = GlobusHttpsDownloader()
@@ -158,5 +149,3 @@ def matio_extract(event):
     #         "full_extract_loop_time": extract_iter_end_time - extract_iter_start_t,
     #         "total_time": t1 - t0
     #         }
-
-
