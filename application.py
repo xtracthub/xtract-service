@@ -1,55 +1,30 @@
 
+import os
+import json
 import time
 import boto3
 import pickle
-from queue import Queue
-
-
-from status_checks import get_crawl_status, get_extract_status
-from orchestrator.orchestrator import Orchestrator
-
-
-# Python standard libraries
 import threading
-import json
-import os
 
-# Third-party libraries
+from queue import Queue
 from flask import Flask, request
-import requests
 
+from orchestrator.orchestrator import Orchestrator
+from status_checks import get_extract_status
+
+# Import Blueprints
+from routes.crawl_bp import crawl_bp
 
 application = Flask(__name__)
+application.register_blueprint(crawl_bp)
+
 
 active_orchestrators = dict()
 
 
-# TODO: move into routes.
-def crawl_launch(crawler, tc):
-    crawler.crawl(tc)
-
-
-@application.route('/crawl', methods=['POST'])
-def crawl_repo():
-
-    crawl_url = 'http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/crawl'
-
-    x = requests.post(url=crawl_url, json=request.json, data=request.data)
-    print(f"CRAWL RESPONSE: {x.content}")
-    return x.content
-
-
-@application.route('/get_crawl_status', methods=['GET'])
-def get_cr_status():
-    """ Returns the status of a crawl. """
-
-    r = request.json
-
-    crawl_id = r["crawl_id"]
-    resp = get_crawl_status(crawl_id)
-    print(resp)
-
-    return resp
+@application.route('/', methods=['POST', 'GET'])
+def xtract_default():
+    return "FUNCTIONAL"
 
 
 @application.route('/extract', methods=['POST'])
@@ -228,4 +203,4 @@ def fetch_mdata():
 
 
 if __name__ == '__main__':
-    application.run(debug=True, threaded=True)  #, ssl_context="adhoc")
+    application.run(debug=True, threaded=True)  # , ssl_context="adhoc")
