@@ -1,5 +1,5 @@
 
-from flask import Flask, request
+from flask import Flask
 
 # Import Blueprints
 from routes import crawl_bp, extract_bp
