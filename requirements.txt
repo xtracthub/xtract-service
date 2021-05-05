@@ -8,13 +8,13 @@
 flask
 # flask_api
 # flask_wtf
-requests
+# requests
 # globus-action-provider-tools
-boto3
+# boto3
 # datasketch
 # google-api-python-client
 # google-auth-oauthlib
 # numpy
 # globus-action-provider-tools
-xtract_sdk==0.0.5
+# xtract_sdk==0.0.5
 # git+https://github.com/materials-data-facility/MaterialsIO.git
