@@ -34,8 +34,4 @@ def invoke_solo_function(event, fx_eid, headers, func_id):
         print("ERROR???")
         print(res.content)
         return res.content
-    # return task_uuid
 
-
-def run_batch_function(func_id, data_ls):
-    pass

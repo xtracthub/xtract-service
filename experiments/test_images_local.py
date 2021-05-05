@@ -77,7 +77,7 @@ class test_orch():
         #     self.fam_list = json.load(f)
 
         self.image_path_list = Queue()
-        with open('experiments/train2014_images.csv') as f:
+        with open('train2014_images.csv') as f:
             reader = csv.reader(f)
             for row in reader:
                 # print(row[0])
