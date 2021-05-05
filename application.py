@@ -1,15 +1,5 @@
 
-import os
-import json
-import time
-import boto3
-import pickle
-import threading
-
-from queue import Queue
 from flask import Flask, request
-
-from status_checks import get_extract_status
 
 # Import Blueprints
 from routes import crawl_bp, extract_bp
@@ -25,7 +15,6 @@ application.register_blueprint(extract_bp.extract_bp)
 @application.route('/', methods=['POST', 'GET'])
 def xtract_default():
     """ Return the default information as part of the request. """
-
     return "FUNCTIONAL"
 
 
