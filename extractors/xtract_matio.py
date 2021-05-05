@@ -22,6 +22,8 @@ def matio_extract(event):
     :return metadata (dict) -- metadata as gotten from the materials_io library:
     """
 
+    # return 'hi'
+
     import time
     import pickle as pkl
 
@@ -124,21 +126,22 @@ def matio_extract(event):
             new_mdata["extraction_time"] = extraction_end_t - extraction_start_t
             family.groups[gid].metadata = new_mdata
 
-        with open(f"/projects/CSC249ADCD01/skluzacek/metadata/{family.family_id}", 'wb') as f:
-            #with open(f"/home/tskluzac/metadata/{family.family_id}", 'wb') as f:
-            # with open(f"/project2/chard/skluzacek/metadata/{family.family_id}") as f:
-            pkl.dump(family, f)
+        # with open(f"/projects/CSC249ADCD01/skluzacek/metadata/{family.family_id}", 'wb') as f:
+        #     #with open(f"/home/tskluzac/metadata/{family.family_id}", 'wb') as f:
+        #     # with open(f"/project2/chard/skluzacek/metadata/{family.family_id}") as f:
+        #     pkl.dump(family, f)
 
 
         # if should_delete:
         #     # Cleanup the clutter -- will not need file again since family includes all groups
         #     shutil.rmtree(os.path.dirname(all_families.file_ls[0]['path']))
+        # time.sleep(0.3)
 
-    extract_iter_end_time = time.time()
+        # extract_iter_end_time = time.time()
 
     t1 = time.time()
 
-    return {'finished': len(all_families.families)}
+    return {'finished': len(all_families.families), 'extract_time': t1-import_end}
 
     # return {"family_batch": all_families,
     #         "container_version": os.environ["container_version"],

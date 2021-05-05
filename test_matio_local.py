@@ -27,7 +27,7 @@ with open("timer2.txt", 'w') as f:
 
 # HERE IS WHERE WE SET THE SYSTEM #
 # system = "js"
-system = "theta"
+system = "midway2"
 
 # 10**6 = 1mb
 soft_batch_bytes_max = 10**6
@@ -52,15 +52,15 @@ ep_id = map['ep_id']
 
 # TODO: make sure this is proper size.
 
-map_size = 16
-batch_size = 20
+map_size = 8
+batch_size = 8
 
-file_cutoff = 3000000
-max_outstanding_tasks = 100000  # 50000
+file_cutoff = 90000
+max_outstanding_tasks = 90000  # 50000
 
 
 # skip_n
-skip_n = 2079027
+skip_n = 0
 
 class test_orch():
     def __init__(self):
@@ -92,7 +92,7 @@ class test_orch():
         print(os.getcwd())
 
         #big_json = "../experiments/tyler_30k.json"
-        big_json = "../experiments/tyler_200k.json"
+        big_json = "experiments/tyler_200k.json"
         # big_json = "/Users/tylerskluzacek/PyCharmProjects/xtracthub-service/experiments/tyler_20k.json"
 
         t0 = time.time() 
@@ -116,12 +116,15 @@ class test_orch():
 
         self.preproc_fam_batches()
 
+        print(f"Number of funcX batches: {self.funcx_batches.qsize()}")
+        # exit()
+
     def path_converter(self, family_id, old_path):
         path_ls = old_path.split('/')
         file_name = path_ls[-1]
         new_path = None
         if system == "midway2":
-            new_path = f"/project2/chard/skluzacek/{family_id}/{file_name}"
+            new_path = f"/project2/chard/skluzacek/data_to_process/{family_id}/{file_name}"
         elif system == "theta":
             new_path = f"/projects/CSC249ADCD01/skluzacek{old_path}"  #TODO: change this for things
         elif system == "js":
@@ -192,7 +195,6 @@ class test_orch():
 
         # img_extractor = NothingExtractor()
         img_extractor = MatioExtractor()
-
 
         # TODO: ADDING TEST. Making sure we have all of our files here.
 
@@ -357,6 +359,9 @@ class test_orch():
 
                 # print(res[item])
                 if 'result' in res[item]:
+
+                    print(f"Received result: {res[item]['result']}")
+                    exit()
 
                     # print(res[item])
 

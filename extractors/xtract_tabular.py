@@ -14,92 +14,63 @@ class TabularExtractor(Extractor):
 
 
 def tabular_extract(event):
-    """Extract metadata from tabular data.
+    """
+    EXTRACTOR CODE.
+
+    The tabular extractor input
+
+    Group-inputs: single file.
+    Group-outputs: dictionary of tabular metadata, mainly centered around the general structure and the column values.
     
     Parameters
     ----------
-    event : dict
-        A dict describing the data and credentials to act on
+    event : dict -- contains credential and FamilyBatch objects.
 
     Returns
     -------
-    dict : The resulting metadata and timers
+    dict : contains macro information, including family_ids, local path(s) where the metadata are stored.
     """
+
     import sys
     import time
-    import os
-    import shutil
-
-    from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
     t0 = time.time()
+
+    from xtract_sdk.xtract import XtractAgent
 
     sys.path.insert(1, '/')
     sys.setrecursionlimit(5000)  # I'm a bad person.
     import xtract_tabular_main
-    # from exceptions import RemoteExceptionWrapper, HttpsDownloadTimeout, ExtractorError, PetrelRetrievalError
 
-    def min_hash(fpath):
-        """
-        Extracts MinHash digest of a file's bytes
-
-        fpath (str): path to file to extract MinHash of
-        """
-
-        from datasketch import MinHash
-
-        NUM_PERMS = 128
-        CHUNK_SZ = 64
-
-        mh = MinHash(num_perm=NUM_PERMS)
-
-        with open(fpath, 'rb') as of:
-            print("File is open")
-            count = 0
-            by = of.read(CHUNK_SZ)
-            while by != b"":
-                by = of.read(CHUNK_SZ)
-                count += 1
-                mh.update(by)
-
-        return mh
-
-    new_mdata = None
-
-    creds = event["creds"]
     family_batch = event["family_batch"]
 
-    # This should be either 'local' or 'remote'.
-    extract_mode = event["extract_mode"]
-
-    downloader = GoogleDriveDownloader(auth_creds=creds)
-    assert extract_mode in ["remote", "local"], "Invalid extraction mode"
-
-    if extract_mode == "remote":
-        ta = time.time()
-        downloader.batch_fetch(family_batch=family_batch)
-        tb = time.time()
-
-        file_paths = downloader.success_files
-    elif extract_mode == "local":
-        ta = tb = 0  # Set both times to be zero so that transfer time is zero.
-        file_paths = []
-
-    if len(file_paths) == 0 and file_paths == "remote":
-        return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
-                'err_msg': "unable to download files"}
+    # Create XtractAgent() and load with families.
+    xtra = XtractAgent(ep_name='tyler_test_2', xtract_dir='/home/tskluzac/.xtract')  # TODO: pass-in argument.
 
     for family in family_batch.families:
-        img_path = family.files[0]['path']
-        # return img_path
+        xtra.load_family(family.to_dict())
 
-        new_mdata = xtract_tabular_main.extract_columnar_metadata(img_path)
-        new_mdata["min_hash"] = min_hash(img_path)
-        family.metadata = new_mdata
+    # Fetch all of the files via the Xtract agent.
+    try:
+        xtra.fetch_all_files()
+    except Exception as e:
+        return f"Caught: {e}"
 
-    if extract_mode == "remote":
-        [os.remove(file_path) for file_path in downloader.success_files]
+    for family in xtra.ready_families:
+        tab_file = family['files'][0]['path']
+        new_mdata = xtract_tabular_main.extract_columnar_metadata(tab_file)
 
+        # TODO: Write preamble out to file.
+
+
+        # TODO: write this out to file.
+        return new_mdata
+
+
+
+    # # TODO: Delete if we need to do that.
+    #
+    # t1 = time.time()
+    # # Return batch
     t1 = time.time()
-    # Return batch
-    return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
+    return {'family_batch': family_batch, 'tot_time': t1-t0}

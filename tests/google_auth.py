@@ -3,7 +3,7 @@ import pickle
 from google.auth.transport.requests import Request
 
 
-with open('../examples/token.pickle', 'rb') as token:
+with open('../notebooks/token.pickle', 'rb') as token:
     creds = pickle.load(token)
     print(creds.refresh_token)
 
