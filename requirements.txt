@@ -8,7 +8,7 @@
 flask
 # flask_api
 # flask_wtf
-# requests
+requests
 # globus-action-provider-tools
 # boto3
 # datasketch
