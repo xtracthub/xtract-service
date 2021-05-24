@@ -1,8 +1,9 @@
-funcx==0.0.2a0
+# funcx==0.0.2a0
 globus_sdk
 psycopg2-binary
 # dfttopif
 Pillow
+funcx
 # hyperspy
 # tableschema
 flask
@@ -12,8 +13,8 @@ requests
 # globus-action-provider-tools
 boto3
 # datasketch
-# google-api-python-client
-# google-auth-oauthlib
+google-api-python-client
+google-auth-oauthlib
 numpy
 # globus-action-provider-tools
 xtract_sdk==0.0.5

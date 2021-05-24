@@ -17,21 +17,21 @@ def remote_extract_batch(items_to_batch, ep_id, headers):
         batch.add(event, endpoint_id=ep_id, function_id=func_id)
 
     data = batch.prepare()
+
+    print(f"Pushing to funcX")
     resp = requests.post(fx_submit_url, json=data, headers=headers)
 
     try:
         resp_dict = json.loads(resp.content)
-        # print(f"RESPONSE: {resp_dict}")
+        print(f"RESPONSE: {resp_dict}")
 
     except Exception: # json.JSONDecodeError:  # TODO: bring back.
         error_str = f"Batch response is not valid JSON: {resp.content}"
+        print("damn son")
         return {'exception_caught': error_str}
 
     if resp_dict["status"] == "Success":
         return resp_dict["task_uuids"]
-
-    # else:  # This mean
-    #     return {'exception': }
 
 
 def remote_poll_batch(task_ids, headers):
