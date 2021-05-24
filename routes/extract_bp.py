@@ -70,8 +70,8 @@ def configure_ep(funcx_eid):
     local_download_path = request.json['local_download_path']
     local_mdata_path = request.json['local_mdata_path']
 
-    client = ConfidentialAppAuthClient('49862fd9-a023-4b90-b62c-0e8b256f0a44',
-                                       'pUB5Cbdw4qnCQfj7pbeb+zQ/BRXDV9FMTjolY//KQsE=')
+    client = ConfidentialAppAuthClient('a1',
+                                       'a2')
 
     scopes = ["https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all",
               "urn:globus:auth:scope:search.api.globus.org:all",
