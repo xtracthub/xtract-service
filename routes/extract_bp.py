@@ -2,20 +2,14 @@
 import json
 import time
 import pickle
-import requests
-import globus_sdk
-import os
+
 
 from funcx import FuncXClient
-
-from globus_sdk import AuthClient, AccessTokenAuthorizer, ConfidentialAppAuthClient, NativeAppAuthClient
-
 from flask import Blueprint, request
+from globus_sdk import AccessTokenAuthorizer
 
 from status_checks import get_extract_status
 from orchestrator.orchestrator import Orchestrator
-from extractors.utils.batch_utils import remote_extract_batch, remote_poll_batch
-from extractors.utils.register_function import register_function
 
 
 def test_function():
@@ -100,7 +94,6 @@ def configure_ep(funcx_eid):
             result[task_id]['exception'].reraise()
 
         if result[task_id]['status'] == 'success':
-            #return {'config_status': 'SUCCESS', 'fx_eid': funcx_eid}
             print("Sucessfully returned test function. Breaking!")
             break
 
@@ -122,9 +115,6 @@ def configure_ep(funcx_eid):
     # Step 1: use funcX function to ensure endpoint is online and returning tasks.
     #  --> Only taking first element in batch, as our batch size is only 1.
     task_id = fx_client.run(event=event, endpoint_id=funcx_eid, function_id=reg_func_id)
-    # remote_extract_batch(items_to_batch=[{'func_id': reg_func_id, 'event': None}],
-    #                            ep_id=funcx_eid,
-    #                            headers=headers)
 
     print(f"Result from config extract: {task_id}")
 
@@ -165,14 +155,13 @@ def extract_mdata():
     data_prefetch_path = None
     dataset_mdata = None
 
-
     try:
         r = pickle.loads(request.data)
         print(f"Data: {request.data}")
         gdrive_token = r["gdrive_pkl"]
         extractor_finder = "gdrive"
         print(f"Received Google Drive token: {gdrive_token}")
-    except pickle.UnpicklingError as e:
+    except pickle.UnpicklingError:
         print("Unable to pickle-load for Google Drive! Trying to JSON load for Globus/HTTPS.")
 
         r = request.json
@@ -230,6 +219,13 @@ def extract_mdata():
 
 @extract_bp.route('/get_extract_status', methods=['GET'])
 def get_extr_status():
+    """
+    Return information about the status of the extraction does not include crawl @ /get_crawl_status
+
+    :inputs : request (dict) with keys --> crawl_id (str)
+    :returns : response (dict) with keys # TODO.
+
+    """
 
     r = request.json
 
