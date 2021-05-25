@@ -224,7 +224,6 @@ def get_extr_status():
 
     :inputs : request (dict) with keys --> crawl_id (str)
     :returns : response (dict) with keys # TODO.
-
     """
 
     r = request.json
