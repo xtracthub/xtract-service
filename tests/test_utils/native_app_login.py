@@ -14,17 +14,21 @@ def globus_native_auth_login():
                           'urn:globus:auth:scope:transfer.api.globus.org:all',
                           "https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all",
                           "urn:globus:auth:scope:data.materialsdatafacility.org:all",
-                          'email', 'openid'],
+                          'email', 'openid', 'urn:globus:auth:scope:search.api.globus.org:all'],
         no_local_server=True,
-        no_browser=True)
+        no_browser=True, force=True)
+
+    print(tokens)
 
     auth_token = tokens["petrel_https_server"]['access_token']
     transfer_token = tokens['transfer.api.globus.org']['access_token']
     mdf_token = tokens["data.materialsdatafacility.org"]['access_token']
     funcx_token = tokens['funcx_service']['access_token']
+    search_token = tokens['search.api.globus.org']['access_token']
+    openid_token = tokens['auth.globus.org']['access_token']
 
     headers = {'Authorization': f"Bearer {funcx_token}", 'Transfer': transfer_token, 'FuncX': funcx_token,
-               'Petrel': mdf_token}
+               'Petrel': mdf_token, 'Search': search_token, 'Openid': openid_token}
     print(f"Headers: {headers}")
     return headers
 

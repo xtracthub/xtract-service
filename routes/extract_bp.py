@@ -3,11 +3,12 @@ import json
 import time
 import pickle
 import requests
+import globus_sdk
 import os
 
 from funcx import FuncXClient
 
-from globus_sdk import AuthClient, AccessTokenAuthorizer, ConfidentialAppAuthClient
+from globus_sdk import AuthClient, AccessTokenAuthorizer, ConfidentialAppAuthClient, NativeAppAuthClient
 
 from flask import Blueprint, request
 
@@ -31,12 +32,6 @@ def configure_function(event):
 
     full_x_path = os.path.join(xtract_path, ep_name)
     os.makedirs(full_x_path, exist_ok=True)
-
-    # original_umask = os.umask(0)
-    # try:
-    #     os.makedirs(full_x_path, 777)
-    # finally:
-    #     os.umask(original_umask)
 
     full_config_path = os.path.join(full_x_path, 'config.json')
     with open(full_config_path, 'w') as f:
@@ -70,41 +65,22 @@ def configure_ep(funcx_eid):
     local_download_path = request.json['local_download_path']
     local_mdata_path = request.json['local_mdata_path']
 
-    client = ConfidentialAppAuthClient('a1',
-                                       'a2')
+    # dep_tokens = client.oauth2_get_dependent_tokens(headers['Authorization'])
+    fx_auth = AccessTokenAuthorizer(headers['Authorization'])
+    search_auth = AccessTokenAuthorizer(headers['Search'])
+    openid_auth = AccessTokenAuthorizer(headers['Openid'])
 
-    scopes = ["https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all",
-              "urn:globus:auth:scope:search.api.globus.org:all",
-              "openid"]
+    print(fx_auth.access_token)
+    print(search_auth.access_token)
+    print(openid_auth.access_token)
 
-    # TODO: bring the following back when we can get that working again
-    token_response = client.oauth2_client_credentials_tokens(requested_scopes=scopes)
-    #
-    # fx_token = token_response.by_resource_server['funcx_service']['access_token']
-    # search_token = token_response.by_resource_server['search.api.globus.org']['access_token']
-    # openid_token = token_response.by_resource_server['auth.globus.org']['access_token']
-    #
-    # print(fx_token)
-    # print(search_token)
-    # print(openid_token)
-    #
-    # fx_auth = AccessTokenAuthorizer(fx_token)
-    # search_auth = AccessTokenAuthorizer(search_token)
-    # openid_auth = AccessTokenAuthorizer(openid_token)
-    #
-    # fx_client = FuncXClient(fx_authorizer=fx_auth,
-    #                         search_authorizer=search_auth,
-    #                         openid_authorizer=openid_auth)
-
-    # TODO: Get rid of this when proper authorizers working.
-    #fx_client = FuncXClient(force_login=True)
-    fx_client = FuncXClient()
+    fx_client = FuncXClient(fx_authorizer=fx_auth,
+                            search_authorizer=search_auth,
+                            openid_authorizer=openid_auth)
 
     print(dir(fx_client))
 
     print(fx_client.TOKEN_DIR, fx_client.TOKEN_FILENAME, fx_client.BASE_USER_AGENT)
-
-    # return
 
     # TODO: boot this outside to avoid wasteful funcX calls.
     reg_func_id = fx_client.register_function(function=test_function)
@@ -114,9 +90,6 @@ def configure_ep(funcx_eid):
     # Step 1: use funcX function to ensure endpoint is online and returning tasks.
     #  --> Only taking first element in batch, as our batch size is only 1.
     task_id = fx_client.run(endpoint_id=funcx_eid, function_id=reg_func_id)
-    # remote_extract_batch(items_to_batch=[{'func_id': reg_func_id, 'event': None}],
-    #                            ep_id=funcx_eid,
-    #                            headers=headers)
 
     print(f"Result from config extract: {task_id}")
 
@@ -171,7 +144,6 @@ def configure_ep(funcx_eid):
             if time.time() - start_time > timeout:
                 return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
         time.sleep(2)
-
 
 
 @extract_bp.route('/check_ep_configured', methods=['GET'])
