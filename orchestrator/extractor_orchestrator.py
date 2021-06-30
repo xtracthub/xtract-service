@@ -1,10 +1,8 @@
 
-import os
 import csv
 import sys
 import json
 import time
-import boto3
 import logging
 import threading
 
@@ -21,9 +19,9 @@ from orchestrator.orch_utils.utils import create_list_chunks
 
 
 # TODO: Python garbage collection!
-class Orchestrator:
+class ExtractorOrchestrator:
 
-    def __init__(self, crawl_id, headers, funcx_eid,
+    def __init__(self, funcx_eid,
                  mdata_store_path, source_eid=None, dest_eid=None, gdrive_token=None,
                  extractor_finder='gdrive', prefetch_remote=False,
                  data_prefetch_path=None, dataset_mdata=None):
@@ -33,7 +31,6 @@ class Orchestrator:
         # TODO -- fix this.
         self.crawl_type = 'from_file'
 
-        self.crawl_id = crawl_id
 
         self.dataset_mdata = dataset_mdata
 
@@ -78,8 +75,7 @@ class Orchestrator:
 
         self.get_families_status = "STARTING"
 
-        # This is here for testing. Only want to test 50k files? Set this to 50k.
-        self.task_cap_until_termination = 50002
+
 
         self.task_dict = {"active": Queue(), "pending": Queue(), "failed": Queue()}
 
@@ -118,7 +114,6 @@ class Orchestrator:
         self.prefetcher_tid = None
         self.prefetch_status = None
 
-        self.headers = headers
         self.fx_headers = {"Authorization": f"Bearer {self.headers['FuncX']}", 'FuncX': self.headers['FuncX']}
 
         self.family_headers = None
@@ -137,38 +132,6 @@ class Orchestrator:
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
         self.logger.setLevel(logging.INFO)  # TODO: let's make this configurable.
-
-
-
-        """
-        # This creates the extraction and validation queues on the Simple Queue Service.
-        self.sqs_base_url = "https://sqs.us-east-1.amazonaws.com/576668000072/"  # TODO: env var.
-        self.client = boto3.client('sqs',
-                                   aws_access_key_id=os.environ["aws_access"],
-                                   aws_secret_access_key=os.environ["aws_secret"], region_name='us-east-1')
-        print(f"Creating queue for crawl_id: {self.crawl_id}")
-        xtract_queue = self.client.create_queue(QueueName=f"xtract_{str(self.crawl_id)}")
-        validation_queue = self.client.create_queue(QueueName=f"validate_{str(self.crawl_id)}")
-
-        if xtract_queue["ResponseMetadata"]["HTTPStatusCode"] == 200 and \
-                validation_queue["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            self.xtract_queue_url = xtract_queue["QueueUrl"]
-            self.validation_queue_url = validation_queue["QueueUrl"]
-
-        else:
-            raise ConnectionError("Received non-200 status from SQS!")
-
-        # Adjust the queue to fit the 'prefetch' mode. One extra queue (transferred) if prefetch == True.
-        q_prefix = "crawl"
-
-        response = self.client.get_queue_url(
-            QueueName=f'{q_prefix}_{self.crawl_id}',
-            QueueOwnerAWSAccountId=os.environ["aws_account"]
-        )
-
-        self.crawl_queue = response["QueueUrl"]
-
-        """
         self.families_to_process = Queue()
         self.to_validate_q = Queue()
 
@@ -179,12 +142,7 @@ class Orchestrator:
 
         if self.prefetch_remote:
             self.logger.info("Launching prefetcher...")
-            self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
-                                               crawl_id=self.crawl_id,
-                                               data_source=self.source_endpoint,
-                                               data_dest=self.dest_endpoint,
-                                               data_path=self.data_prefetch_path,
-                                               max_gb=500)  # TODO: bounce this out.
+
             self.logger.info("Prefetcher successfully launched!")
 
             prefetch_thread = threading.Thread(target=self.prefetcher.main_poller_loop, args=())
@@ -530,106 +488,7 @@ class Orchestrator:
         print("ENDING LOOP")
 #
 
-    def get_next_families_loop(self):
-        """
 
-        get_next_families() will keep polling SQS queue containing all of the crawled data. This should generally be
-        read as its own thread, and terminate when the orchestrator's POLLER is completed
-        (because, well, that means everything is finished)
-
-        If prefetching is turned OFF, then families will be placed directly into families_to_process queue.
-
-        If prefetching is turned ON, then families will be placed directly into families_to_prefetch queue.
-
-        NOTE: *n* current threads of this loop!
-
-        """
-
-        final_kill_check = False
-
-        while True:
-            # Getting this var to avoid flooding ourselves with SQS messages we can't process
-            # num_pulled_but_not_pfing = self.prefetcher.next_prefetch_queue.qsize()
-
-            if self.num_families_fetched >= self.task_cap_until_termination:
-                print(f"HIT CAP ON NUMBER OF TASKS. Terminating...")
-                # Here we also tell the prefetcher that it's time to start terminating.
-                self.prefetcher.last_batch = True
-                return
-
-            # Do some queue pause checks (if too many current uncompleted tasks)
-            if self.num_extracting_tasks > self.max_extracting_tasks:
-                self.pause_q_consume = True
-                self.logger.info(f"[GET] Num. active tasks ({self.num_extracting_tasks}) "
-                      f"above threshold. Pausing SQS consumption...")
-
-            if self.pause_q_consume:
-                self.logger.info("[GET] Pausing pull of new families. Sleeping for 20 seconds...")
-                time.sleep(20)
-                continue
-
-            # Step 1. Get ceiling(batch_size/10) messages down from queue.
-            # Otherwise, we can just pluck straight from the sqs crawl queue
-            sqs_response = self.client.receive_message(  # TODO: properly try/except this block.
-                QueueUrl=self.crawl_queue,
-                MaxNumberOfMessages=10,
-                WaitTimeSeconds=1)
-
-            del_list = []
-            found_messages = False
-            deleted_messages = False
-
-            if ("Messages" in sqs_response) and (len(sqs_response["Messages"]) > 0):
-                self.get_families_status = "ACTIVE"
-                for message in sqs_response["Messages"]:
-                    self.num_families_fetched += 1
-                    message_body = message["Body"]
-
-                    # IF WE ARE NOT PREFETCHING, place directly into processing queue.
-                    if not self.prefetch_remote:
-                        self.families_to_process.put(message_body)
-
-                    # OTHERWISE, place into prefetching queue.
-                    else:
-                        self.prefetcher.next_prefetch_queue.put(message_body)
-
-                    del_list.append({'ReceiptHandle': message["ReceiptHandle"],
-                                     'Id': message["MessageId"]})
-                found_messages = True
-
-            # If we didn't get messages last time around, and the crawl is over.
-            if final_kill_check:
-                # Make sure no final messages squeaked in...
-                if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
-
-                    # If GET about to die, then the next step is that prefetcher should die.
-                    # TODO: *Technically* a race condition here since there are n concurrent threads.
-                    # TODO: Should wait until this is the LAST such thread.
-                    self.prefetcher.kill_prefetcher = True
-
-                    self.logger.info(f"[GET] Crawl successful and no messages in queue to get...")
-                    self.logger.info("[GET] Terminating...")
-                    return
-                else:
-                    final_kill_check = False
-
-            # Step 2. Delete the messages from SQS.
-            if len(del_list) > 0:
-                self.client.delete_message_batch(
-                    QueueUrl=self.crawl_queue,
-                    Entries=del_list)
-
-            if not deleted_messages and not found_messages:
-                self.logger.info("[GET] FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
-                self.get_families_status = "IDLE"
-
-            if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
-                status_dict = get_crawl_status(self.crawl_id)
-
-                if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
-                    final_kill_check = True
-
-            time.sleep(2)
 
     def launch_extract(self):
         ex_thr = threading.Thread(target=self.send_families_loop, args=())

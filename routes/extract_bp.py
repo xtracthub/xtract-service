@@ -9,7 +9,7 @@ from flask import Blueprint, request
 from globus_sdk import AccessTokenAuthorizer
 
 from status_checks import get_extract_status
-from orchestrator.orchestrator import Orchestrator
+from orchestrator.orchestrator import ExtractorOrchestrator
 
 
 def test_function():
@@ -192,18 +192,18 @@ def extract_mdata():
     print("Successfully unpacked data! Initializing orchestrator...")
 
     # TODO: Can have parallel orchestrators, esp now that we're using queues.
-    orch = Orchestrator(crawl_id=crawl_id,
-                        headers=headers,
-                        funcx_eid=funcx_eid,
-                        source_eid=source_eid,
-                        dest_eid=dest_eid,
-                        mdata_store_path=mdata_store_path,
-                        gdrive_token=gdrive_token,
-                        extractor_finder=extractor_finder,
-                        prefetch_remote=prefetch_remote,
-                        data_prefetch_path=data_prefetch_path,
-                        dataset_mdata=dataset_mdata
-                        )
+    orch = ExtractorOrchestrator(crawl_id=crawl_id,
+                                 headers=headers,
+                                 funcx_eid=funcx_eid,
+                                 source_eid=source_eid,
+                                 dest_eid=dest_eid,
+                                 mdata_store_path=mdata_store_path,
+                                 gdrive_token=gdrive_token,
+                                 extractor_finder=extractor_finder,
+                                 prefetch_remote=prefetch_remote,
+                                 data_prefetch_path=data_prefetch_path,
+                                 dataset_mdata=dataset_mdata
+                                 )
 
     print("Launching response poller...")
     orch.launch_poll()
