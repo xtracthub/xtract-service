@@ -6,10 +6,10 @@ import threading
 
 from queue import Queue
 
-from status_checks import get_crawl_status
+# from status_checks import get_crawl_status
 from prefetcher.prefetcher import GlobusPrefetcher
 from strategies.rand_n_families import RandNFamiliesStrategy
-from orchestrator.extractor_orchestrator import ExtractorOrchestrator
+# from orchestrator.extractor_orchestrator import ExtractorOrchestrator
 
 
 #####
@@ -28,6 +28,7 @@ class FamilyLocationScheduler:
         # Testing variables (do not run unless in debug)
         self.task_cap_until_termination = 50002  # Only want to run 50k files? Set to 50000.
         self.prefetch_remote = True  # In theory this should always be true...
+        self.fx_ep_timeout_s = 60
 
         # General variables
         self.headers = headers
@@ -210,6 +211,25 @@ class FamilyLocationScheduler:
 
 from tests.test_utils.native_app_login import globus_native_auth_login
 headers = globus_native_auth_login()
-FamilyLocationScheduler(fx_eps=[],
-                        crawl_id='4fcc180a-0925-4e2c-a59e-90623f156036',
-                        headers=headers)
+# FamilyLocationScheduler(fx_eps=[],
+#                         crawl_id='d09390b6-83fe-434e-b1c2-db43004067d6',
+#                         headers=headers)
+
+# config_load = FamilyLocationScheduler.fetch_all_endpoint_configs()
+from funcx import FuncXClient
+
+from utils import config_func_info
+
+fxc = FuncXClient()
+func_uuid = fxc.register_function(function=config_func_info['function'], function_name='xtract_config')
+print(func_uuid)
+task_id = fxc.run('/home/skluzacek/.xtract', 'tyler-midway', function_id=func_uuid, endpoint_id="6b10014b-7dd3-482e-8996-b16f818e2921")
+print(task_id)
+while True:
+    res = fxc.get_task(task_id=task_id)
+    print(res)
+
+    if "exception" in res:
+        res["exception"].reraise()
+    import time
+    time.sleep(5)
