@@ -1,6 +1,6 @@
 # funcx==0.0.2a0
 globus_sdk
-psycopg2-binary
+psycopg2-binary==2.8.5
 # dfttopif
 Pillow
 funcx
