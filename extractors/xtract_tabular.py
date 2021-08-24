@@ -43,9 +43,11 @@ def tabular_extract(event):
     import xtract_tabular_main
 
     family_batch = event["family_batch"]
+    ep_name = event["ep_name"]
+    dot_xtract_path = event[".xtract_path"]
 
     # Create XtractAgent() and load with families.
-    xtra = XtractAgent(ep_name='tyler_test_2', xtract_dir='/home/tskluzac/.xtract')  # TODO: pass-in argument.
+    xtra = XtractAgent(ep_name=ep_name, xtract_dir=dot_xtract_path)
 
     for family in family_batch.families:
         xtra.load_family(family.to_dict())
@@ -61,15 +63,11 @@ def tabular_extract(event):
         new_mdata = xtract_tabular_main.extract_columnar_metadata(tab_file)
 
         # TODO: Write preamble out to file.
-
-
         # TODO: write this out to file.
+
         return new_mdata
 
-
-
     # # TODO: Delete if we need to do that.
-    #
     # t1 = time.time()
     # # Return batch
     t1 = time.time()

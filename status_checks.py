@@ -3,7 +3,6 @@ import time
 import json
 import logging
 from utils.pg_utils import pg_conn
-from datetime import datetime
 import requests
 
 

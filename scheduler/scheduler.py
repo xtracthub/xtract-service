@@ -6,11 +6,12 @@ import threading
 
 from queue import Queue
 
-# from status_checks import get_crawl_status
+from status_checks import get_crawl_status
 from prefetcher.prefetcher import GlobusPrefetcher
-from strategies.rand_n_families import RandNFamiliesStrategy
+from endpoint_strategies.rand_n_families import RandNFamiliesStrategy
+from endpoint_strategies.nothing_moves import NothingMovesStrategy
 # from orchestrator.extractor_orchestrator import ExtractorOrchestrator
-
+from tests.test_utils.native_app_login import globus_native_auth_login
 
 #####
 # TODO pool.
@@ -23,7 +24,7 @@ from strategies.rand_n_families import RandNFamiliesStrategy
 # TODO 1: need list of all available endpoints
 class FamilyLocationScheduler:
     def __init__(self, fx_eps: list, crawl_id: str, headers: dict, load_type: str = "from_queue",
-                 max_pull_threads: int = 20, strategy: str = 'rand_n_families'):
+                 max_pull_threads: int = 20, endpoint_strategy: str = 'rand_n_families'):
 
         # Testing variables (do not run unless in debug)
         self.task_cap_until_termination = 50002  # Only want to run 50k files? Set to 50000.
@@ -37,9 +38,11 @@ class FamilyLocationScheduler:
         self.get_families_status = "STARTING"
 
         # Scheduling strategy setup
-        self.strategy = strategy
-        if self.strategy == 'rand_n_families':
+        self.endpoint_strategy = endpoint_strategy
+        if self.endpoint_strategy == 'rand_n_families':
             self.strategy_exec = RandNFamiliesStrategy(n=0.5)
+        elif self.endpoint_strategy == 'nothing_moves':
+            self.strategy_exec = NothingMovesStrategy()
 
         # Variables about funcX endpoints
         self.fx_eps_to_check = fx_eps
@@ -206,30 +209,30 @@ class FamilyLocationScheduler:
                 if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
                     final_kill_check = True
 
-            # time.sleep(2)
 
-
-from tests.test_utils.native_app_login import globus_native_auth_login
+# TODO: below is the funcX config code. We should get this working too!
+# from tests.test_utils.native_app_login import globus_native_auth_login
 headers = globus_native_auth_login()
-# FamilyLocationScheduler(fx_eps=[],
-#                         crawl_id='d09390b6-83fe-434e-b1c2-db43004067d6',
-#                         headers=headers)
+FamilyLocationScheduler(fx_eps=[],
+                        crawl_id='c2788750-b7fc-4e00-85c8-f8c0963bdd23',
+                        headers=headers)
+
 
 # config_load = FamilyLocationScheduler.fetch_all_endpoint_configs()
-from funcx import FuncXClient
+# from funcx import FuncXClient
 
-from utils import config_func_info
+# from utils import config_func_info
 
-fxc = FuncXClient()
-func_uuid = fxc.register_function(function=config_func_info['function'], function_name='xtract_config')
-print(func_uuid)
-task_id = fxc.run('/home/skluzacek/.xtract', 'tyler-midway', function_id=func_uuid, endpoint_id="6b10014b-7dd3-482e-8996-b16f818e2921")
-print(task_id)
-while True:
-    res = fxc.get_task(task_id=task_id)
-    print(res)
-
-    if "exception" in res:
-        res["exception"].reraise()
-    import time
-    time.sleep(5)
+# fxc = FuncXClient()
+# func_uuid = fxc.register_function(function=config_func_info['function'], function_name='xtract_config')
+# print(func_uuid)
+# task_id = fxc.run('/home/skluzacek/.xtract', 'tyler-midway', function_id=func_uuid, endpoint_id="6b10014b-7dd3-482e-8996-b16f818e2921")
+# print(task_id)
+# while True:
+#     res = fxc.get_task(task_id=task_id)
+#     print(res)
+#
+#     if "exception" in res:
+#         res["exception"].reraise()
+#     import time
+#     time.sleep(5)
