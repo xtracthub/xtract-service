@@ -75,8 +75,16 @@ def configure_funcx(globus_eid, funcx_eid, home):
     no_local_server=False,)
 
     fx_scope = 'https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all'
-    headers = {'Authorization': f"Bearer {auths['petrel']}", 'Transfer': auths['transfer'], 'FuncX': auths[fx_scope], 'Petrel': auths['petrel']}
-    print(headers)
+    headers = {
+        'Authorization': f"Bearer {auths['petrel'].refresh_token}",
+        'Transfer': str(auths['transfer']), 
+        'FuncX': auths[fx_scope].refresh_token, 
+        'Petrel': auths['petrel'].refresh_token}
+
+    # print(type(auths['petrel'].refresh_token))
+    # print(type(str(auths['transfer'])))
+    # print(type(auths[fx_scope].refresh_token))
+    # print(type(auths['petrel'].refresh_token))
 
     if not os.path.exists('.xtract/'):
         os.makedirs('.xtract/')
@@ -86,9 +94,8 @@ def configure_funcx(globus_eid, funcx_eid, home):
             'home': '.xtract/',
             'globus_eid': globus_eid,
             'funcx_eid': funcx_eid}
-        # json.dump(config, f)
+        json.dump(config, f)
         return {'status': 'success'}
-    return {'status': 'failure'}
 
 
 @extract_bp.route('/configure_ep/<funcx_eid>', methods=['POST', 'PUT'])
