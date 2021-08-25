@@ -44,6 +44,53 @@ extract_bp = Blueprint('extract_bp', __name__)
 active_orchestrators = dict()
 
 
+@extract_bp.route('/configure_funcx', methods=['PUT'])
+def configure_funcx():
+    from fair_research_login import NativeClient
+    from mdf_toolbox import login
+
+    client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
+
+    tokens = client.login(
+    requested_scopes=['https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all',
+                      'urn:globus:auth:scope:transfer.api.globus.org:all',
+                      'https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all'],
+    no_local_server=True,
+    no_browser=True,
+    force=True,)
+
+    # tokens will return a token for each of the requested scopes
+    auth_token = tokens["petrel_https_server"]['access_token']
+    transfer_token = tokens['transfer.api.globus.org']['access_token']
+    funcx_token = tokens['funcx_service']['access_token']
+
+    auths = login(services=[
+        "data_mdf",
+        "search",
+        "petrel",
+        "transfer",
+        "dlhub",
+        "https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all",
+    ],
+    app_name="Foundry",
+    make_clients=True,
+    no_browser=False,
+    no_local_server=False,)
+
+    fx_scope = 'https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all'
+    headers = {'Authorization': f"Bearer {auths['petrel']}", 'Transfer': auths['transfer'], 'FuncX': auths[fx_scope], 'Petrel': auths['petrel']}
+
+    
+#     payload = json.dumps({
+#         'header_auth': headers,
+#         'home': None,
+#         'globus_ep': None,
+#         'funcx_ep': None
+#     })
+#
+#     return payload
+
+
 @extract_bp.route('/configure_ep/<funcx_eid>', methods=['POST', 'PUT'])
 def configure_ep(funcx_eid):
     """ Configuring the endpoint means ensuring that all credentials on the endpoint
