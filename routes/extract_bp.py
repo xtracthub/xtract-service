@@ -1,5 +1,7 @@
 
+from genericpath import exists
 import json
+from os import write
 import time
 import pickle
 
@@ -44,13 +46,13 @@ extract_bp = Blueprint('extract_bp', __name__)
 active_orchestrators = dict()
 
 
-@extract_bp.route('/configure_funcx', methods=['PUT'])
-def configure_funcx():
+@extract_bp.route('/configure_funcx/<globus_eid>/<funcx_eid>/<home>', methods=['GET', 'POST', 'PUT'])
+def configure_funcx(globus_eid, funcx_eid, home):
     from fair_research_login import NativeClient
     from mdf_toolbox import login
+    import os
 
     client = NativeClient(client_id='7414f0b4-7d05-4bb6-bb00-076fa3f17cf5')
-
     tokens = client.login(
     requested_scopes=['https://auth.globus.org/scopes/56ceac29-e98a-440a-a594-b41e7a084b62/all',
                       'urn:globus:auth:scope:transfer.api.globus.org:all',
@@ -58,11 +60,6 @@ def configure_funcx():
     no_local_server=True,
     no_browser=True,
     force=True,)
-
-    # tokens will return a token for each of the requested scopes
-    auth_token = tokens["petrel_https_server"]['access_token']
-    transfer_token = tokens['transfer.api.globus.org']['access_token']
-    funcx_token = tokens['funcx_service']['access_token']
 
     auths = login(services=[
         "data_mdf",
@@ -79,16 +76,19 @@ def configure_funcx():
 
     fx_scope = 'https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all'
     headers = {'Authorization': f"Bearer {auths['petrel']}", 'Transfer': auths['transfer'], 'FuncX': auths[fx_scope], 'Petrel': auths['petrel']}
+    print(headers)
 
-    
-#     payload = json.dumps({
-#         'header_auth': headers,
-#         'home': None,
-#         'globus_ep': None,
-#         'funcx_ep': None
-#     })
-#
-#     return payload
+    if not os.path.exists('.xtract/'):
+        os.makedirs('.xtract/')
+    with open('.xtract/config.json', 'w') as f:
+        config = {
+            'header_auth': headers,
+            'home': '.xtract/',
+            'globus_eid': globus_eid,
+            'funcx_eid': funcx_eid}
+        # json.dump(config, f)
+        return {'status': 'success'}
+    return {'status': 'failure'}
 
 
 @extract_bp.route('/configure_ep/<funcx_eid>', methods=['POST', 'PUT'])
@@ -141,7 +141,7 @@ def configure_ep(funcx_eid):
             result[task_id]['exception'].reraise()
 
         if result[task_id]['status'] == 'success':
-            print("Sucessfully returned test function. Breaking!")
+            print("Successfully returned test function. Breaking!")
             break
 
         elif result[task_id]['status'] == 'FAILED':
@@ -187,7 +187,7 @@ def configure_ep(funcx_eid):
 def check_ep_configured():
     """ This should check to see which credentials on the endpoint are up-to-date.
     Try some basic API calls to ensure they don't return empty results"""
-    pass
+    return 'Not yet implemented.'
 
 
 @extract_bp.route('/extract', methods=['POST'])
