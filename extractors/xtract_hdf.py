@@ -28,8 +28,6 @@ def hdf_extract(event):
     import time
     import os
 
-    from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
-
     t0 = time.time()
 
     sys.path.insert(1, '/')
@@ -37,40 +35,10 @@ def hdf_extract(event):
 
     new_mdata = None
 
-    creds = event["creds"]
-    family_batch = event["family_batch"]
+    # TODO: add check for file existence.
+    # TODO: batching (via Xtract_sdk)
+    family = event
+    h5_path = event['files'][0]  # These are all of size 1.
 
-    # This should be either 'local' or 'remote'.
-    extract_mode = event["extract_mode"]
-
-    downloader = GoogleDriveDownloader(auth_creds=creds)
-    assert extract_mode in ["remote", "local"], "Invalid extraction mode"
-
-    if extract_mode == "remote":
-        ta = time.time()
-        downloader.batch_fetch(family_batch=family_batch)
-        tb = time.time()
-
-        file_paths = downloader.success_files
-    elif extract_mode == "local":
-        ta = tb = 0  # Set both times to be zero so that transfer time is zero.
-        file_paths = []
-
-    if len(file_paths) == 0 and file_paths == "remote":
-        return {'family_batch': family_batch, 'error': True, 'tot_time': time.time() - t0,
-                'err_msg': "unable to download files"}
-
-    for family in family_batch.families:
-        img_path = family.files[0]['path']
-        # return img_path
-
-        new_mdata = xtract_hdf_main.extract_json_metadata(img_path)
-        family.metadata = new_mdata
-
-    if extract_mode == "remote":
-        [os.remove(file_path) for file_path in downloader.success_files]
-
-    t1 = time.time()
-    # Return batch
-    return {'family_batch': family_batch, 'tot_time': t1 - t0, 'trans_time': tb - ta}
-
+    new_mdata = xtract_hdf_main.extract_hdf_main(h5_path)
+    return new_mdata
