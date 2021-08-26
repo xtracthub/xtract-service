@@ -1,7 +1,4 @@
-
-from genericpath import exists
 import json
-from os import write
 import time
 import pickle
 
@@ -80,11 +77,6 @@ def configure_funcx(globus_eid, funcx_eid, home):
         'Transfer': str(auths['transfer']), 
         'FuncX': auths[fx_scope].refresh_token, 
         'Petrel': auths['petrel'].refresh_token}
-
-    # print(type(auths['petrel'].refresh_token))
-    # print(type(str(auths['transfer'])))
-    # print(type(auths[fx_scope].refresh_token))
-    # print(type(auths['petrel'].refresh_token))
 
     if not os.path.exists('.xtract/'):
         os.makedirs('.xtract/')
