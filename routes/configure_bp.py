@@ -1,12 +1,14 @@
+import pickle
 import json
 from flask import Blueprint
 
 
 """ Routes that have to do with using configuration """
-crawl_bp = Blueprint('crawl_bp', __name__)
+configure_bp = Blueprint('configure_bp', __name__)
+print(configure_bp.root_path)
 
 
-@crawl_bp.route('/configure_funcx/<globus_eid>/<funcx_eid>/<home>', methods=['GET', 'POST', 'PUT'])
+@configure_bp.route('/configure_funcx/<globus_eid>/<funcx_eid>/<home>', methods=['GET', 'POST', 'PUT'])
 def configure_funcx(globus_eid, funcx_eid, home):
     from fair_research_login import NativeClient
     from mdf_toolbox import login
@@ -36,18 +38,20 @@ def configure_funcx(globus_eid, funcx_eid, home):
 
     fx_scope = 'https://auth.globus.org/scopes/facd7ccc-c5f4-42aa-916b-a0e270e2c2a9/all'
     headers = {
-        'Authorization': f"Bearer {auths['petrel'].refresh_token}",
-        'Transfer': str(auths['transfer']), 
-        'FuncX': auths[fx_scope].refresh_token, 
-        'Petrel': auths['petrel'].refresh_token}
+        'Authorization': auths['petrel'],
+        'Transfer': auths['transfer'],
+        'FuncX': auths[fx_scope],
+        'Petrel': auths['petrel']}
+
+    print(headers)
 
     if not os.path.exists('.xtract/'):
         os.makedirs('.xtract/')
-    with open('.xtract/config.json', 'w') as f:
+    with open('.xtract/config.pickle', 'wb') as f:
         config = {
             'header_auth': headers,
             'home': '.xtract/',
             'globus_eid': globus_eid,
             'funcx_eid': funcx_eid}
-        json.dump(config, f)
+        pickle.dump(config, f)
         return {'status': 'success'}
