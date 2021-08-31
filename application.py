@@ -34,6 +34,5 @@ def xtract_default():
 #
 #     return {'status': 200, 'message': 'Endpoint successfully configured!', 'fx_eid': fx_ep}
 
-
 if __name__ == '__main__':
     application.run(debug=True, threaded=True, ssl_context="adhoc")
