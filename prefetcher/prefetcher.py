@@ -22,7 +22,7 @@ class GlobusPrefetcher:
         self.data_path = data_path
 
         self.max_gb = max_gb
-        self.max_files_in_batch = 5000
+        self.max_files_in_batch = 10
 
         self.last_batch = False
         bytes_in_gb = 1024 * 1024 * 1024
@@ -63,6 +63,9 @@ class GlobusPrefetcher:
 
         self.pf_msgs_pulled_since_last_batch = 0
 
+    def start(self):
+        self.main_poller_loop()
+
     def get_globus_tc(self, TRANSFER_TOKEN):
 
         authorizer = globus_sdk.AccessTokenAuthorizer(TRANSFER_TOKEN)
@@ -82,20 +85,18 @@ class GlobusPrefetcher:
         num_completed = 0
 
         while True:
-            gl_tid = self.transfer_check_queue.get()
+            print("TRANSFER QUEUE THREAD loop iter")
+            gl_tid = self.transfer_check_queue.get()  # This is blocking.
+            print("Retrieved item from transfer_check_queue!")
             res = self.tc.get_task(gl_tid)
 
             if res['status'] != "SUCCEEDED":
                 gl_task_tmp_ls.append(gl_tid)
             else:
 
-                # num_completed += 1
-
                 arrival_time = time.time()
 
                 fids = self.transfer_map[gl_tid]
-
-                # print(f"[PF] NUMBER OF FIDS RETURNED: {len(fids)}")
 
                 for fid in fids:
 
@@ -157,13 +158,13 @@ class GlobusPrefetcher:
 
     def main_poller_loop(self):
 
+        print(f"Starting transfer queue thread!")
         transfer_thr = threading.Thread(target=self.transfer_queue_thread, args=())
         transfer_thr.start()
 
         need_more_families = True
 
         while True:
-
             if self.kill_prefetcher and self.last_batch:
                 print("[PF] Killing main PF loop...")
                 return
@@ -176,6 +177,7 @@ class GlobusPrefetcher:
                     self.last_batch = True
 
             if need_more_families:
+                print("Getting new families from queue!")
                 total_size = self.get_new_families()
 
                 # If nothing to prefetch, BUT not ready to kill...
@@ -222,7 +224,6 @@ class GlobusPrefetcher:
             # 3. batch_n_files_full: We have filled up the maximum number of files for 1 batch.
             batch_n_files_full = len(self.current_batch) > self.max_files_in_batch
 
-
             if batch_n_files_full or last_batch:
                 # if batch_size_full or last_batch or batch_n_files_full:  # TODO: BRING THIS BACK TO TRY SIZES AGAIN.
                 print("[PF] Generating a batch transfer object...")
@@ -236,9 +237,8 @@ class GlobusPrefetcher:
                 for family_to_trans in self.current_batch:
 
                     # Create a directory (named by family_id) into which we want to place our families.
-                    # TODO: hardcoding.
+                    # TODO: hardcoding. BIG YIKES.
                     fam_dir = '/project2/chard/skluzacek/data_to_process/{}'.format(family_to_trans['family_id'])
-                    # fam_dir = ''
 
                     for file_obj in family_to_trans['files']:
                         file_path = file_obj['path']
