@@ -9,4 +9,5 @@ boto3
 google-api-python-client
 google-auth-oauthlib
 numpy
-xtract_sdk==0.0.5
+xtract_sdk==0.0.6b1
+xlrd
