@@ -22,14 +22,10 @@ def matio_extract(event):
     :return metadata (dict) -- metadata as gotten from the materials_io library:
     """
 
-    # return 'hi'
-
     import time
     import sys
 
-    from xtract_sdk.downloaders.globus_https import GlobusHttpsDownloader
-    from xtract_sdk.packagers.family import Family
-    from xtract_sdk.packagers.family_batch import FamilyBatch
+
 
     # Enable using files stored at '/' in the container.
     sys.path.insert(1, '/')

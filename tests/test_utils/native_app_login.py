@@ -16,7 +16,7 @@ def globus_native_auth_login():
                           "urn:globus:auth:scope:data.materialsdatafacility.org:all",
                           'email', 'openid', 'urn:globus:auth:scope:search.api.globus.org:all'],
         no_local_server=True,
-        no_browser=True, force=True)
+        no_browser=True)
 
     print(tokens)
 
