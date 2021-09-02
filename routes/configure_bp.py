@@ -19,9 +19,6 @@ def configure_endpoint_function(headers, funcx_eid, globus_eid=None, home=None):
             }
         json.dump(config, f)
         return {'status': 'success'}
-    
-def printSomething(thingToPrint):
-    return {'hi': 'test'}
 
 
 @configure_bp.route('/configure_ep/<funcx_eid>', methods=['GET', 'POST'])
@@ -48,9 +45,8 @@ def configure_endpoint(funcx_eid):
         # search_authorizer=search_auth,
         # openid_authorizer=openid_auth)
     ep_uuid = funcx_eid
-    # func_uuid = fxc.register_function(configure_endpoint_function)
-    # fxc.run(headers, funcx_eid, globus_eid, home, function_id=func_uuid, endpoint_id=ep_uuid)
-    func_uuid = fxc.register_function(printSomething)
-    fxc.run('hello', function_id=func_uuid, endpoint_id=ep_uuid)
+    func_uuid = fxc.register_function(configure_endpoint_function)
+    task_id = fxc.run(headers, funcx_eid, globus_eid, home, function_id=func_uuid, endpoint_id=ep_uuid)
+    print(fxc.get_result(task_id=task_id))
 
     return {'status': 200, 'message': 'Endpoint successfully configured!', 'funcx_eid': funcx_eid}
