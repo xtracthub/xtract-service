@@ -1,76 +1,38 @@
 from extractors.extractor import Extractor
+from extractors.utils.base_event import create_event
 
 
 class TabularExtractor(Extractor):
 
     def __init__(self):
-
+        self.recursion_depth = 5000
         super().__init__(extr_id=None,
                          func_id="833f6271-e03c-4ac5-bc32-64eba7f13460",
                          extr_name="xtract-tabular",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
-        super().set_extr_func(tabular_extract)
+        # super().set_extr_func(tabular_extract)
 
+    def create_event(self,
+                     family_batch,
+                     ep_name,
+                     xtract_dir,
+                     sys_path_add,
+                     module_path,
+                     metadata_write_path,
+                     recursion_depth=None):
 
-def tabular_extract(event):
-    """
-    EXTRACTOR CODE.
+        if recursion_depth is not None:
+            rec_limit = recursion_depth
+        else:  # otherwise, set to extractor default.
+            rec_limit = self.recursion_depth
 
-    The tabular extractor input
+        event = create_event(family_batch=family_batch,
+                             ep_name=ep_name,
+                             xtract_dir=xtract_dir,
+                             sys_path_add=sys_path_add,
+                             module_path=module_path,
+                             metadata_write_path=metadata_write_path,
+                             recursion_limit=rec_limit)
 
-    Group-inputs: single file.
-    Group-outputs: dictionary of tabular metadata, mainly centered around the general structure and the column values.
-    
-    Parameters
-    ----------
-    event : dict -- contains credential and FamilyBatch objects.
-
-    Returns
-    -------
-    dict : contains macro information, including family_ids, local path(s) where the metadata are stored.
-    """
-
-    import sys
-    import time
-
-    t0 = time.time()
-
-    from xtract_sdk.xtract import XtractAgent
-
-    sys.path.insert(1, '/')
-    sys.setrecursionlimit(5000)  # I'm a bad person.
-    import xtract_tabular_main
-
-    family_batch = event["family_batch"]
-
-    # Create XtractAgent() and load with families.
-    xtra = XtractAgent(ep_name='tyler_test_2', xtract_dir='/home/tskluzac/.xtract')  # TODO: pass-in argument.
-
-    for family in family_batch.families:
-        xtra.load_family(family.to_dict())
-
-    # Fetch all of the files via the Xtract agent.
-    try:
-        xtra.fetch_all_files()
-    except Exception as e:
-        return f"Caught: {e}"
-
-    for family in xtra.ready_families:
-        tab_file = family['files'][0]['path']
-        new_mdata = xtract_tabular_main.extract_columnar_metadata(tab_file)
-
-        # TODO: Write preamble out to file.
-
-
-        # TODO: write this out to file.
-        return new_mdata
-
-
-
-    # # TODO: Delete if we need to do that.
-    #
-    # t1 = time.time()
-    # # Return batch
-    t1 = time.time()
-    return {'family_batch': family_batch, 'tot_time': t1-t0}
+        return event

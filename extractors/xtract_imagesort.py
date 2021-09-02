@@ -16,9 +16,6 @@ class ImageExtractor(Extractor):
 
 
 def images_extract(event):
-    # import platform
-    # print(platform.python_version())
-
     import os
     import sys
     import time
@@ -28,11 +25,9 @@ def images_extract(event):
 
     sys.path.insert(1, '/app')
 
-    # return "Made it here 2"
 
     import xtract_images_main
 
-    # return ("HEY")
 
     def min_hash(fpath):
 
@@ -210,14 +205,10 @@ def images_extract(event):
         if len(file_paths) == 0:
             return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
                     'err_msg': "unable to download files"}
-
-    # return "HEREZO"
     for family in family_batch.families:
 
-        # return "NICE AND EASY. "
         img_path = family.files[0]['path']
 
-        # return "IS THIS THE INDEX ISSUE"
 
         new_mdata = xtract_images_main.extract_image('predict', img_path)
 
