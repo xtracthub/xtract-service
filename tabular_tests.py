@@ -5,27 +5,6 @@ from xtract_sdk.packagers.family import Family
 from xtract_sdk.packagers.family_batch import FamilyBatch
 from extractors.utils.base_extractor import base_extractor
 
-# # TYLER LOCAL TESTS
-# ep_name = "test_tabular_ep"
-# xtract_dir = "/Users/tylerskluzacek/.xtract"
-# # Note: this is the following to my local version of the git repo 'xtract-tabular'
-# sys_path_add = "/Users/tylerskluzacek/xtract-sdk/tests/xtract-tabular"
-# module_path = "xtract_tabular_main"  # The file containing 'execute_extractor'
-# recursion_depth = 5000
-# metadata_write_path = "/Users/tylerskluzacek/Desktop/test_metadata"
-
-# # HERE WE PACK LOCAL FAMILIES INTO SAME STRUCTURES AS USED BY XTRACT.
-# test_fam_1 = Family()
-# test_fam_2 = Family()
-
-# base_path = "/Users/tylerskluzacek/xtract-sdk/tests/xtract-tabular/tests/test_files"
-# test_fam_1.add_group(files=[{'path': os.path.join(base_path, 'comma_delim'), 'metadata': dict()}], parser=None)
-# test_fam_1.download_type = "LOCAL"
-# print(f"[DEBUG] JSON form of our family object: {test_fam_1.to_dict()}")
-
-# fam_batch = FamilyBatch()
-# fam_batch.add_family(test_fam_1)
-
 # ****** JOAO LOCAL TESTS ******
 ep_name = "test_tabular_ep"
 xtract_dir = "/Users/joaovictor/.xtract"
