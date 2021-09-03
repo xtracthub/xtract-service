@@ -44,7 +44,6 @@ def configure_ep(funcx_eid):
         'authorization': headers['authorization']
         }
 
-
     fx_auth = AccessTokenAuthorizer(header_auth['authorization'])
     fxc = FuncXClient(fx_authorizer=fx_auth)
     ep_uuid = funcx_eid
@@ -55,7 +54,5 @@ def configure_ep(funcx_eid):
         header_auth['home'], 
         function_id=func_uuid, 
         endpoint_id=ep_uuid)
-
-    # print(fxc.get_result(task_id=task_id))
 
     return {'status': 200, 'message': 'Endpoint successfully configured!', 'funcx_eid': funcx_eid}
