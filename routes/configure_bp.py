@@ -23,8 +23,9 @@ def configure_endpoint_function(header_auth):
         print('Unable to decode header.')
         return {'status': 'failure'}
 
-    # make more thorough later
-    # add some checking
+    # TODO: Verify that the user provides a valid path,
+    # possibly via regex/checking if the path is available
+    # and that permissions allow us to write to that location
     if not os.path.exists(data['xtract_path']):
         os.makedirs(data['xtract_path'])
     with open(os.path.join(data['xtract_path'], 'config.json'), 'w') as f:
@@ -68,9 +69,12 @@ def configure_ep(funcx_eid):
     start_time = time.time()
     num_requests = 0
 
-    endpoint_status = fxc.get_endpoint_status(funcx_eid)
-    endpoint_status = json.dumps(endpoint_status, indent=4)
-    print(endpoint_status)
+
+    # TODO: Verify that an endpoint is online before configuring it
+    # This can be done by calling for the endpoint status function
+    # endpoint_status = fxc.get_endpoint_status(funcx_eid)
+    # endpoint_status = json.dumps(endpoint_status, indent=4)
+    # print(endpoint_status)
     
     while True and num_requests < max_requests:
         result = fxc.get_batch_result(task_id_list=[task_id])
