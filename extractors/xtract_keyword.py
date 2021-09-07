@@ -13,6 +13,8 @@ class KeywordExtractor(Extractor):
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-keyword:latest")
         super().set_extr_func(keyword_extract)
 
+# def execute_extractor():
+# event is a 'context' for an extractor to run on
 
 def keyword_extract(event):
 
