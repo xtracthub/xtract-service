@@ -1,14 +1,15 @@
 from extractors.extractor import Extractor
 from extractors.utils.base_event import create_event
 
-class JsonXMLExtractor(Extractor):
+
+class CCodeExtractor(Extractor):
 
     def __init__(self):
         super().__init__(extr_id=None,
-                         func_id="",  # TODO: Fill in once func is registered
-                         extr_name="xtract-jsonxml",
+                         func_id="",
+                         extr_name="xtract-c-code",
                          store_type="ecr",
-                         store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-jsonxml:lateset")
+                         store_url="abc.com")
 
     def create_event(self,
                      family_batch,
