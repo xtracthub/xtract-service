@@ -1,4 +1,5 @@
 from extractors.extractor import Extractor
+from extractors.utils.base_event import create_event
 
 
 class ImageExtractor(Extractor):
@@ -6,229 +7,242 @@ class ImageExtractor(Extractor):
     def __init__(self):
 
         super().__init__(extr_id=None,
-                         # TODO 1: Get this by running test_image_families.py. Don't do until you think it might work :)
                          func_id="f22d9206-0352-449f-8a5a-f6855f2bef30",
-                         # TODO 2: Call yours xtract-c-code.
                          extr_name="xtract-image",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
-        super().set_extr_func(images_extract)
 
+    def create_event(self,
+                    family_batch,
+                    ep_name,
+                    xtract_dir,
+                    sys_path_add,
+                    module_path,
+                    metadata_write_path):
 
-def images_extract(event):
-    import os
-    import sys
-    import time
-    from shutil import copyfile
+        event = create_event(family_batch=family_batch,
+                                ep_name=ep_name,
+                                xtract_dir=xtract_dir,
+                                sys_path_add=sys_path_add,
+                                module_path=module_path,
+                                metadata_write_path=metadata_write_path)
 
-    from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
+        return event
 
-    sys.path.insert(1, '/app')
+# def images_extract(event):
+#     import os
+#     import sys
+#     import time
+#     from shutil import copyfile
 
+#     from xtract_sdk.downloaders.google_drive import GoogleDriveDownloader
 
-    import xtract_images_main
+#     sys.path.insert(1, '/app')
 
 
-    def min_hash(fpath):
+#     import xtract_images_main
 
-        """
-        Extracts MinHash digest of a file's bytes
 
-        fpath (str): path to file to extract MinHash of
-        """
+#     def min_hash(fpath):
 
-        from datasketch import MinHash
+#         """
+#         Extracts MinHash digest of a file's bytes
 
-        NUM_PERMS = 128
-        CHUNK_SZ = 64
+#         fpath (str): path to file to extract MinHash of
+#         """
 
-        mh = MinHash(num_perm=NUM_PERMS)
+#         from datasketch import MinHash
 
-        with open(fpath, 'rb') as of:
-            by = of.read(CHUNK_SZ)
-            while by != b"":
-                by = of.read(CHUNK_SZ)
-                mh.update(by)
+#         NUM_PERMS = 128
+#         CHUNK_SZ = 64
 
-        return mh
+#         mh = MinHash(num_perm=NUM_PERMS)
 
-    def imbytes_to_imformat(fb):
+#         with open(fpath, 'rb') as of:
+#             by = of.read(CHUNK_SZ)
+#             while by != b"":
+#                 by = of.read(CHUNK_SZ)
+#                 mh.update(by)
 
-        """
-        Takes bytes from an image and turns it into a representation
-        we can use for classification
-        """
+#         return mh
 
-        RESNET_SIZE = (224, 224)
+#     def imbytes_to_imformat(fb):
 
-        import tensorflow as tf
-        from PIL import Image
-        import io
+#         """
+#         Takes bytes from an image and turns it into a representation
+#         we can use for classification
+#         """
 
-        image = Image.open(io.BytesIO(fb))
-        img_arr = tf.keras.preprocessing.image.img_to_array(image)
-        if img_arr.shape[-1] == 1:
-            img_arr = tf.tile(img_arr, [1, 1, 3])
-        elif img_arr.shape[-1] == 4:
-            img_arr = img_arr[:, :, :3]
-        img_arr = tf.image.resize(img_arr[tf.newaxis, :, :, :], RESNET_SIZE)
+#         RESNET_SIZE = (224, 224)
 
-        return img_arr
+#         import tensorflow as tf
+#         from PIL import Image
+#         import io
 
-    def conv_resnet_labels(pred_obj):
+#         image = Image.open(io.BytesIO(fb))
+#         img_arr = tf.keras.preprocessing.image.img_to_array(image)
+#         if img_arr.shape[-1] == 1:
+#             img_arr = tf.tile(img_arr, [1, 1, 3])
+#         elif img_arr.shape[-1] == 4:
+#             img_arr = img_arr[:, :, :3]
+#         img_arr = tf.image.resize(img_arr[tf.newaxis, :, :, :], RESNET_SIZE)
 
-        """
-        Prediction object looks like:
+#         return img_arr
 
-    [
-       [
-          ('n07753592', 'banana', 0.99229723),
-          ('n03532672', 'hook', 0.0014551596),
-          ('n03970156', 'plunger', 0.0010738898),
-          ('n07753113', 'fig', 0.0009359837) ,
-          ('n03109150', 'corkscrew', 0.00028538404)
-       ]
-    ]
+#     def conv_resnet_labels(pred_obj):
 
-        And we want to get the labels from each.
+#         """
+#         Prediction object looks like:
 
-        """
+#     [
+#        [
+#           ('n07753592', 'banana', 0.99229723),
+#           ('n03532672', 'hook', 0.0014551596),
+#           ('n03970156', 'plunger', 0.0010738898),
+#           ('n07753113', 'fig', 0.0009359837) ,
+#           ('n03109150', 'corkscrew', 0.00028538404)
+#        ]
+#     ]
 
-        import tensorflow as tf
+#         And we want to get the labels from each.
 
-        decoded_pred = tf.keras.applications.imagenet_utils.decode_predictions(pred_obj)
-        unbatch = decoded_pred[0]
-        get_pred_obj = lambda x: x[1]
-        labels = [get_pred_obj(o) for o in unbatch]
+#         """
 
-        return labels
+#         import tensorflow as tf
 
-    def conv_to_web_labels(labels):
+#         decoded_pred = tf.keras.applications.imagenet_utils.decode_predictions(pred_obj)
+#         unbatch = decoded_pred[0]
+#         get_pred_obj = lambda x: x[1]
+#         labels = [get_pred_obj(o) for o in unbatch]
 
-        """
-        We're stuck with a rough legacy format--web labels are formatted
-        in the database as a string
+#         return labels
 
-        '[(label, None)]'
+#     def conv_to_web_labels(labels):
 
-        So we have to convert to that from the labels
+#         """
+#         We're stuck with a rough legacy format--web labels are formatted
+#         in the database as a string
 
-        """
+#         '[(label, None)]'
 
-        return [(l, None) for l in labels]
+#         So we have to convert to that from the labels
 
-    def get_im_model():
+#         """
 
-        import os
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
-        import tensorflow as tf
+#         return [(l, None) for l in labels]
 
-        # return "Made it here"
-        resnet = tf.keras.applications.resnet50.ResNet50(weights='imagenet')
-        # resnet = tf.keras.models.load_model('/app/resnet50_weights_tf_dim_ordering_tf_kernels.h5')
+#     def get_im_model():
 
+#         import os
+#         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+#         import tensorflow as tf
 
-        out_layer = resnet.layers[-2]
-        identity = tf.keras.layers.Lambda(lambda x: x)(out_layer.output)
-        pred_layer = resnet.layers[-1](out_layer.output)
+#         # return "Made it here"
+#         resnet = tf.keras.applications.resnet50.ResNet50(weights='imagenet')
+#         # resnet = tf.keras.models.load_model('/app/resnet50_weights_tf_dim_ordering_tf_kernels.h5')
 
-        model = tf.keras.models.Model(inputs=resnet.input,
-                                      outputs=[identity, pred_layer])
 
-        for l in model.layers:
-            l.trainable = False
+#         out_layer = resnet.layers[-2]
+#         identity = tf.keras.layers.Lambda(lambda x: x)(out_layer.output)
+#         pred_layer = resnet.layers[-1](out_layer.output)
 
-        return model
+#         model = tf.keras.models.Model(inputs=resnet.input,
+#                                       outputs=[identity, pred_layer])
 
-    def get_fb(fname):
+#         for l in model.layers:
+#             l.trainable = False
 
-        with open(fname, 'rb') as of:
-            fb = of.read()
-        return fb
+#         return model
 
-    def finalize_im_rep(fname):
+#     def get_fb(fname):
 
-        fb = get_fb(fname)
-        model = get_im_model()
+#         with open(fname, 'rb') as of:
+#             fb = of.read()
+#         return fb
 
+#     def finalize_im_rep(fname):
 
-        im = imbytes_to_imformat(fb)
-        im_rep, label_preds = model.predict(im)
-        full_labels = conv_resnet_labels(label_preds)
-        return im_rep[0], full_labels
+#         fb = get_fb(fname)
+#         model = get_im_model()
 
-        # except Exception as e:
-        #     print(e)
-        #     return None, None
 
+#         im = imbytes_to_imformat(fb)
+#         im_rep, label_preds = model.predict(im)
+#         full_labels = conv_resnet_labels(label_preds)
+#         return im_rep[0], full_labels
 
-    import sys
-    import pickle as pkl
-    import base64
+#         # except Exception as e:
+#         #     print(e)
+#         #     return None, None
 
-    # logging.error("Testing")
-    # return "Made it here!"
 
-    t0 = time.time()
+#     import sys
+#     import pickle as pkl
+#     import base64
 
-    try:
-        import cv2
-    except Exception as e:
-        return e
+#     # logging.error("Testing")
+#     # return "Made it here!"
 
-    cur_ls = os.listdir('.')
-    if 'pca_model.sav' not in cur_ls or 'clf_model.sav' not in cur_ls:
-        # TODO: Make these lines unnecessary.
-        copyfile('/app/pca_model.sav', f'pca_model.sav')
-        copyfile('/app/clf_model.sav', f'clf_model.sav')
+#     t0 = time.time()
 
-    family_batch = event["family_batch"]
-    creds = event["creds"]
+#     try:
+#         import cv2
+#     except Exception as e:
+#         return e
 
-    download_file = event["download_file"]
+#     cur_ls = os.listdir('.')
+#     if 'pca_model.sav' not in cur_ls or 'clf_model.sav' not in cur_ls:
+#         # TODO: Make these lines unnecessary.
+#         copyfile('/app/pca_model.sav', f'pca_model.sav')
+#         copyfile('/app/clf_model.sav', f'clf_model.sav')
 
-    if download_file:
+#     family_batch = event["family_batch"]
+#     creds = event["creds"]
 
-        downloader = GoogleDriveDownloader(auth_creds=creds)
+#     download_file = event["download_file"]
 
-        # TODO: Put time info into the downloader/extractor objects.
-        ta = time.time()
-        try:
-            downloader.batch_fetch(family_batch=family_batch)
-        except Exception as e:
-            return e
-        tb = time.time()
+#     if download_file:
 
-        file_paths = downloader.success_files
-        # return file_paths
+#         downloader = GoogleDriveDownloader(auth_creds=creds)
 
-        if len(file_paths) == 0:
-            return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
-                    'err_msg': "unable to download files"}
-    for family in family_batch.families:
+#         # TODO: Put time info into the downloader/extractor objects.
+#         ta = time.time()
+#         try:
+#             downloader.batch_fetch(family_batch=family_batch)
+#         except Exception as e:
+#             return e
+#         tb = time.time()
 
-        img_path = family.files[0]['path']
+#         file_paths = downloader.success_files
+#         # return file_paths
 
+#         if len(file_paths) == 0:
+#             return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
+#                     'err_msg': "unable to download files"}
+#     for family in family_batch.families:
 
-        new_mdata = xtract_images_main.extract_image('predict', img_path)
+#         img_path = family.files[0]['path']
 
 
-        # TODO: BRING THESE BACK FOR MIDWAY.
-        # new_mdata["min_hash"] = base64.b64encode(pkl.dumps(min_hash(img_path))).decode('ascii')
-        # vec_rep, labels = finalize_im_rep(img_path)  # TODO: was fname
+#         new_mdata = xtract_images_main.extract_image('predict', img_path)
 
-        # new_mdata['image_vector'] = vec_rep
-        # new_mdata['image_objects'] = labels
-        family.metadata = new_mdata
 
-        # return new_mdata
+#         # TODO: BRING THESE BACK FOR MIDWAY.
+#         # new_mdata["min_hash"] = base64.b64encode(pkl.dumps(min_hash(img_path))).decode('ascii')
+#         # vec_rep, labels = finalize_im_rep(img_path)  # TODO: was fname
 
-    t1 = time.time()
+#         # new_mdata['image_vector'] = vec_rep
+#         # new_mdata['image_objects'] = labels
+#         family.metadata = new_mdata
 
-    if download_file:
-        [os.remove(file_path) for file_path in downloader.success_files]
-    else:
-        # This is the transfer time.
-        ta = tb = 0
+#         # return new_mdata
 
-    return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
+#     t1 = time.time()
+
+#     if download_file:
+#         [os.remove(file_path) for file_path in downloader.success_files]
+#     else:
+#         # This is the transfer time.
+#         ta = tb = 0
+
+#     return {'family_batch': family_batch, 'tot_time': t1-t0, 'trans_time': tb-ta}
