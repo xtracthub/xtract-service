@@ -1,4 +1,3 @@
-
 from abc import ABCMeta
 from queue import Queue
 from xtract_sdk.agent.xtract import XtractAgent
