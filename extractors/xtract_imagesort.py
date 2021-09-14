@@ -18,14 +18,16 @@ class ImageExtractor(Extractor):
                     xtract_dir,
                     sys_path_add,
                     module_path,
-                    metadata_write_path):
+                    metadata_write_path,
+                    writer):
 
         event = create_event(family_batch=family_batch,
                                 ep_name=ep_name,
                                 xtract_dir=xtract_dir,
                                 sys_path_add=sys_path_add,
                                 module_path=module_path,
-                                metadata_write_path=metadata_write_path)
+                                metadata_write_path=metadata_write_path,
+                                writer=writer)
 
         return event
 
