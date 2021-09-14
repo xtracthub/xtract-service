@@ -1,7 +1,7 @@
 
 from abc import ABCMeta
 from queue import Queue
-from xtract_sdk.xtract import XtractAgent
+from xtract_sdk.agent.xtract import XtractAgent
 from utils.fx_utils import invoke_solo_function
 from extractors.utils.base_extractor import base_extractor
 
