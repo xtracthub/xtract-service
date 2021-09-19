@@ -12,7 +12,7 @@ from extractors.utils.base_extractor import base_extractor
 # ****** JOAO LOCAL TESTS ******
 ep_name = "test_hdf_ep"
 xtract_dir = "/Users/joaovictor/.xtract"
-# Note: this is the following to my local version of the git repo 'xtract-netcdf'
+# Note: this is the following to my local version of the git repo 'xtract-hdf'
 sys_path_add = "/Users/joaovictor/xtract-hdf"
 module_path = "xtract_hdf_main"  # The file containing 'execute_extractor'
 metadata_write_path = "/Users/joaovictor/Desktop/test_metadata"
@@ -24,7 +24,7 @@ test_fam_2 = Family()
 base_path = "/Users/joaovictor/xtract-hdf/"
 test_fam_1.add_group(files=[{'path': os.path.join(base_path, 'test.hdf5'), 'metadata': dict()}], parser=None)
 test_fam_1.download_type = "LOCAL"
-# print(f"[DEBUG] JSON form of our family object: {test_fam_1.to_dict()}")
+print(f"[DEBUG] JSON form of our family object: {test_fam_1.to_dict()}")
 
 fam_batch = FamilyBatch()
 fam_batch.add_family(test_fam_1)
