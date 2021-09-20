@@ -11,7 +11,7 @@ from extractors.utils.base_extractor import base_extractor
 # ****** JOAO LOCAL TESTS ******
 ep_name = "test_c_code_ep"
 xtract_dir = "/Users/joaovictor/.xtract"
-# Note: this is the following to my local version of the git repo 'xtract-keyword'
+# Note: this is the following to my local version of the git repo 'xtract-c-code'
 sys_path_add = "/Users/joaovictor/xtract-c-code"
 module_path = "xtract_c_main"  # The file containing 'execute_extractor'
 metadata_write_path = "/Users/joaovictor/Desktop/test_metadata"
@@ -38,4 +38,4 @@ event = extractor.create_event(family_batch=fam_batch,
                                metadata_write_path=metadata_write_path)
 
 metadata = base_extractor(event)
-# print(metadata)
+print('Statistics:' + str(metadata))
