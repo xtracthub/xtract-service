@@ -22,7 +22,7 @@ test_fam_1 = Family()
 test_fam_2 = Family()
 
 base_path = "/Users/joaovictor/xtract-hdf/"
-test_fam_1.add_group(files=[{'path': os.path.join(base_path, 'test.hdf5'), 'metadata': dict()}], parser=None)
+test_fam_1.add_group(files=[{'path': os.path.join(base_path, 'local_test.hdf5'), 'metadata': dict()}], parser=None)
 test_fam_1.download_type = "LOCAL"
 print(f"[DEBUG] JSON form of our family object: {test_fam_1.to_dict()}")
 
@@ -39,4 +39,4 @@ event = extractor.create_event(family_batch=fam_batch,
                                metadata_write_path=metadata_write_path)
 
 metadata = base_extractor(event)
-print(metadata)
+print('Statistics:' + str(metadata))
