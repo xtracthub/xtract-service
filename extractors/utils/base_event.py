@@ -1,9 +1,14 @@
 
+import copy
+
 
 def create_event(family_batch, ep_name, xtract_dir, sys_path_add, module_path, metadata_write_path,
                  recursion_limit=1000, input_type=str, writer='json'):
 
-    event = default_event
+    # TODO: should probably have an event class.
+    # This enables us to not have mutable 'pass by reference' copies
+    event = copy.deepcopy(default_event)
+
     event['family_batch'] = family_batch
     event['ep_name'] = ep_name
     event['xtract_dir'] = xtract_dir
