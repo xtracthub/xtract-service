@@ -35,7 +35,7 @@ batch_size = 500
 hdf_count = 0
 all_events = Queue()
 
-max_count = 10000
+max_count = 100000
 
 crawl_info = "/Users/tylerskluzacek/Desktop/xpcs_crawl_info.csv"
 
@@ -53,8 +53,6 @@ with open(crawl_info, 'r') as f:
         hdf_count += 1
 
         event = create_mock_event([real_filename])
-        # print(event['family_batch'].to_dict())
-        # time.sleep(0.5)
         all_events.put(event)
 
         if hdf_count > max_count:
@@ -65,18 +63,20 @@ poll_queue = Queue()
 
 print(f"Sending batches")
 time.sleep(2)
+current_batch = []
 
 # While my queue isn't empty
 while not all_events.empty():
 
     # Temporary edge case fix.
-    if all_events.qsize() <= 2:
-        break
+
 
     current_batch = []
 
     while len(current_batch) < batch_size:
         print(f"All events queue size: {all_events.qsize()}")
+        if all_events.empty():
+            break
         event = all_events.get()
 
         print("PLOP")
@@ -92,29 +92,8 @@ while not all_events.empty():
         # print(current_batch)
         print(f"Len Current Batch: {len(current_batch)}")
 
-        # print(f"Pre-item ID: {xpcs_event['family_batch'].to_dict()['families'][0]['family_id']}")
-        # time.sleep(0.5)
-
-        # i = 0
-        # for i in range(0, len(current_batch)):
-        #     item = current_batch[i]
-        #     print(item['family_batch'].to_dict()['families'][0]['family_id'])
-            # current_batch.put(item)
-
-        # current_batch.put(None)
-            # i += 1
-            # print(f"Item ID: {item['family_batch'].to_dict()['families'][0]['family_id']}")
-        # exit()
-
-    # exit()
-    # print(current_batch)
-    # current_batch.put(None)
     for item in current_batch:
-        # item = current_batch.get()
-        # print(f"Item ID: {item['family_batch'].to_dict()['families'][0]['family_id']}")
         batch.add(item, endpoint_id=ep_id, function_id=fn_uuid)
-    # current_batch = []
-    # time.sleep(5)
 
     # List of task_ids
     batch_res = fxc.batch_run(batch)
@@ -126,14 +105,25 @@ while not all_events.empty():
 
     # TODO: sauce this to be much better.
     print("Moving to phase 2...")
-    time.sleep(1)
+    time.sleep(0.5)
+
+# Cleanup the 'non-full-last-batch-stragglers'
+if len(current_batch) > 0:
+    for item in current_batch:
+        batch.add(item, endpoint_id=ep_id, function_id=fn_uuid)
+
+    # List of task_ids
+    batch_res = fxc.batch_run(batch)
+
+    for item in batch_res:
+        poll_queue.put(item)
 
 success_count = 0
 print(f"Moving to status checks...")
 while True:
     tids_to_check = []
     poll_batch = []
-    while len(tids_to_check) < batch_size:
+    while len(tids_to_check) < batch_size and not poll_queue.empty():
         tid = poll_queue.get()
         tids_to_check.append(tid)
 
@@ -146,5 +136,5 @@ while True:
         else:
             poll_queue.put(tid_key)
     print(f"Success Count: {success_count}")
-
-    time.sleep(2)
+    print(f"Size of poller queue: {poll_queue.qsize()}")
+    time.sleep(1)
