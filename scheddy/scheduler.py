@@ -1,17 +1,20 @@
 
 import os
+import json
 import time
 import boto3
 import threading
 
-from queue import Queue
+# TODO: add back the 'priority' queue.
+from queue import Queue, PriorityQueue
 
 from status_checks import get_crawl_status
 from prefetcher.prefetcher import GlobusPrefetcher
 from endpoint_strategies.rand_n_families import RandNFamiliesStrategy
 from endpoint_strategies.nothing_moves import NothingMovesStrategy
-# from orchestrator.extractor_orchestrator import ExtractorOrchestrator
 from tests.test_utils.native_app_login import globus_native_auth_login
+
+from scheddy.extractor_strategies.extension_map import ExtensionMapStrategy
 
 #####
 # TODO pool.
@@ -24,11 +27,17 @@ from tests.test_utils.native_app_login import globus_native_auth_login
 # TODO 1: need list of all available endpoints
 class FamilyLocationScheduler:
     def __init__(self, fx_eps: list, crawl_id: str, headers: dict, load_type: str = "from_queue",
-                 max_pull_threads: int = 20, endpoint_strategy: str = 'rand_n_families'):
+                 max_pull_threads: int = 1, endpoint_strategy: str = 'rand_n_families'):
+
+        # TODO: generalize as kwarg
+        self.extractor_scheduler = ExtensionMapStrategy()
+
+        self.new_tasks_flag = True
+        self.tasks_to_sched_flag = True
 
         # Testing variables (do not run unless in debug)
         self.task_cap_until_termination = 50002  # Only want to run 50k files? Set to 50000.
-        self.prefetch_remote = True  # In theory this should always be true...
+        self.prefetch_remote = False  # In theory this should always be true...
         self.fx_ep_timeout_s = 60
 
         # General variables
@@ -48,10 +57,10 @@ class FamilyLocationScheduler:
         self.fx_eps_to_check = fx_eps
         self.fx_eps_ready = dict()
 
-        # All sorts of internal queues.
-        self.to_schedule_q = Queue()
-        self.to_prefetch_q = Queue()
-        self.to_xtract_q = Queue()
+        # *** QUEUES ***
+        self.to_schedule_pqs = dict()  # PRIORITY queues for endpoint scheduling.
+        self.to_prefetch_q = Queue()  # QUEUE for the order in which files are prefetched.
+        self.to_xtract_q = Queue()  # QUEUES for the order in which files sent to extractors  # TODO: should be 1 queue for each destination.
 
         # Variables about pulling data into the scheduler (and start it)
         self.load_type = load_type
@@ -100,7 +109,23 @@ class FamilyLocationScheduler:
             pass
 
     def schedule(self):
-        pass
+        if self.prefetch_remote:
+            raise NotImplementedError("Need to move this into a proper scheduler.")
+        else:
+            # Drain priority queues in order (make sure same extractor near each other)
+            for ext_type in self.to_schedule_pqs:
+                # TODO: should have rules in 'simple' cases (e.g., by extension) for what we do with mismatching files?
+                if ext_type in ['unknown']:
+                    continue
+
+                # TODO: go by priority queues here ('peek' individual pq with highest priority at head).
+                full_pq = self.to_schedule_pqs[ext_type]
+
+                while not full_pq.empty():
+                    pri, fam = full_pq.get()
+                    self.to_xtract_q.put(fam)
+        self.tasks_to_sched_flag = False
+
 
     def task_pulldown_thread(self):
         """
@@ -160,13 +185,14 @@ class FamilyLocationScheduler:
                     self.n_families_pull_from_sqs += 1
                     message_body = message["Body"]
 
+                    # TODO: moved the prefetch logic.
                     # IF WE ARE NOT PREFETCHING, place directly into processing queue.
-                    if not self.prefetch_remote:
-                        self.to_xtract_q = Queue()
+                    # if not self.prefetch_remote:
+                    #     self.to_xtract_q = Queue()
 
                     # OTHERWISE, place into prefetching queue.
-                    else:
-                        self.to_prefetch_q.put(message_body)
+                    # else:
+                    #     self.to_prefetch_q.put(message_body)
 
                     del_list.append({'ReceiptHandle': message["ReceiptHandle"],
                                      'Id': message["MessageId"]})
@@ -174,6 +200,26 @@ class FamilyLocationScheduler:
                     if self.n_families_pull_from_sqs % 1000 == 0:
                         print(f"SQS Pull Rate: "
                               f"{self.n_families_pull_from_sqs/(time.time()-self.tasks_pulled_start_time)} families/s")
+
+                    message_as_dict = json.loads(message_body)
+                    pri_extractor_pairs = self.extractor_scheduler.assign_files_to_extractors([message_as_dict])
+
+                    # TODO: Tyler -- place these onto the relevant queue.
+                    for item in pri_extractor_pairs:
+                        priority, extractor = item
+
+                        if extractor not in self.to_schedule_pqs:
+                            # TODO: get the priority queues working.
+                            # TypeError: '<' not supported between instances of 'dict' and 'dict'
+                            # self.to_schedule_pqs[extractor] = PriorityQueue()
+                            self.to_schedule_pqs[extractor] = Queue()
+
+                        print(f"Priority: {priority}")
+                        print(f"Extractor: {extractor}")
+                        pri_msg_tup = (priority, message_as_dict)
+                        self.to_schedule_pqs[extractor].put(pri_msg_tup)
+
+                    time.sleep(0.5)
                 found_messages = True
 
             # If we didn't get messages last time around, and the crawl is over.
@@ -203,36 +249,39 @@ class FamilyLocationScheduler:
                 print("[GET] FOUND NO NEW MESSAGES. SLEEPING THEN DOWNGRADING TO IDLE...")
                 self.get_families_status = "IDLE"
 
+            # If we manage to pull nothing from SQS...
             if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
+
+                # Quick check to see if 'status is 'complete'
                 status_dict = get_crawl_status(self.crawl_id)
 
-                if status_dict['crawl_status'] in ["SUCCEEDED", "FAILED"]:
-                    final_kill_check = True
+                # TODO: add failed case here (when we provide means for crawl to fail).
+                # if the crawl is completed
+                if status_dict['crawl_status'] == 'complete':
+                    # flag the class as 'no_new_tasks'
+                    self.new_tasks_flag = False
+                    print(f"[SCHEDULER] Terminating task pull-down thread!")
+
+                    self.schedule()
+
+                    break
 
 
-# TODO: below is the funcX config code. We should get this working too!
-# from tests.test_utils.native_app_login import globus_native_auth_login
 headers = globus_native_auth_login()
-FamilyLocationScheduler(fx_eps=[],
-                        crawl_id='c2788750-b7fc-4e00-85c8-f8c0963bdd23',
-                        headers=headers)
+sched_obj = FamilyLocationScheduler(fx_eps=[],
+                                    crawl_id='3238cff1-2765-431c-a2d4-107464c90809',
+                                    headers=headers)
 
 
-# config_load = FamilyLocationScheduler.fetch_all_endpoint_configs()
-# from funcx import FuncXClient
-
-# from utils import config_func_info
-
-# fxc = FuncXClient()
-# func_uuid = fxc.register_function(function=config_func_info['function'], function_name='xtract_config')
-# print(func_uuid)
-# task_id = fxc.run('/home/skluzacek/.xtract', 'tyler-midway', function_id=func_uuid, endpoint_id="6b10014b-7dd3-482e-8996-b16f818e2921")
-# print(task_id)
 # while True:
-#     res = fxc.get_task(task_id=task_id)
-#     print(res)
 #
-#     if "exception" in res:
-#         res["exception"].reraise()
-#     import time
-#     time.sleep(5)
+#     if not sched_obj.tasks_to_sched_flag:
+#         print("PRINTING SIZES EXTERNAL")
+#         while not sched_obj.to_xtract_q.empty():
+#             x = sched_obj.to_xtract_q.get()
+#             print(f"Item: {x}")
+#
+#     else:
+#         print("NVM gotta sleep")
+#
+#     time.sleep(2)
