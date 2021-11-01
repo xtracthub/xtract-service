@@ -8,12 +8,32 @@ from flask import Blueprint, request
 from globus_sdk import AccessTokenAuthorizer
 
 from status_checks import get_extract_status
+from scheddy.scheduler import FamilyLocationScheduler
 # from orchestrator.orchestrator import ExtractorOrchestrator
+from threading import Thread
+
+
+# TODO: back in the databases
+schedulers_by_crawl_id = dict()
+status_by_crawl_id = dict()
 
 
 def test_function():
     # TODO: add ep_id
     return {'is_success': True}
+
+
+def create_scheduler_thread(fx_eps, crawl_id, headers):
+
+    # status_by_crawl_id[crawl_id] = "SCHEDULING"
+
+    print("Started sched_obj")
+    sched_obj = FamilyLocationScheduler(fx_eps=fx_eps,
+                                        crawl_id=crawl_id,
+                                        headers=headers)
+    print("POST sched obj")
+    sched_obj.cur_status = "IN_SCHEDULING"
+    schedulers_by_crawl_id[crawl_id] = sched_obj
 
 
 def configure_function(event):
@@ -142,55 +162,20 @@ def check_ep_configured():
     return 'Not yet implemented.'
 
 
-# @extract_bp.route('/extract', methods=['POST'])
-# def extract_mdata():
-#
-#     gdrive_token = None
-#     source_eid = None
-#     dest_eid = None
-#     mdata_store_path = None
-#     extractor_finder = None
-#     prefetch_remote = None
-#     data_prefetch_path = None
-#     dataset_mdata = None
-#
-#     try:
-#         r = pickle.loads(request.data)
-#         print(f"Data: {request.data}")
-#         gdrive_token = r["gdrive_pkl"]
-#         extractor_finder = "gdrive"
-#         print(f"Received Google Drive token: {gdrive_token}")
-#     except pickle.UnpicklingError:
-#         print("Unable to pickle-load for Google Drive! Trying to JSON load for Globus/HTTPS.")
-#
-#         r = request.json
-#
-#         if r["repo_type"] in ["GLOBUS", "HTTPS"]:
-#             source_eid = r["source_eid"]
-#             dest_eid = r["dest_eid"]
-#             mdata_store_path = r["mdata_store_path"]
-#             print(f"Received {r['repo_type']} data!")
-#             extractor_finder = "matio"
-#             print("SETTING PREFETCH REMOTE")
-#             prefetch_remote = r["prefetch_remote"]
-#
-#             data_prefetch_path = r['data_prefetch_path']
-#
-#             if 'dataset_mdata' in r:
-#                 dataset_mdata = r['dataset_mdata']
-#             else:
-#                 dataset_mdata = None
-#
-#     crawl_id = r["crawl_id"]
-#     headers = json.loads(r["headers"])
-#     funcx_eid = r["funcx_eid"]
-#
-#     if crawl_id in active_orchestrators:  # TODO: improved error-handling.
-#         return "ERROR -- crawl_id already has an associated orchestrator!"
-#
-#     print("Successfully unpacked data! Initializing orchestrator...")
-#
-#     # TODO: Can have parallel orchestrators, esp now that we're using queues.
+@extract_bp.route('/extract', methods=['POST'])
+def extract_mdata():
+    r = request.json
+
+    # Starting a thread containing our FamilyScheduler object.
+    status_by_crawl_id[r["crawl_id"]] = "INIT"
+    t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
+    t1.start()
+
+    return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
+
+
+# TODO: Look how I had parallel processes in the past
+
 #     orch = ExtractorOrchestrator(crawl_id=crawl_id,
 #                                  headers=headers,
 #                                  funcx_eid=funcx_eid,
@@ -211,9 +196,6 @@ def check_ep_configured():
 #     orch.launch_extract()
 #
 #     active_orchestrators[crawl_id] = orch
-#
-#     extract_id = crawl_id
-#     return extract_id  # TODO: return actual response object.
 
 
 @extract_bp.route('/get_extract_status', methods=['GET'])
@@ -229,7 +211,9 @@ def get_extr_status():
 
     extract_id = r["crawl_id"]
 
-    orch = active_orchestrators[extract_id]
-    resp = get_extract_status(orch)
+    # cur_status = status_by_crawl_id[extract_id]
+    sched = schedulers_by_crawl_id[extract_id]
+    cur_status = sched.cur_status
+    print(f"STATUS: {cur_status}")
 
-    return resp
+    return {'status': cur_status, 'crawl_id': extract_id}

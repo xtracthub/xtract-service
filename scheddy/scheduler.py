@@ -10,8 +10,8 @@ from queue import Queue, PriorityQueue
 
 from status_checks import get_crawl_status
 from prefetcher.prefetcher import GlobusPrefetcher
-from endpoint_strategies.rand_n_families import RandNFamiliesStrategy
-from endpoint_strategies.nothing_moves import NothingMovesStrategy
+from scheddy.endpoint_strategies.rand_n_families import RandNFamiliesStrategy
+from scheddy.endpoint_strategies.nothing_moves import NothingMovesStrategy
 from tests.test_utils.native_app_login import globus_native_auth_login
 
 from scheddy.extractor_strategies.extension_map import ExtensionMapStrategy
@@ -31,6 +31,8 @@ class FamilyLocationScheduler:
 
         # TODO: generalize as kwarg
         self.extractor_scheduler = ExtensionMapStrategy()
+
+        self.cur_status = "INIT"
 
         self.new_tasks_flag = True
         self.tasks_to_sched_flag = True
@@ -125,7 +127,7 @@ class FamilyLocationScheduler:
                     pri, fam = full_pq.get()
                     self.to_xtract_q.put(fam)
         self.tasks_to_sched_flag = False
-
+        self.cur_status = "SCHEDULED"
 
     def task_pulldown_thread(self):
         """
@@ -267,10 +269,10 @@ class FamilyLocationScheduler:
                     break
 
 
-headers = globus_native_auth_login()
-sched_obj = FamilyLocationScheduler(fx_eps=[],
-                                    crawl_id='3238cff1-2765-431c-a2d4-107464c90809',
-                                    headers=headers)
+# headers = globus_native_auth_login()
+# sched_obj = FamilyLocationScheduler(fx_eps=[],
+#                                     crawl_id='3238cff1-2765-431c-a2d4-107464c90809',
+#                                     headers=headers)
 
 
 # while True:
