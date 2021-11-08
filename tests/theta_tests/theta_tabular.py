@@ -6,7 +6,8 @@ from tests.test_utils.mock_event import create_mock_event
 from extractors.utils.base_extractor import base_extractor
 from extractors.xtract_tabular import TabularExtractor
 
-test_file = '/projects/CSC249ADCD01/skluzacek/containers/comma_delim'
+# test_file = '/projects/CSC249ADCD01/skluzacek/containers/comma_delim'
+test_file = '/home/tskluzac/ext_repos/xtract-tabular/tests/test_files/comma_delim'
 
 mock_event = create_mock_event([test_file])
 ext = TabularExtractor()
@@ -16,7 +17,7 @@ tabular_event = ext.create_event(ep_name="foobar",
                              xtract_dir="/home/tskluzac/.xtract",
                              sys_path_add="/",
                              module_path="xtract_tabular_main",
-                             metadata_write_path='/home/tskluzac/testytesty')
+                             metadata_write_path='/home/tskluzac/mdata')
 
 
 def test(event):
@@ -25,10 +26,9 @@ def test(event):
 
 
 def main(fxc, ep_id):
-    container_uuid = fxc.register_container('/projects/CSC249ADCD01/skluzacek/containers/xtract-tabular.img', 'singularity')
+    container_uuid = fxc.register_container('/home/tskluzac/ext_repos/xtract-tabular/xtract-tabular.img', 'singularity')
     print("Container UUID: {}".format(container_uuid))
     fn_uuid = fxc.register_function(base_extractor,
-                                    #ep_id, # TODO: We do not need ep id here
                                     container_uuid=container_uuid,
                                     description="Tabular test function.")
     print("FN_UUID : ", fn_uuid)
@@ -39,13 +39,12 @@ def main(fxc, ep_id):
         try:
             x = fxc.get_result(res)
             print(x)
-            # print(x['family_batch'].families[0].metadata)
             break
         except Exception as e:
             print("Exception: {}".format(e))
             time.sleep(2)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     fxc = FuncXClient()
-    main(fxc, "0ac60203-68f1-464b-a595-b10e85ae2084")
+    main(fxc, "e1398319-0d0f-4188-909b-a978f6fc5621")

@@ -1,11 +1,15 @@
 import json
 import time
 import pickle
-
+import globus_sdk
 
 from funcx import FuncXClient
 from flask import Blueprint, request
 from globus_sdk import AccessTokenAuthorizer
+from extractors.xtract_keyword import KeywordExtractor
+from extractors.extractor import base_extractor
+from tests.test_utils.mock_event import create_mock_event
+
 
 from status_checks import get_extract_status
 from scheddy.scheduler import FamilyLocationScheduler
@@ -25,8 +29,6 @@ def test_function():
 
 def create_scheduler_thread(fx_eps, crawl_id, headers):
 
-    # status_by_crawl_id[crawl_id] = "SCHEDULING"
-
     print("Started sched_obj")
     sched_obj = FamilyLocationScheduler(fx_eps=fx_eps,
                                         crawl_id=crawl_id,
@@ -34,6 +36,12 @@ def create_scheduler_thread(fx_eps, crawl_id, headers):
     print("POST sched obj")
     sched_obj.cur_status = "IN_SCHEDULING"
     schedulers_by_crawl_id[crawl_id] = sched_obj
+
+    # t2 = Thread(target=orch_thread, args=(sched_obj,))
+    # t2.start()
+
+
+
 
 
 def configure_function(event):
@@ -155,6 +163,8 @@ active_orchestrators = dict()
 #         time.sleep(2)
 
 
+
+
 @extract_bp.route('/check_ep_configured', methods=['GET'])
 def check_ep_configured():
     """ This should check to see which credentials on the endpoint are up-to-date.
@@ -162,9 +172,62 @@ def check_ep_configured():
     return 'Not yet implemented.'
 
 
+local_mdata_maps = dict()
+remote_mdata_maps = dict()
+
+
+
+
+
+@extract_bp.route('/debug_orch', methods=['POST'])
+def debug_orch():
+
+    ep_id = "e1398319-0d0f-4188-909b-a978f6fc5621"
+    r = request.json
+    crawl_id = r['crawl_id']
+    headers = r['tokens']
+
+    test_file = '/home/tskluzac/tyler_research_files/MOTW.docx'
+
+    mock_event = create_mock_event([test_file])
+    ext = KeywordExtractor()
+
+    tabular_event = ext.create_event(ep_name="foobar",
+                                 family_batch=mock_event['family_batch'],
+                                 xtract_dir="/home/tskluzac/.xtract",
+                                 sys_path_add="/",
+                                 module_path="xtract_keyword_main",
+                                 metadata_write_path='/home/tskluzac/mdata')
+
+    from scheddy.maps.function_ids import functions, containers
+    fxc = get_fx_client(crawl_id, headers)
+
+    fn_uuid = functions['keyword']
+
+    print(fn_uuid)
+
+    res = fxc.run(tabular_event,
+                  endpoint_id=ep_id, function_id=fn_uuid)
+    print(res)
+    for i in range(100):
+        try:
+            x = fxc.get_result(res)
+            print(x)
+            break
+        except Exception as e:
+            print("Exception: {}".format(e))
+            time.sleep(2)
+
+    return "NICE"
+
+
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
+
+    # Store these for possibility of transfer later.
+    local_mdata_maps[r['crawl_id']] = r['local_mdata_path']
+    remote_mdata_maps[r['crawl_id']] = r['remote_mdata_path']
 
     # Starting a thread containing our FamilyScheduler object.
     status_by_crawl_id[r["crawl_id"]] = "INIT"
@@ -172,30 +235,6 @@ def extract_mdata():
     t1.start()
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
-
-
-# TODO: Look how I had parallel processes in the past
-
-#     orch = ExtractorOrchestrator(crawl_id=crawl_id,
-#                                  headers=headers,
-#                                  funcx_eid=funcx_eid,
-#                                  source_eid=source_eid,
-#                                  dest_eid=dest_eid,
-#                                  mdata_store_path=mdata_store_path,
-#                                  gdrive_token=gdrive_token,
-#                                  extractor_finder=extractor_finder,
-#                                  prefetch_remote=prefetch_remote,
-#                                  data_prefetch_path=data_prefetch_path,
-#                                  dataset_mdata=dataset_mdata
-#                                  )
-#
-#     print("Launching response poller...")
-#     orch.launch_poll()
-#
-#     print("Launching metadata extractors...")
-#     orch.launch_extract()
-#
-#     active_orchestrators[crawl_id] = orch
 
 
 @extract_bp.route('/get_extract_status', methods=['GET'])
@@ -211,9 +250,73 @@ def get_extr_status():
 
     extract_id = r["crawl_id"]
 
-    # cur_status = status_by_crawl_id[extract_id]
     sched = schedulers_by_crawl_id[extract_id]
     cur_status = sched.cur_status
     print(f"STATUS: {cur_status}")
 
     return {'status': cur_status, 'crawl_id': extract_id}
+
+
+def get_globus_tc(transfer_token):
+
+    authorizer = globus_sdk.AccessTokenAuthorizer(transfer_token)
+    tc = globus_sdk.TransferClient(authorizer=authorizer)
+    return tc
+
+
+@extract_bp.route('/ingest_search', methods=['POST'])
+def ingest_search():
+    r = request.json
+
+    search_index_id = r['search_index_id']
+    mdata_dir = r['metadata']
+
+    def funcx_func(event):
+        from globus_sdk import SearchClient
+        import os
+
+        search_token = event['search_token']
+        ingest_dir = event['ingest_dir']
+
+        # TODO: auth with search.
+        sc = globus_sdk.SearchClient(authorizer=globus_sdk.authorizers.AccessTokenAuthorizer(access_token=search_token))
+
+        # TODO: ingest all metadata in folder.
+        files_to_ingest = '/home/tskluzac/mdata'
+
+        # TODO: ingest.
+
+
+@extract_bp.route('/offload_mdata', methods=['POST'])
+def offload_mdata():
+
+    # TODO: only transfer if extraction is complete.
+    # TODO: add proper polling.
+    r = request.json
+
+    crawl_id = r['crawl_id']
+    tokens = r['tokens']
+
+    source_ep = r['source_ep']
+    mdata_ep = r['mdata_ep']
+
+    source_dir = local_mdata_maps[crawl_id]
+    dest_dir = remote_mdata_maps[crawl_id]
+
+    print(f"Source EP: {source_ep}")
+    print(f"Source Dir: {source_dir}")
+
+    print(f"Dest EP: {mdata_ep}")
+    print(f"Dest Dir: {dest_dir}")
+
+    tc = get_globus_tc(tokens['Transfer'])
+
+    tdata = globus_sdk.TransferData(transfer_client=tc,
+                                    source_endpoint=source_ep,
+                                    destination_endpoint=mdata_ep)
+
+    tdata.add_item(source_dir, dest_dir, recursive=True)
+    transfer_result = tc.submit_transfer(tdata)
+
+    print(transfer_result)
+    return {"status": "SUCCESS"}

@@ -7,9 +7,9 @@ class KeywordExtractor(Extractor):
     def __init__(self):
         super().__init__(extr_id=None,
                          func_id="833f6271-e03c-4ac5-bc32-64eba7f13460",
-                         extr_name="xtract-tabular", #TODO: change to xtract-keyword
+                         extr_name="xtract-keyword", #TODO: change to xtract-keyword
                          store_type="ecr",
-                         store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest") #TODO: change to xtract-keyword
+                         store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-keyword:latest") #TODO: change to xtract-keyword
 
     def create_event(self,
                      family_batch,

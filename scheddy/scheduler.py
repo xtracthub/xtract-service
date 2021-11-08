@@ -7,6 +7,8 @@ import threading
 
 # TODO: add back the 'priority' queue.
 from queue import Queue, PriorityQueue
+from xtract_sdk.packagers.family_batch import FamilyBatch
+from xtract_sdk.packagers.family import Family
 
 from status_checks import get_crawl_status
 from prefetcher.prefetcher import GlobusPrefetcher
@@ -15,6 +17,9 @@ from scheddy.endpoint_strategies.nothing_moves import NothingMovesStrategy
 from tests.test_utils.native_app_login import globus_native_auth_login
 
 from scheddy.extractor_strategies.extension_map import ExtensionMapStrategy
+from funcx import FuncXClient
+from globus_sdk import AccessTokenAuthorizer
+
 
 #####
 # TODO pool.
@@ -22,6 +27,12 @@ from scheddy.extractor_strategies.extension_map import ExtensionMapStrategy
 # - finish the application of the fetch_all_endpoint_configs() function.
 # - function to read data off of the crawl_queue --> load in internal queue.
 # - create a strategy base class that includes a 'schedule()' function.
+
+
+def get_fx_client(headers):
+    fx_auth = AccessTokenAuthorizer(headers['Authorization'])
+    fxc = FuncXClient(fx_authorizer=fx_auth)
+    return fxc
 
 
 # TODO 1: need list of all available endpoints
@@ -32,10 +43,14 @@ class FamilyLocationScheduler:
         # TODO: generalize as kwarg
         self.extractor_scheduler = ExtensionMapStrategy()
 
+        self.counters = {'success': 0, 'failed': 0, 'pending': 0, 'flagged_unknown': 0}
+
         self.cur_status = "INIT"
 
         self.new_tasks_flag = True
         self.tasks_to_sched_flag = True
+
+        self.funcx_current_tasks = Queue()
 
         # Testing variables (do not run unless in debug)
         self.task_cap_until_termination = 50002  # Only want to run 50k files? Set to 50000.
@@ -89,6 +104,9 @@ class FamilyLocationScheduler:
                 consumer_thr.start()
                 print(f"Successfully started the get_next_families() thread number {i} ")
 
+        orch_thread = threading.Thread(target=self.orch_thread, args=(headers,))
+        orch_thread.start()  # TODO: bring back.
+
         # # TODO: right now the prefetcher takes too much info. Should just input a bunch of orders.
         # self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
         #                                    crawl_id=self.crawl_id,
@@ -111,6 +129,10 @@ class FamilyLocationScheduler:
             pass
 
     def schedule(self):
+
+        # TODO: TYLER, use this to communicate with [ORCH]
+        self.currently_scheduling_flag = "True"
+
         if self.prefetch_remote:
             raise NotImplementedError("Need to move this into a proper scheduler.")
         else:
@@ -118,6 +140,7 @@ class FamilyLocationScheduler:
             for ext_type in self.to_schedule_pqs:
                 # TODO: should have rules in 'simple' cases (e.g., by extension) for what we do with mismatching files?
                 if ext_type in ['unknown']:
+                    self.counters['flagged_unknown'] += 1
                     continue
 
                 # TODO: go by priority queues here ('peek' individual pq with highest priority at head).
@@ -125,9 +148,121 @@ class FamilyLocationScheduler:
 
                 while not full_pq.empty():
                     pri, fam = full_pq.get()
+                    fam['first_extractor'] = ext_type
                     self.to_xtract_q.put(fam)
         self.tasks_to_sched_flag = False
         self.cur_status = "SCHEDULED"
+
+    def orch_thread(self, headers):
+        to_terminate = False
+
+        from scheddy.maps.function_ids import functions
+        fxc = get_fx_client(headers)
+
+        while True:
+            if to_terminate:
+                print("[ORCH] Terminating!")
+                break
+
+            print(f"[ORCH] WQ length: {self.to_xtract_q.qsize()}")
+
+            if self.to_xtract_q.empty() and self.funcx_current_tasks.empty():
+                print(f"[ORCH] Empty work thread. Sleeping...")
+                time.sleep(5)
+                if not self.tasks_to_sched_flag:
+                    # TODO: NOT HAVING A TERMINATION RULE BREAKS STATUS.
+
+                    pass
+            else:
+
+                batch = fxc.create_batch()
+                family_batch = FamilyBatch()
+
+                from extractors.xtract_tabular import TabularExtractor
+                from extractors.xtract_keyword import KeywordExtractor
+
+                batch_len = 0
+                while not self.to_xtract_q.empty():  # TODO: also need max batch size here.
+                    family = self.to_xtract_q.get()
+
+                    extractor_id = family['first_extractor']
+
+                    print(f"Family's extractor id: {extractor_id}")
+
+                    # TODO: needs to be offloaded to a map or something.
+                    if extractor_id == 'tabular':
+                        extractor = TabularExtractor()
+                    elif extractor_id == 'keyword':
+                        extractor = KeywordExtractor()
+                    else:
+                        continue
+
+                    # *** Spaghetti code zone ***
+                    # We should not need to repack and add an empty base_url
+                    fam_batch = FamilyBatch()
+                    packed_family = Family()
+                    family['base_url'] = None
+                    packed_family.from_dict(family)
+                    # ***************************
+
+                    print(f"Family object: {packed_family}")
+                    fam_batch.add_family(packed_family)
+
+                    event = extractor.create_event(
+                        family_batch=fam_batch,
+                        ep_name='foobar',
+                        xtract_dir="/home/tskluzac/.xtract",
+                        sys_path_add="/",
+                        module_path=f"xtract_{extractor_id}_main",
+                        metadata_write_path='/home/tskluzac/mdata'
+                    )
+
+                    print(f"[ORCH] Extractor: {extractor_id}")
+                    print(f"[ORCH] Event: {event}")
+
+                    batch.add(event,
+                              endpoint_id='e1398319-0d0f-4188-909b-a978f6fc5621',  # TODO: hardcode.
+                              function_id=functions[extractor_id])
+                    batch_len += 1
+
+                # Only want to send tasks if we retrieved tasks.
+                if batch_len > 0:
+                    batch_res = fxc.batch_run(batch)
+                    for item in batch_res:
+                        self.funcx_current_tasks.put(item)
+
+                poll_batch = []
+
+                print("Entering task loop")
+                for i in range(0, 20):  # TODO: hardcode
+                    if not self.funcx_current_tasks.empty():
+                        tid = self.funcx_current_tasks.get()
+                        poll_batch.append(tid)
+                print(f"Current length of poll_batch: {len(poll_batch)}")
+
+                if len(poll_batch) > 0:
+                    x = fxc.get_batch_result(poll_batch)
+                    print(f"Poll result: {x}")
+                    for item in x:
+                        result = x[item]
+
+                        if result['status'] == 'success':
+                            # print(f"Success result: {result}")
+                            self.counters['success'] += 1
+
+                        elif result['status'] == 'failed':
+                            result['exception'].reraise()
+                            self.counters['failures'] += 1
+
+                        elif result['pending']:
+                            self.funcx_current_tasks.put(item)
+                        else:
+                            # If we haven't figured it out until here, we need some dev...
+                            raise ValueError("[ORCH] CRITICAL Unrecognized funcX status...")
+                    print(self.counters)
+                    time.sleep(1)
+
+            time.sleep(0.5)
 
     def task_pulldown_thread(self):
         """
@@ -206,7 +341,6 @@ class FamilyLocationScheduler:
                     message_as_dict = json.loads(message_body)
                     pri_extractor_pairs = self.extractor_scheduler.assign_files_to_extractors([message_as_dict])
 
-                    # TODO: Tyler -- place these onto the relevant queue.
                     for item in pri_extractor_pairs:
                         priority, extractor = item
 
@@ -221,25 +355,8 @@ class FamilyLocationScheduler:
                         pri_msg_tup = (priority, message_as_dict)
                         self.to_schedule_pqs[extractor].put(pri_msg_tup)
 
-                    time.sleep(0.5)
+                    # time.sleep(0.5)
                 found_messages = True
-
-            # If we didn't get messages last time around, and the crawl is over.
-            # TODO: TYLER BRING BACK: 06/29
-            # if final_kill_check:
-            #     # Make sure no final messages squeaked in...
-            #     if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
-            #
-            #         # If GET about to die, then the next step is that prefetcher should die.
-            #         # TODO: *Technically* a race condition here since there are n concurrent threads.
-            #         # TODO: Should wait until this is the LAST such thread.
-            #         self.prefetcher.kill_prefetcher = True
-            #
-            #         print(f"[GET] Crawl successful and no messages in queue to get...")
-            #         print("[GET] Terminating...")
-            #         return
-            #     else:
-            #         final_kill_check = False
 
             # Step 2. Delete the messages from SQS.
             if len(del_list) > 0:
@@ -267,23 +384,3 @@ class FamilyLocationScheduler:
                     self.schedule()
 
                     break
-
-
-# headers = globus_native_auth_login()
-# sched_obj = FamilyLocationScheduler(fx_eps=[],
-#                                     crawl_id='3238cff1-2765-431c-a2d4-107464c90809',
-#                                     headers=headers)
-
-
-# while True:
-#
-#     if not sched_obj.tasks_to_sched_flag:
-#         print("PRINTING SIZES EXTERNAL")
-#         while not sched_obj.to_xtract_q.empty():
-#             x = sched_obj.to_xtract_q.get()
-#             print(f"Item: {x}")
-#
-#     else:
-#         print("NVM gotta sleep")
-#
-#     time.sleep(2)

@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 EXTENSION_MAP = {
-    'tabular': ['csv', 'dat', 'xls', 'xlsx'],
+    'tabular': ['csv', 'dat', 'xls'],
     'keyword': ['txt', 'pdf', 'doc', 'docx', 'md', 'README'],
     'jsonxml': ['json', 'xml'],
     'netcdf': ['nc', 'netcdf', 'nc4', 'netcdf4'],

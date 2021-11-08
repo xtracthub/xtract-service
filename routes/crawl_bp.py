@@ -13,7 +13,7 @@ crawl_bp = Blueprint('crawl_bp', __name__)
 @crawl_bp.route('/crawl', methods=['POST'])
 def crawl_repo():
 
-    crawl_url = 'http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/crawl'
+    crawl_url = 'http://xtractcrawler5-env.eba-akbhvznm.us-east-1.elasticbeanstalk.com/crawl'
 
     x = requests.post(url=crawl_url, json=request.json, data=request.data)
     print(f"CRAWL RESPONSE: {x.content}")
