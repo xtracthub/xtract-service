@@ -41,9 +41,6 @@ def create_scheduler_thread(fx_eps, crawl_id, headers):
     # t2.start()
 
 
-
-
-
 def configure_function(event):
     import os
     import json

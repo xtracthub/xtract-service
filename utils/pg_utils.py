@@ -23,6 +23,7 @@ def pg_list(py_list):
     new_list = ((str(py_list).replace('[', '{')).replace(']', '}')).replace('\'', '')
     return new_list
 
+
 def pg_update(cur, update_string):
 
     try:
