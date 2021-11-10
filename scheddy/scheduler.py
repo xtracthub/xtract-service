@@ -5,28 +5,28 @@ import time
 import boto3
 import threading
 
-# TODO: add back the 'priority' queue.
+from random import shuffle
 from queue import Queue, PriorityQueue
 from xtract_sdk.packagers.family_batch import FamilyBatch
 from xtract_sdk.packagers.family import Family
 
 from status_checks import get_crawl_status
-from prefetcher.prefetcher import GlobusPrefetcher
 from scheddy.endpoint_strategies.rand_n_families import RandNFamiliesStrategy
 from scheddy.endpoint_strategies.nothing_moves import NothingMovesStrategy
-from tests.test_utils.native_app_login import globus_native_auth_login
 
 from scheddy.extractor_strategies.extension_map import ExtensionMapStrategy
 from funcx import FuncXClient
 from globus_sdk import AccessTokenAuthorizer
 
 
-#####
-# TODO pool.
-# - add a funcX function that has the sole job of fetching (and returning) configuration info from eps.
-# - finish the application of the fetch_all_endpoint_configs() function.
-# - function to read data off of the crawl_queue --> load in internal queue.
-# - create a strategy base class that includes a 'schedule()' function.
+class PriorityEntry(object):
+
+    def __init__(self, priority, data):
+        self.data = data
+        self.priority = priority
+
+    def __lt__(self, other):
+        return self.priority < other.priority
 
 
 def get_fx_client(headers):
@@ -35,7 +35,7 @@ def get_fx_client(headers):
     return fxc
 
 
-# TODO 1: need list of all available endpoints
+# TODO 1: need list of all available endpoints (ignoring for demo)
 class FamilyLocationScheduler:
     def __init__(self, fx_eps: list, crawl_id: str, headers: dict, load_type: str = "from_queue",
                  max_pull_threads: int = 1, endpoint_strategy: str = 'rand_n_families'):
@@ -43,7 +43,12 @@ class FamilyLocationScheduler:
         # TODO: generalize as kwarg
         self.extractor_scheduler = ExtensionMapStrategy()
 
-        self.counters = {'success': 0, 'failed': 0, 'pending': 0, 'flagged_unknown': 0}
+        self.counters = {'fx': {'success': 0, 'failed': 0, 'pending': 0},
+                         'flagged_unknown': 0,
+                         'cumu_pulled': 0,
+                         'cumu_orch_enter': 0,
+                         'cumu_to_schedule': 0,
+                         'cumu_scheduled': 0}
 
         self.cur_status = "INIT"
 
@@ -60,7 +65,6 @@ class FamilyLocationScheduler:
         # General variables
         self.headers = headers
         self.crawl_id = crawl_id
-        # self.xorch = ExtractorOrchestrator()
         self.get_families_status = "STARTING"
 
         # Scheduling strategy setup
@@ -77,7 +81,9 @@ class FamilyLocationScheduler:
         # *** QUEUES ***
         self.to_schedule_pqs = dict()  # PRIORITY queues for endpoint scheduling.
         self.to_prefetch_q = Queue()  # QUEUE for the order in which files are prefetched.
-        self.to_xtract_q = Queue()  # QUEUES for the order in which files sent to extractors  # TODO: should be 1 queue for each destination.
+
+        # TODO: should be 1 queue for each destination.
+        self.to_xtract_q = Queue()  # QUEUES for the order in which files sent to extractors.
 
         # Variables about pulling data into the scheduler (and start it)
         self.load_type = load_type
@@ -105,7 +111,7 @@ class FamilyLocationScheduler:
                 print(f"Successfully started the get_next_families() thread number {i} ")
 
         orch_thread = threading.Thread(target=self.orch_thread, args=(headers,))
-        orch_thread.start()  # TODO: bring back.
+        orch_thread.start()
 
         # # TODO: right now the prefetcher takes too much info. Should just input a bunch of orders.
         # self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
@@ -128,7 +134,7 @@ class FamilyLocationScheduler:
             # TODO: populate fx_endpoints
             pass
 
-    def schedule(self):
+    def schedule(self, tiebreaker='random'):
 
         # TODO: TYLER, use this to communicate with [ORCH]
         self.currently_scheduling_flag = "True"
@@ -137,19 +143,60 @@ class FamilyLocationScheduler:
             raise NotImplementedError("Need to move this into a proper scheduler.")
         else:
             # Drain priority queues in order (make sure same extractor near each other)
-            for ext_type in self.to_schedule_pqs:
-                # TODO: should have rules in 'simple' cases (e.g., by extension) for what we do with mismatching files?
-                if ext_type in ['unknown']:
-                    self.counters['flagged_unknown'] += 1
-                    continue
+            while True:
+                # Hold the value of the queue with the leading priority.
+                ext_pri_mapping = dict()
+                for ext_type in self.to_schedule_pqs:
 
-                # TODO: go by priority queues here ('peek' individual pq with highest priority at head).
-                full_pq = self.to_schedule_pqs[ext_type]
+                    # If file type is unknown, then we skip. # TODO: think more about how to handle 'unknowns'.
+                    if ext_type in ['unknown']:
+                        print(f"Unknown continue for ext_type {ext_type}")
+                        continue
 
-                while not full_pq.empty():
-                    pri, fam = full_pq.get()
-                    fam['first_extractor'] = ext_type
-                    self.to_xtract_q.put(fam)
+                    # If there is nothing in a given priority queue, just skip it.
+                    if self.to_schedule_pqs[ext_type].qsize() == 0:
+                        print(ext_type)
+                        print(f"Q Size continue for ext_type {ext_type}")
+                        continue
+
+                    ext_pri_mapping[ext_type] = self.to_schedule_pqs[ext_type].queue[0].priority
+
+                # If there is nothing to order, then we should break. # TODO: when in loop, will want a wait/retry.
+                print(f"Number of extractors in queue: {len(ext_pri_mapping)}")
+                if len(ext_pri_mapping) == 0:
+                    print("Nothing left to schedule! Breaking...")
+                    break
+
+                print(f"Ext Pri Mapping: {ext_pri_mapping}")
+                # List of all 'maximum priority' extractor (queue) names.
+                max_value = max(ext_pri_mapping.values())
+                max_value_items = [key for key, val in ext_pri_mapping.items() if val == max_value]
+                print(f"Here are our max_value_items: {max_value_items}")
+
+                # If there's a tie.
+                if len(max_value_items) >= 1:
+                    # if our tiebreaker is 'random', then pop all leaders in random order.
+                    # NOTE: pop all at once to avoid unnecessary iterations + checks.
+                    if tiebreaker == 'random':
+                        print(f"IN RANDOM")
+                        max_value_items = list(max_value_items)  # cast to list so we can shuffle
+                        print(f"Max value items: {max_value_items}")
+
+                        # "Tuple" object does not support item assignment
+                        print(type(max_value_items))
+                        shuffle(max_value_items)
+
+                        # DRAIN the leaders into to_xtract_q.
+                        for extractor_name in max_value_items:
+                            full_pq = self.to_schedule_pqs[extractor_name]
+                            packed_pri_obj = full_pq.get()
+                            fam = packed_pri_obj.data
+
+                            print(f"Fetched: {fam}")
+                            fam['first_extractor'] = extractor_name
+                            self.to_xtract_q.put(fam)
+                            self.counters['cumu_scheduled'] += 1
+
         self.tasks_to_sched_flag = False
         self.cur_status = "SCHEDULED"
 
@@ -160,8 +207,19 @@ class FamilyLocationScheduler:
         fxc = get_fx_client(headers)
 
         while True:
+
+            # If our accounting is complete
+            # NOTE: when concurrent, will also need to check if scheduling is DONE.
+            print(f"Checking done-ness...")
+            if self.counters['fx']['success'] + \
+                    self.counters['fx']['failed'] + \
+                    self.counters['flagged_unknown'] == self.counters['cumu_scheduled'] \
+                    and self.cur_status == 'SCHEDULED':
+                to_terminate = True
+
             if to_terminate:
                 print("[ORCH] Terminating!")
+                print(f"Final counters: {self.counters}")
                 break
 
             print(f"[ORCH] WQ length: {self.to_xtract_q.qsize()}")
@@ -171,19 +229,19 @@ class FamilyLocationScheduler:
                 time.sleep(5)
                 if not self.tasks_to_sched_flag:
                     # TODO: NOT HAVING A TERMINATION RULE BREAKS STATUS.
-
                     pass
             else:
 
                 batch = fxc.create_batch()
-                family_batch = FamilyBatch()
 
+                # Bounce these out after Globus Demo.
                 from extractors.xtract_tabular import TabularExtractor
                 from extractors.xtract_keyword import KeywordExtractor
 
                 batch_len = 0
                 while not self.to_xtract_q.empty():  # TODO: also need max batch size here.
                     family = self.to_xtract_q.get()
+                    self.counters['cumu_orch_enter'] += 1
 
                     extractor_id = family['first_extractor']
 
@@ -195,6 +253,7 @@ class FamilyLocationScheduler:
                     elif extractor_id == 'keyword':
                         extractor = KeywordExtractor()
                     else:
+                        self.counters['flagged_unknown'] += 1
                         continue
 
                     # *** Spaghetti code zone ***
@@ -208,6 +267,7 @@ class FamilyLocationScheduler:
                     print(f"Family object: {packed_family}")
                     fam_batch.add_family(packed_family)
 
+                    # TODO: remove hardcoded elements here.
                     event = extractor.create_event(
                         family_batch=fam_batch,
                         ep_name='foobar',
@@ -248,11 +308,11 @@ class FamilyLocationScheduler:
 
                         if result['status'] == 'success':
                             # print(f"Success result: {result}")
-                            self.counters['success'] += 1
+                            self.counters['fx']['success'] += 1
 
                         elif result['status'] == 'failed':
                             result['exception'].reraise()
-                            self.counters['failures'] += 1
+                            self.counters['fx']['failures'] += 1
 
                         elif result['pending']:
                             self.funcx_current_tasks.put(item)
@@ -260,9 +320,9 @@ class FamilyLocationScheduler:
                             # If we haven't figured it out until here, we need some dev...
                             raise ValueError("[ORCH] CRITICAL Unrecognized funcX status...")
                     print(self.counters)
-                    time.sleep(1)
+                    # time.sleep(1)
 
-            time.sleep(0.5)
+            # time.sleep(0.5)
 
     def task_pulldown_thread(self):
         """
@@ -320,6 +380,7 @@ class FamilyLocationScheduler:
                 self.get_families_status = "ACTIVE"
                 for message in sqs_response["Messages"]:
                     self.n_families_pull_from_sqs += 1
+                    self.counters['cumu_pulled'] += 1
                     message_body = message["Body"]
 
                     # TODO: moved the prefetch logic.
@@ -345,17 +406,14 @@ class FamilyLocationScheduler:
                         priority, extractor = item
 
                         if extractor not in self.to_schedule_pqs:
-                            # TODO: get the priority queues working.
-                            # TypeError: '<' not supported between instances of 'dict' and 'dict'
-                            # self.to_schedule_pqs[extractor] = PriorityQueue()
-                            self.to_schedule_pqs[extractor] = Queue()
+                            self.to_schedule_pqs[extractor] = PriorityQueue()
 
                         print(f"Priority: {priority}")
                         print(f"Extractor: {extractor}")
-                        pri_msg_tup = (priority, message_as_dict)
-                        self.to_schedule_pqs[extractor].put(pri_msg_tup)
+                        pri_entry_obj = PriorityEntry(priority, message_as_dict)
+                        self.to_schedule_pqs[extractor].put(pri_entry_obj)
+                        self.counters['cumu_to_schedule'] += 1
 
-                    # time.sleep(0.5)
                 found_messages = True
 
             # Step 2. Delete the messages from SQS.
@@ -371,12 +429,11 @@ class FamilyLocationScheduler:
             # If we manage to pull nothing from SQS...
             if "Messages" not in sqs_response or len(sqs_response["Messages"]) == 0:
 
-                # Quick check to see if 'status is 'complete'
+                # Quick check to see if 'status is 'complete'/'failed'
                 status_dict = get_crawl_status(self.crawl_id)
 
-                # TODO: add failed case here (when we provide means for crawl to fail).
-                # if the crawl is completed
-                if status_dict['crawl_status'] == 'complete':
+                # if the crawl is completed (either by success or failure reasons...)
+                if status_dict['crawl_status'] in ['complete', 'failed']:
                     # flag the class as 'no_new_tasks'
                     self.new_tasks_flag = False
                     print(f"[SCHEDULER] Terminating task pull-down thread!")

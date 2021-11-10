@@ -18,6 +18,3 @@ INVERTED_EXTENSION_MAP = dict()
 for key in _uninverted_index:
     for value in _uninverted_index[key]:
         INVERTED_EXTENSION_MAP[value] = key
-
-
-
