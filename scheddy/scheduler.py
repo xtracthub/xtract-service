@@ -30,15 +30,19 @@ class PriorityEntry(object):
 
 
 def get_fx_client(headers):
-    fx_auth = AccessTokenAuthorizer(headers['Authorization'])
-    search_auth = AccessTokenAuthorizer(headers['Search'])
-    openid_auth = AccessTokenAuthorizer(headers['Openid'])
+    tokens = headers
+    fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
+    search_auth = AccessTokenAuthorizer(tokens['Search'])
+    openid_auth = AccessTokenAuthorizer(tokens['Openid'])
+    print(f"TRYING TO CREATE FUNCX CLIENT")
+
+    print(f"fx_auth: {fx_auth}")
+    print(f"search_auth: {search_auth}")
+    print(f"openid_auth: {openid_auth}")
+
     fxc = FuncXClient(fx_authorizer=fx_auth,
                       search_authorizer=search_auth,
-                      openid_auth=openid_auth,
-                      no_local_server=True,
-                      no_browser=True,
-                      use_offprocess_checker=False)
+                      openid_authorizer=openid_auth)
     return fxc
 
 

@@ -183,7 +183,6 @@ def check_fx_client():
 
     tokens = r['headers']
 
-
     fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
     search_auth = AccessTokenAuthorizer(tokens['Search'])
     openid_auth = AccessTokenAuthorizer(tokens['Openid'])
@@ -202,8 +201,6 @@ def check_fx_client():
     return "IT WORKED!"
 
 
-
-
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
@@ -214,8 +211,9 @@ def extract_mdata():
 
     # Starting a thread containing our FamilyScheduler object.
     status_by_crawl_id[r["crawl_id"]] = "INIT"
-    t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
-    t1.start()
+    # t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
+    # t1.start()
+    create_scheduler_thread([], r["crawl_id"], r["tokens"])
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
 
