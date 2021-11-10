@@ -110,8 +110,8 @@ class FamilyLocationScheduler:
                 consumer_thr.start()
                 print(f"Successfully started the get_next_families() thread number {i} ")
 
-        orch_thread = threading.Thread(target=self.orch_thread, args=(headers,))
-        orch_thread.start()
+        # orch_thread = threading.Thread(target=self.orch_thread, args=(headers,))
+        # orch_thread.start()
 
         # # TODO: right now the prefetcher takes too much info. Should just input a bunch of orders.
         # self.prefetcher = GlobusPrefetcher(transfer_token=self.headers['Transfer'],
@@ -147,13 +147,13 @@ class FamilyLocationScheduler:
 
                     # If file type is unknown, then we skip. # TODO: think more about how to handle 'unknowns'.
                     if ext_type in ['unknown']:
-                        print(f"Unknown continue for ext_type {ext_type}")
+                        # print(f"Unknown continue for ext_type {ext_type}")
                         continue
 
                     # If there is nothing in a given priority queue, just skip it.
                     if self.to_schedule_pqs[ext_type].qsize() == 0:
                         print(ext_type)
-                        print(f"Q Size continue for ext_type {ext_type}")
+                        # print(f"Q Size continue for ext_type {ext_type}")
                         continue
 
                     ext_pri_mapping[ext_type] = self.to_schedule_pqs[ext_type].queue[0].priority
@@ -196,6 +196,8 @@ class FamilyLocationScheduler:
 
         self.tasks_to_sched_flag = False
         self.cur_status = "SCHEDULED"
+
+        orch = self.orch_thread(headers=self.headers)
 
     def orch_thread(self, headers):
         to_terminate = False
@@ -241,7 +243,7 @@ class FamilyLocationScheduler:
 
                     extractor_id = family['first_extractor']
 
-                    print(f"Family's extractor id: {extractor_id}")
+                    # print(f"Family's extractor id: {extractor_id}")
 
                     # TODO: needs to be offloaded to a map or something.
                     if extractor_id == 'tabular':
@@ -260,7 +262,7 @@ class FamilyLocationScheduler:
                     packed_family.from_dict(family)
                     # ***************************
 
-                    print(f"Family object: {packed_family}")
+                    # print(f"Family object: {packed_family}")
                     fam_batch.add_family(packed_family)
 
                     # TODO: remove hardcoded elements here.
@@ -273,8 +275,8 @@ class FamilyLocationScheduler:
                         metadata_write_path='/home/tskluzac/mdata'
                     )
 
-                    print(f"[ORCH] Extractor: {extractor_id}")
-                    print(f"[ORCH] Event: {event}")
+                    # print(f"[ORCH] Extractor: {extractor_id}")
+                    # print(f"[ORCH] Event: {event}")
 
                     batch.add(event,
                               endpoint_id='e1398319-0d0f-4188-909b-a978f6fc5621',  # TODO: hardcode.
@@ -290,7 +292,7 @@ class FamilyLocationScheduler:
 
                 poll_batch = []
 
-                print("Entering task loop")
+                # print("Entering task loop")
                 for i in range(0, 20):  # TODO: hardcode
                     if not self.funcx_current_tasks.empty():
                         tid = self.funcx_current_tasks.get()
