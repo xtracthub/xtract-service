@@ -2,6 +2,7 @@ import json
 import time
 import pickle
 import globus_sdk
+from flask import current_app
 
 from funcx import FuncXClient
 from flask import Blueprint, request
@@ -9,7 +10,7 @@ from globus_sdk import AccessTokenAuthorizer
 from extractors.xtract_keyword import KeywordExtractor
 from extractors.extractor import base_extractor
 from tests.test_utils.mock_event import create_mock_event
-
+import application
 
 from status_checks import get_extract_status
 from scheddy.scheduler import FamilyLocationScheduler
@@ -183,6 +184,9 @@ def check_fx_client():
 
     tokens = r['headers']
 
+    current_app.logger.debug("hi")
+
+
     fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
     search_auth = AccessTokenAuthorizer(tokens['Search'])
     openid_auth = AccessTokenAuthorizer(tokens['Openid'])
@@ -204,6 +208,7 @@ def check_fx_client():
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
+
 
     # Store these for possibility of transfer later.
     local_mdata_maps[r['crawl_id']] = r['local_mdata_path']
