@@ -40,7 +40,7 @@ class Extractor(metaclass=ABCMeta):
     def register_function(self, container_type='docker', location=None, ep_id=None, group=None):
         from funcx import FuncXClient
 
-        assert(self.extr_func is not None, "Extractor function must first be registered!")
+        assert self.extr_func is not None, "Extractor function must first be registered!"
 
         if location is None:
             location = self.store_url

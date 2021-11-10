@@ -136,9 +136,6 @@ class FamilyLocationScheduler:
 
     def schedule(self, tiebreaker='random'):
 
-        # TODO: TYLER, use this to communicate with [ORCH]
-        self.currently_scheduling_flag = "True"
-
         if self.prefetch_remote:
             raise NotImplementedError("Need to move this into a proper scheduler.")
         else:
@@ -227,7 +224,7 @@ class FamilyLocationScheduler:
             if self.to_xtract_q.empty() and self.funcx_current_tasks.empty():
                 print(f"[ORCH] Empty work thread. Sleeping...")
                 time.sleep(5)
-            
+
             else:
 
                 batch = fxc.create_batch()
