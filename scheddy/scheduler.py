@@ -227,9 +227,7 @@ class FamilyLocationScheduler:
             if self.to_xtract_q.empty() and self.funcx_current_tasks.empty():
                 print(f"[ORCH] Empty work thread. Sleeping...")
                 time.sleep(5)
-                if not self.tasks_to_sched_flag:
-                    # TODO: NOT HAVING A TERMINATION RULE BREAKS STATUS.
-                    pass
+            
             else:
 
                 batch = fxc.create_batch()
@@ -320,9 +318,6 @@ class FamilyLocationScheduler:
                             # If we haven't figured it out until here, we need some dev...
                             raise ValueError("[ORCH] CRITICAL Unrecognized funcX status...")
                     print(self.counters)
-                    # time.sleep(1)
-
-            # time.sleep(0.5)
 
     def task_pulldown_thread(self):
         """
