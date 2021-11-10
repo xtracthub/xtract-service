@@ -1,24 +1,9 @@
-from extractors.extractor import Extractor
-
-
-class ImageExtractor(Extractor):
-
-    def __init__(self):
-
-        super().__init__(extr_id=None,
-                         # TODO 1: Get this by running test_image_families.py. Don't do until you think it might work :)
-                         func_id="f22d9206-0352-449f-8a5a-f6855f2bef30",
-                         # TODO 2: Call yours xtract-c-code.
-                         extr_name="xtract-image",
-                         store_type="ecr",
-                         store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-image:latest")
-        super().set_extr_func(images_extract)
-
+"""
+A handful of functions written for xtract_imagesort.py that were removed
+in the refactoring involving a move towards event-based extractors.
+"""
 
 def images_extract(event):
-    # import platform
-    # print(platform.python_version())
-
     import os
     import sys
     import time
@@ -28,11 +13,9 @@ def images_extract(event):
 
     sys.path.insert(1, '/app')
 
-    # return "Made it here 2"
 
     import xtract_images_main
 
-    # return ("HEY")
 
     def min_hash(fpath):
 
@@ -210,14 +193,10 @@ def images_extract(event):
         if len(file_paths) == 0:
             return {'family_batch': family_batch, 'error': True, 'tot_time': time.time()-t0,
                     'err_msg': "unable to download files"}
-
-    # return "HEREZO"
     for family in family_batch.families:
 
-        # return "NICE AND EASY. "
         img_path = family.files[0]['path']
 
-        # return "IS THIS THE INDEX ISSUE"
 
         new_mdata = xtract_images_main.extract_image('predict', img_path)
 

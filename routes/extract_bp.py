@@ -1,20 +1,44 @@
-
 import json
 import time
 import pickle
-
+import globus_sdk
 
 from funcx import FuncXClient
 from flask import Blueprint, request
 from globus_sdk import AccessTokenAuthorizer
+from extractors.xtract_keyword import KeywordExtractor
+from extractors.extractor import base_extractor
+from tests.test_utils.mock_event import create_mock_event
+
 
 from status_checks import get_extract_status
+from scheddy.scheduler import FamilyLocationScheduler
 # from orchestrator.orchestrator import ExtractorOrchestrator
+from threading import Thread
+
+
+# TODO: back in the databases
+schedulers_by_crawl_id = dict()
+status_by_crawl_id = dict()
 
 
 def test_function():
     # TODO: add ep_id
     return {'is_success': True}
+
+
+def create_scheduler_thread(fx_eps, crawl_id, headers):
+
+    print("Started sched_obj")
+    sched_obj = FamilyLocationScheduler(fx_eps=fx_eps,
+                                        crawl_id=crawl_id,
+                                        headers=headers)
+    print("POST sched obj")
+    sched_obj.cur_status = "IN_SCHEDULING"
+    schedulers_by_crawl_id[crawl_id] = sched_obj
+
+    # t2 = Thread(target=orch_thread, args=(sched_obj,))
+    # t2.start()
 
 
 def configure_function(event):
@@ -44,177 +68,156 @@ extract_bp = Blueprint('extract_bp', __name__)
 active_orchestrators = dict()
 
 
-@extract_bp.route('/configure_ep/<funcx_eid>', methods=['POST'])
-def configure_ep(funcx_eid):
-    """ Configuring the endpoint means ensuring that all credentials on the endpoint
-        are updated/refreshed, and that the Globus + funcX eps are online"""
-    start_time = time.time()
+# @extract_bp.route('/configure_ep/<funcx_eid>', methods=['POST'])
+# def configure_ep(funcx_eid):
+#     """ Configuring the endpoint means ensuring that all credentials on the endpoint
+#         are updated/refreshed, and that the Globus + funcX eps are online"""
+#     start_time = time.time()
 
-    # Step 0: pull out the headers
-    headers = request.json['headers']
-    timeout = request.json['timeout']
-    ep_name = request.json['ep_name']
-    globus_eid = request.json['globus_eid']
-    xtract_path = request.json['xtract_path']
-    local_download_path = request.json['local_download_path']
-    local_mdata_path = request.json['local_mdata_path']
+#     # Step 0: pull out the headers
+#     headers = request.json['headers']
+#     timeout = request.json['timeout']
+#     ep_name = request.json['ep_name']
+#     globus_eid = request.json['globus_eid']
+#     xtract_path = request.json['xtract_path']
+#     local_download_path = request.json['local_download_path']
+#     local_mdata_path = request.json['local_mdata_path']
 
-    # dep_tokens = client.oauth2_get_dependent_tokens(headers['Authorization'])
-    fx_auth = AccessTokenAuthorizer(headers['Authorization'])
-    search_auth = AccessTokenAuthorizer(headers['Search'])
-    openid_auth = AccessTokenAuthorizer(headers['Openid'])
+#     # dep_tokens = client.oauth2_get_dependent_tokens(headers['Authorization'])
+#     fx_auth = AccessTokenAuthorizer(headers['Authorization'])
+#     search_auth = AccessTokenAuthorizer(headers['Search'])
+#     openid_auth = AccessTokenAuthorizer(headers['Openid'])
 
-    print(fx_auth.access_token)
-    print(search_auth.access_token)
-    print(openid_auth.access_token)
+#     print(fx_auth.access_token)
+#     print(search_auth.access_token)
+#     print(openid_auth.access_token)
 
-    fx_client = FuncXClient(fx_authorizer=fx_auth,
-                            search_authorizer=search_auth,
-                            openid_authorizer=openid_auth)
+#     fx_client = FuncXClient(fx_authorizer=fx_auth,
+#                             search_authorizer=search_auth,
+#                             openid_authorizer=openid_auth)
 
-    print(dir(fx_client))
+#     print(dir(fx_client))
 
-    print(fx_client.TOKEN_DIR, fx_client.TOKEN_FILENAME, fx_client.BASE_USER_AGENT)
+#     print(fx_client.TOKEN_DIR, fx_client.TOKEN_FILENAME, fx_client.BASE_USER_AGENT)
 
-    # TODO: boot this outside to avoid wasteful funcX calls.
-    reg_func_id = fx_client.register_function(function=test_function)
+#     # TODO: boot this outside to avoid wasteful funcX calls.
+#     reg_func_id = fx_client.register_function(function=test_function)
 
-    print(f"Successfully registered check-function with ID: {reg_func_id}")
+#     print(f"Successfully registered check-function with ID: {reg_func_id}")
 
-    # Step 1: use funcX function to ensure endpoint is online and returning tasks.
-    #  --> Only taking first element in batch, as our batch size is only 1.
-    task_id = fx_client.run(endpoint_id=funcx_eid, function_id=reg_func_id)
+#     # Step 1: use funcX function to ensure endpoint is online and returning tasks.
+#     #  --> Only taking first element in batch, as our batch size is only 1.
+#     task_id = fx_client.run(endpoint_id=funcx_eid, function_id=reg_func_id)
 
-    print(f"Result from config extract: {task_id}")
+#     print(f"Result from config extract: {task_id}")
 
-    while True:
-        result = fx_client.get_batch_result(task_id_list=[task_id])
-        print(result)
-        if 'exception' in result[task_id]:
-            result[task_id]['exception'].reraise()
+#     while True:
+#         result = fx_client.get_batch_result(task_id_list=[task_id])
+#         print(result)
+#         if 'exception' in result[task_id]:
+#             result[task_id]['exception'].reraise()
 
-        if result[task_id]['status'] == 'success':
-            print("Sucessfully returned test function. Breaking!")
-            break
+#         if result[task_id]['status'] == 'success':
+#             print("Successfully returned test function. Breaking!")
+#             break
 
-        elif result[task_id]['status'] == 'FAILED':
-            return {'config_status': 'FAILED', 'fx_eid': funcx_eid, 'msg': 'funcX internal failure'}
+#         elif result[task_id]['status'] == 'FAILED':
+#             return {'config_status': 'FAILED', 'fx_eid': funcx_eid, 'msg': 'funcX internal failure'}
 
-        else:
-            if time.time() - start_time > timeout:
-                return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
-            else:
-                time.sleep(2)
+#         else:
+#             if time.time() - start_time > timeout:
+#                 return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
+#             else:
+#                 time.sleep(2)
 
-    reg_func_id = fx_client.register_function(function=configure_function)
+#     reg_func_id = fx_client.register_function(function=configure_function)
 
-    print(f"Successfully registered check-function with ID: {reg_func_id}")
+#     print(f"Successfully registered check-function with ID: {reg_func_id}")
 
-    event = [xtract_path, ep_name, globus_eid, funcx_eid, local_download_path, local_mdata_path]
+#     event = [xtract_path, ep_name, globus_eid, funcx_eid, local_download_path, local_mdata_path]
 
-    # Step 1: use funcX function to ensure endpoint is online and returning tasks.
-    #  --> Only taking first element in batch, as our batch size is only 1.
-    task_id = fx_client.run(event=event, endpoint_id=funcx_eid, function_id=reg_func_id)
+#     # Step 1: use funcX function to ensure endpoint is online and returning tasks.
+#     #  --> Only taking first element in batch, as our batch size is only 1.
+#     task_id = fx_client.run(event=event, endpoint_id=funcx_eid, function_id=reg_func_id)
 
-    print(f"Result from config extract: {task_id}")
+#     print(f"Result from config extract: {task_id}")
 
-    while True:
-        result = fx_client.get_batch_result(task_id_list=[task_id])
-        print(result)
-        if 'exception' in result[task_id]:
-            result[task_id]['exception'].reraise()
+#     while True:
+#         result = fx_client.get_batch_result(task_id_list=[task_id])
+#         print(result)
+#         if 'exception' in result[task_id]:
+#             result[task_id]['exception'].reraise()
 
-        if result[task_id]['status'] == 'success':
-            return {'config_status': 'SUCCESS', 'fx_eid': funcx_eid}
+#         if result[task_id]['status'] == 'success':
+#             return {'config_status': 'SUCCESS', 'fx_eid': funcx_eid}
 
-        elif result[task_id]['status'] == 'FAILED':
-            return {'config_status': 'FAILED', 'fx_eid': funcx_eid, 'msg': 'funcX internal failure'}
+#         elif result[task_id]['status'] == 'FAILED':
+#             return {'config_status': 'FAILED', 'fx_eid': funcx_eid, 'msg': 'funcX internal failure'}
 
-        else:
-            if time.time() - start_time > timeout:
-                return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
-        time.sleep(2)
+#         else:
+#             if time.time() - start_time > timeout:
+#                 return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
+#         time.sleep(2)
+
+
 
 
 @extract_bp.route('/check_ep_configured', methods=['GET'])
 def check_ep_configured():
     """ This should check to see which credentials on the endpoint are up-to-date.
     Try some basic API calls to ensure they don't return empty results"""
-    pass
+    return 'Not yet implemented.'
 
 
-# @extract_bp.route('/extract', methods=['POST'])
-# def extract_mdata():
-#
-#     gdrive_token = None
-#     source_eid = None
-#     dest_eid = None
-#     mdata_store_path = None
-#     extractor_finder = None
-#     prefetch_remote = None
-#     data_prefetch_path = None
-#     dataset_mdata = None
-#
-#     try:
-#         r = pickle.loads(request.data)
-#         print(f"Data: {request.data}")
-#         gdrive_token = r["gdrive_pkl"]
-#         extractor_finder = "gdrive"
-#         print(f"Received Google Drive token: {gdrive_token}")
-#     except pickle.UnpicklingError:
-#         print("Unable to pickle-load for Google Drive! Trying to JSON load for Globus/HTTPS.")
-#
-#         r = request.json
-#
-#         if r["repo_type"] in ["GLOBUS", "HTTPS"]:
-#             source_eid = r["source_eid"]
-#             dest_eid = r["dest_eid"]
-#             mdata_store_path = r["mdata_store_path"]
-#             print(f"Received {r['repo_type']} data!")
-#             extractor_finder = "matio"
-#             print("SETTING PREFETCH REMOTE")
-#             prefetch_remote = r["prefetch_remote"]
-#
-#             data_prefetch_path = r['data_prefetch_path']
-#
-#             if 'dataset_mdata' in r:
-#                 dataset_mdata = r['dataset_mdata']
-#             else:
-#                 dataset_mdata = None
-#
-#     crawl_id = r["crawl_id"]
-#     headers = json.loads(r["headers"])
-#     funcx_eid = r["funcx_eid"]
-#
-#     if crawl_id in active_orchestrators:  # TODO: improved error-handling.
-#         return "ERROR -- crawl_id already has an associated orchestrator!"
-#
-#     print("Successfully unpacked data! Initializing orchestrator...")
-#
-#     # TODO: Can have parallel orchestrators, esp now that we're using queues.
-#     orch = ExtractorOrchestrator(crawl_id=crawl_id,
-#                                  headers=headers,
-#                                  funcx_eid=funcx_eid,
-#                                  source_eid=source_eid,
-#                                  dest_eid=dest_eid,
-#                                  mdata_store_path=mdata_store_path,
-#                                  gdrive_token=gdrive_token,
-#                                  extractor_finder=extractor_finder,
-#                                  prefetch_remote=prefetch_remote,
-#                                  data_prefetch_path=data_prefetch_path,
-#                                  dataset_mdata=dataset_mdata
-#                                  )
-#
-#     print("Launching response poller...")
-#     orch.launch_poll()
-#
-#     print("Launching metadata extractors...")
-#     orch.launch_extract()
-#
-#     active_orchestrators[crawl_id] = orch
-#
-#     extract_id = crawl_id
-#     return extract_id  # TODO: return actual response object.
+local_mdata_maps = dict()
+remote_mdata_maps = dict()
+
+
+@extract_bp.route('/check_fx_client', methods=['GET'])
+def check_fx_client():
+    """ This should check to see which credentials on the endpoint are up-to-date.
+    Try some basic API calls to ensure they don't return empty results"""
+    from funcx import FuncXClient
+
+    r = request.json
+
+    tokens = r['headers']
+
+
+    fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
+    search_auth = AccessTokenAuthorizer(tokens['Search'])
+    openid_auth = AccessTokenAuthorizer(tokens['Openid'])
+    print(f"TRYING TO CREATE FUNCX CLIENT")
+
+    print(f"fx_auth: {fx_auth}")
+    print(f"search_auth: {search_auth}")
+    print(f"openid_auth: {openid_auth}")
+
+    fxc = FuncXClient(fx_authorizer=fx_auth,
+                      search_authorizer=search_auth,
+                      openid_authorizer=openid_auth)
+    # no_local_server=True,
+    # no_browser=True)
+
+    return "IT WORKED!"
+
+
+
+
+@extract_bp.route('/extract', methods=['POST'])
+def extract_mdata():
+    r = request.json
+
+    # Store these for possibility of transfer later.
+    local_mdata_maps[r['crawl_id']] = r['local_mdata_path']
+    remote_mdata_maps[r['crawl_id']] = r['remote_mdata_path']
+
+    # Starting a thread containing our FamilyScheduler object.
+    status_by_crawl_id[r["crawl_id"]] = "INIT"
+    t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
+    t1.start()
+
+    return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
 
 
 @extract_bp.route('/get_extract_status', methods=['GET'])
@@ -230,7 +233,74 @@ def get_extr_status():
 
     extract_id = r["crawl_id"]
 
-    orch = active_orchestrators[extract_id]
-    resp = get_extract_status(orch)
+    sched = schedulers_by_crawl_id[extract_id]
+    cur_status = sched.cur_status
+    cur_counters = sched.counters
+    print(f"STATUS: {cur_status}")
 
-    return resp
+    return {'status': cur_status, 'counters': cur_counters, 'crawl_id': extract_id}
+
+
+def get_globus_tc(transfer_token):
+
+    authorizer = globus_sdk.AccessTokenAuthorizer(transfer_token)
+    tc = globus_sdk.TransferClient(authorizer=authorizer)
+    return tc
+
+
+@extract_bp.route('/ingest_search', methods=['POST'])
+def ingest_search():
+    r = request.json
+
+    search_index_id = r['search_index_id']
+    mdata_dir = r['metadata']
+
+    def funcx_func(event):
+        from globus_sdk import SearchClient
+        import os
+
+        search_token = event['search_token']
+        ingest_dir = event['ingest_dir']
+
+        # TODO: auth with search.
+        sc = globus_sdk.SearchClient(authorizer=globus_sdk.authorizers.AccessTokenAuthorizer(access_token=search_token))
+
+        # TODO: ingest all metadata in folder.
+        files_to_ingest = '/home/tskluzac/mdata'
+
+        # TODO: ingest.
+
+
+@extract_bp.route('/offload_mdata', methods=['POST'])
+def offload_mdata():
+
+    # TODO: only transfer if extraction is complete.
+    # TODO: add proper polling.
+    r = request.json
+
+    crawl_id = r['crawl_id']
+    tokens = r['tokens']
+
+    source_ep = r['source_ep']
+    mdata_ep = r['mdata_ep']
+
+    source_dir = local_mdata_maps[crawl_id]
+    dest_dir = remote_mdata_maps[crawl_id]
+
+    print(f"Source EP: {source_ep}")
+    print(f"Source Dir: {source_dir}")
+
+    print(f"Dest EP: {mdata_ep}")
+    print(f"Dest Dir: {dest_dir}")
+
+    tc = get_globus_tc(tokens['Transfer'])
+
+    tdata = globus_sdk.TransferData(transfer_client=tc,
+                                    source_endpoint=source_ep,
+                                    destination_endpoint=mdata_ep)
+
+    tdata.add_item(source_dir, dest_dir, recursive=True)
+    transfer_result = tc.submit_transfer(tdata)
+
+    print(transfer_result)
+    return {"status": "SUCCESS"}

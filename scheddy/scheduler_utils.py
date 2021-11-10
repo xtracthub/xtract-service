@@ -12,8 +12,6 @@ def xtract_config_fetch(config_path: str, ep_name: str):
 
     full_config_path = os.path.join(config_path, ep_name)
 
-    # return full_config_path
-
     with open(os.path.join(full_config_path, 'config.json'), 'r') as f:
         return json.load(f)
 

@@ -1,5 +1,5 @@
 
-from scheduler.endpoint_strategies.rand_n_families import RandNFamiliesStrategy
+from scheddy.endpoint_strategies.rand_n_families import RandNFamiliesStrategy
 
 rnf_strat = RandNFamiliesStrategy(n=0.4)
 

@@ -8,15 +8,11 @@ import requests
 
 def get_crawl_status(crawl_id):
 
-    t0 = time.time()
-    conn = pg_conn()
-    cur2 = conn.cursor()
-
-    r = requests.get("http://xtract-crawler-4.eba-ghixpmdf.us-east-1.elasticbeanstalk.com/get_crawl_status",
+    r = requests.get("http://xtractcrawler5-env.eba-akbhvznm.us-east-1.elasticbeanstalk.com/get_crawl_status",
                      json={'crawl_id': crawl_id})
 
+    print(r.content)
     vals = json.loads(r.content)
-    t1 = time.time()
 
     return vals
 
