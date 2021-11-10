@@ -33,15 +33,12 @@ def get_fx_client(headers):
     fx_auth = AccessTokenAuthorizer(headers['Authorization'])
     search_auth = AccessTokenAuthorizer(headers['Search'])
     openid_auth = AccessTokenAuthorizer(headers['Openid'])
-    print(f"TRYING TO CREATE FUNCX CLIENT")
-    print(fx_auth.access_token)
-    print(search_auth.access_token)
-    print(openid_auth.access_token)
     fxc = FuncXClient(fx_authorizer=fx_auth,
                       search_authorizer=search_auth,
                       openid_auth=openid_auth,
                       no_local_server=True,
-                      no_browser=True)
+                      no_browser=True,
+                      use_offprocess_checker=False)
     return fxc
 
 
