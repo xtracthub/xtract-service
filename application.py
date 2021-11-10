@@ -16,6 +16,7 @@ application.register_blueprint(configure_bp.configure_bp)
 @application.route('/', methods=['POST', 'GET'])
 def xtract_default():
     """ Return the default information as part of the request. """
+    # TODO: helpful message here that Vas can check.
     return "FUNCTIONAL"
 
 

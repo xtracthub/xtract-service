@@ -176,51 +176,6 @@ local_mdata_maps = dict()
 remote_mdata_maps = dict()
 
 
-
-
-
-@extract_bp.route('/debug_orch', methods=['POST'])
-def debug_orch():
-
-    ep_id = "e1398319-0d0f-4188-909b-a978f6fc5621"
-    r = request.json
-    crawl_id = r['crawl_id']
-    headers = r['tokens']
-
-    test_file = '/home/tskluzac/tyler_research_files/MOTW.docx'
-
-    mock_event = create_mock_event([test_file])
-    ext = KeywordExtractor()
-
-    tabular_event = ext.create_event(ep_name="foobar",
-                                 family_batch=mock_event['family_batch'],
-                                 xtract_dir="/home/tskluzac/.xtract",
-                                 sys_path_add="/",
-                                 module_path="xtract_keyword_main",
-                                 metadata_write_path='/home/tskluzac/mdata')
-
-    from scheddy.maps.function_ids import functions, containers
-    fxc = get_fx_client(crawl_id, headers)
-
-    fn_uuid = functions['keyword']
-
-    print(fn_uuid)
-
-    res = fxc.run(tabular_event,
-                  endpoint_id=ep_id, function_id=fn_uuid)
-    print(res)
-    for i in range(100):
-        try:
-            x = fxc.get_result(res)
-            print(x)
-            break
-        except Exception as e:
-            print("Exception: {}".format(e))
-            time.sleep(2)
-
-    return "NICE"
-
-
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
@@ -252,9 +207,10 @@ def get_extr_status():
 
     sched = schedulers_by_crawl_id[extract_id]
     cur_status = sched.cur_status
+    cur_counters = sched.counters
     print(f"STATUS: {cur_status}")
 
-    return {'status': cur_status, 'crawl_id': extract_id}
+    return {'status': cur_status, 'counters': cur_counters, 'crawl_id': extract_id}
 
 
 def get_globus_tc(transfer_token):

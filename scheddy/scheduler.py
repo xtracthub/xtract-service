@@ -217,6 +217,7 @@ class FamilyLocationScheduler:
             if to_terminate:
                 print("[ORCH] Terminating!")
                 print(f"Final counters: {self.counters}")
+                self.cur_status = 'COMPLETED'  # TODO: Need to push this status to DB.
                 break
 
             print(f"[ORCH] WQ length: {self.to_xtract_q.qsize()}")
@@ -283,6 +284,7 @@ class FamilyLocationScheduler:
                 # Only want to send tasks if we retrieved tasks.
                 if batch_len > 0:
                     batch_res = fxc.batch_run(batch)
+                    time.sleep(1.1)
                     for item in batch_res:
                         self.funcx_current_tasks.put(item)
 
@@ -297,6 +299,7 @@ class FamilyLocationScheduler:
 
                 if len(poll_batch) > 0:
                     x = fxc.get_batch_result(poll_batch)
+                    time.sleep(1.1)
                     print(f"Poll result: {x}")
                     for item in x:
                         result = x[item]
