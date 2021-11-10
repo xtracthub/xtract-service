@@ -173,6 +173,32 @@ local_mdata_maps = dict()
 remote_mdata_maps = dict()
 
 
+@extract_bp.route('/check_fx_client', methods=['GET'])
+def check_fx_client():
+    """ This should check to see which credentials on the endpoint are up-to-date.
+    Try some basic API calls to ensure they don't return empty results"""
+    from funcx import FuncXClient
+
+    r = request.json
+
+    tokens = r['headers']
+
+
+    fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
+    search_auth = AccessTokenAuthorizer(tokens['Search'])
+    openid_auth = AccessTokenAuthorizer(tokens['Openid'])
+    print(f"TRYING TO CREATE FUNCX CLIENT")
+    fxc = FuncXClient(fx_authorizer=fx_auth,
+                  search_authorizer=search_auth,
+                  openid_auth=openid_auth,
+                  no_local_server=True,
+                  no_browser=True)
+
+    return "IT WORKED!"
+
+
+
+
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
