@@ -22,7 +22,6 @@ from threading import Thread
 schedulers_by_crawl_id = dict()
 status_by_crawl_id = dict()
 
-
 def test_function():
     # TODO: add ep_id
     return {'is_success': True}
@@ -161,8 +160,6 @@ active_orchestrators = dict()
 #         time.sleep(2)
 
 
-
-
 @extract_bp.route('/check_ep_configured', methods=['GET'])
 def check_ep_configured():
     """ This should check to see which credentials on the endpoint are up-to-date.
@@ -205,7 +202,6 @@ def check_fx_client():
 def extract_mdata():
     r = request.json
 
-
     # Store these for possibility of transfer later.
     local_mdata_maps[r['crawl_id']] = r['local_mdata_path']
     remote_mdata_maps[r['crawl_id']] = r['remote_mdata_path']
@@ -247,27 +243,151 @@ def get_globus_tc(transfer_token):
     return tc
 
 
+def funcx_func(event):
+    from globus_sdk import SearchClient
+    import globus_sdk
+
+    search_token = event['search_token']
+    mdata_dir = event['mdata_dir']
+    dataset_mdata  = event['dataset_mdata']
+
+    base_gmeta = {"ingest_type": "GMetaList",
+                  "ingest_data": {
+                      "gmeta": []
+                  }
+                  }
+
+    # Auth with search
+    print(search_token)
+    sc = globus_sdk.SearchClient(authorizer=globus_sdk.authorizers.AccessTokenAuthorizer(access_token=search_token))
+    #
+    # TODO: hardcode.
+    files_to_ingest = '/home/tskluzac/mdata'
+
+    from random import randint
+    cur_subject = randint(0,100000)
+
+    metadata = dict()
+    metadata['file_information'] = {'a': 1, 'b': 2, 'c': 3}
+    metadata["keywords"] = {'a': 30, 'b': 20, 'c': 10}
+
+    file_obj = {"subject": str(cur_subject),
+                "visible_to": ["public"],
+                "content": metadata}
+
+    base_gmeta['ingest_data']['gmeta'].append(file_obj)
+
+    print(base_gmeta)
+
+    index_id = "cba4cfc9-435e-4e88-90ab-cc17ef488d6f"
+    x = sc.ingest(index_id, base_gmeta)
+    print(x)
+    print(x.content)
+
+    #print(x)
+
+
+    # # TODO: ingest.
+    return "HELLO WORLD"
+
+
+json_to_ingest = {
+    # "dc": {
+    #     # FILL 1
+    #     "titles": [
+    #     ],
+    #     # FILL 2
+    #     "creators": [
+    #     ],
+    #     # FILL 3
+    #     "subjects": [
+    #     ],
+    #     "publicationYear": "Fill 4",
+    #     "publisher": "Fill 5",
+    #     "resourceType": "Fill 6",
+    #     "dates": [
+    #         {
+    #             "dateType": "Created",
+    #             # "date": "2021-01-01T00:00:00.000000Z"
+    #             "date": "2021-09-08T15:39:26.174252Z"
+    #         }
+    #     ],
+    #     "formats": [
+    #         "text/plain"
+    #     ],
+    #     "version": "1"
+    # },
+    "files": [
+        {
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "md5": "d41d8cd98f00b204e9800998ecf8427e",
+            "filename": "Fill7.xyz",
+            "url": "https://4f99675c-ac1f-11ea-bee8-0e716405a293.e.globus.org/xpcs/xtract-xpcs-1/",  # Fill 8
+            "field_metadata": {},
+            "mime_type": "text/plain",
+            "length": 0
+        }
+    ],
+    "project_metadata": {
+        # 'measurement.instrument.acquisition.angle': -1.0,
+        "project-slug": "xtract-covid-1",
+        "keywords": {'a': 30, 'b': 20, 'c': 10}
+
+    }
+}
+
+
 @extract_bp.route('/ingest_search', methods=['POST'])
 def ingest_search():
     r = request.json
 
+    #dataset_mdata = None
+    if 'dataset_mdata' in r:
+        dataset_mdata = r['dataset_mdata']
+    else:
+        dataset_mdata = None
     search_index_id = r['search_index_id']
-    mdata_dir = r['metadata']
+    mdata_dir = r['mdata_dir']
+    tokens = r['tokens']
 
-    def funcx_func(event):
-        from globus_sdk import SearchClient
-        import os
+    search_auth=globus_sdk.authorizers.AccessTokenAuthorizer(access_token=tokens['Search'])
+    sc = globus_sdk.SearchClient(authorizer=search_auth)
+    print("Showing indexes")
+    # indexes = [si for si in sc.get("/").data]
+    # print(indexes)
+    # time.sleep(20)
 
-        search_token = event['search_token']
-        ingest_dir = event['ingest_dir']
 
-        # TODO: auth with search.
-        sc = globus_sdk.SearchClient(authorizer=globus_sdk.authorizers.AccessTokenAuthorizer(access_token=search_token))
 
-        # TODO: ingest all metadata in folder.
-        files_to_ingest = '/home/tskluzac/mdata'
+    from scheddy.scheduler import get_fx_client
 
-        # TODO: ingest.
+    fxc = get_fx_client(tokens)
+
+    search_ingest_fx_eid = "e246aad8-7838-46a3-b260-956eed859c7c"
+
+    event = {
+        'dataset_mdata':  dataset_mdata,
+        'search_index_id': search_index_id,
+        'mdata_dir': mdata_dir,
+        'search_token': tokens['Search']
+    }
+
+    proc = funcx_func(event)
+
+
+    # fn_uuid = fxc.register_function(function=funcx_func)
+    # #  print(fn_uuid)
+    # task_id = fxc.run(event, function_id=fn_uuid, endpoint_id=search_ingest_fx_eid)
+    #
+    # while True:
+    #     try:
+    #         x = fxc.get_result(task_id)
+    #         print(x)
+    #     except Exception as e:
+    #         print(e)
+    #         time.sleep(1)
+    #         continue
+    #     time.sleep(1)
 
 
 @extract_bp.route('/offload_mdata', methods=['POST'])

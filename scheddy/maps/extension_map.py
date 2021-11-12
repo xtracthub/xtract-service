@@ -3,8 +3,8 @@ from copy import deepcopy
 
 EXTENSION_MAP = {
     'tabular': ['csv', 'dat', 'xls'],
-    'keyword': ['txt', 'pdf', 'doc', 'docx', 'md', 'README'],
-    'jsonxml': ['json', 'xml'],
+    'keyword': ['txt', 'pdf', 'doc', 'docx', 'md', 'README', 'json'],
+    'jsonxml': ['xml'],  # TODO: add back json
     'netcdf': ['nc', 'netcdf', 'nc4', 'netcdf4'],
     'images': ['png', 'jpg', 'jpeg', 'tif', 'tiff'],
     'c_code': ['c', 'h'],
