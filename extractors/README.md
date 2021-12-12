@@ -1,19 +1,19 @@
 
 Current status of Xtract extractor library
 
-| Extractor     | Singularity | Theta Status | Jetstream Status | Midway2 Status |
-|-------------- | ----------- |------------- | ---------------- | -------------- |
-| **Tabular**   | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **Keyword**   | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **ImageSort** | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **JSON-XML**  | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **HDF**       | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **Python**    | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **C-Code**    | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **ImageNER**  | Tabled      | Tabled       | Tabled           | Tabled         |
-| **NetCDF**    | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **Maps**      | Tabled      | Tabled       | Tabled           | Tabled         |
-| **XPCS**      | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **MatIO**     | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **Tika**      | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
-| **UNIX-File** | Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| Extractor       | Version |Singularity | Theta Status | Jetstream Status | Midway2 Status |
+|---------------- | ------- |----------- |------------- | ---------------- | -------------- |
+| **Tabular**     | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **Keyword**     | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **ImageSort**   | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **JSON-XML**    | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **HDF**         | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **Python**      | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **C-Code**      | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **ImageNER**    | v0.0    |Tabled      | Tabled       | Tabled           | Tabled         |
+| **NetCDF**      | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **Maps**        | v0.0    |Tabled      | Tabled       | Tabled           | Tabled         |
+| **XPCS**        | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **MatIO**       | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **Tika**        | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
+| **UNIX-File**   | v0.0    |Incomplete  | Incomplete   | Incomplete       | Incomplete     |
