@@ -22,13 +22,17 @@ from threading import Thread
 schedulers_by_crawl_id = dict()
 status_by_crawl_id = dict()
 
+
 def test_function():
     # TODO: add ep_id
     return {'is_success': True}
 
 
 def create_scheduler_thread(fx_eps, crawl_id, headers):
-
+    """
+    This is a function that does xyz,
+    :param fx_eps (list) : does xyz
+    """
     print("Started sched_obj")
     sched_obj = FamilyLocationScheduler(fx_eps=fx_eps,
                                         crawl_id=crawl_id,

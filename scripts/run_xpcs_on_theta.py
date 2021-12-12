@@ -85,7 +85,7 @@ while not all_events.empty():
                                    xtract_dir="/home/tskluzac/.xtract",
                                    sys_path_add="/",
                                    module_path="gather_xpcs_metadata",
-                                   metadata_write_path='/home/tskluzac/testytesty')
+                                   metadata_write_path='/home/tskluzac/xtract_xpcs_2021_01--12-11-2021')
 
         current_batch.append(payload)
 

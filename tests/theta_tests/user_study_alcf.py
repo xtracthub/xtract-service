@@ -23,7 +23,8 @@ xpcs_event = ext.create_event(ep_name="foobar",
 
 
 def main(fxc, ep_id):
-    container_uuid = fxc.register_container('/projects/CSC249ADCD01/skluzacek/containers/xtract-xpcs.img', 'singularity')
+    container_uuid = fxc.register_container('/projects/CSC249ADCD01/skluzacek/containers/xtract-xpcs.img',
+                                            'singularity')
     print("Container UUID: {}".format(container_uuid))
     fn_uuid = fxc.register_function(base_extractor,
                                     #ep_id, # TODO: We do not need ep id here

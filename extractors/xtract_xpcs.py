@@ -12,28 +12,28 @@ class XPCSExtractor(Extractor):
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
 
+    def create_event(self,
+                     family_batch,
+                     ep_name,
+                     xtract_dir,
+                     sys_path_add,
+                     module_path,
+                     metadata_write_path,
+                     recursion_depth=None):
 
-def create_event(family_batch,
-                 ep_name,
-                 xtract_dir,
-                 sys_path_add,
-                 module_path,
-                 metadata_write_path,
-                 recursion_depth=None):
+        if recursion_depth is not None:
+            rec_limit = recursion_depth
+        else:  # otherwise, set to extractor default.
+            rec_limit = recursion_depth
 
-    if recursion_depth is not None:
-        rec_limit = recursion_depth
-    else:  # otherwise, set to extractor default.
-        rec_limit = recursion_depth
+        event = create_event(family_batch=family_batch,
+                             ep_name=ep_name,
+                             xtract_dir=xtract_dir,
+                             sys_path_add=sys_path_add,
+                             module_path=module_path,
+                             metadata_write_path=metadata_write_path)
+        # ,
+        # recursion_limit=rec_limit)
 
-    event = create_event(family_batch=family_batch,
-                         ep_name=ep_name,
-                         xtract_dir=xtract_dir,
-                         sys_path_add=sys_path_add,
-                         module_path=module_path,
-                         metadata_write_path=metadata_write_path)
-    # ,
-    # recursion_limit=rec_limit)
-
-    return event
+        return event
 
