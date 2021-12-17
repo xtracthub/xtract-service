@@ -29,6 +29,27 @@ class PriorityEntry(object):
         return self.priority < other.priority
 
 
+def get_all_extractors(fx_ep_ls):
+
+    from utils.pg_utils import pg_conn
+    cur = pg_conn().cursor()  # don't need connection object; don't need to commit.
+
+    # Should be {extractor_name: {'funcx_id": uuid}}
+    all_extractors = dict()
+    for fx_ep in fx_ep_ls:
+        print('here')
+        get_query = f"""SELECT ext_name, func_uuid from extractors WHERE fx_eid='{fx_ep}';"""
+        cur.execute(get_query)
+
+        for item in cur.fetchall():
+            ext_name, func_uuid = item
+            if ext_name not in all_extractors:
+                all_extractors[ext_name] = dict()
+            all_extractors[ext_name][fx_ep] = func_uuid
+
+    return all_extractors
+
+
 def get_fx_client(headers):
     tokens = headers
     fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
@@ -213,7 +234,13 @@ class FamilyLocationScheduler:
     def orch_thread(self, headers):
         to_terminate = False
 
-        from scheddy.maps.function_ids import functions
+        # TYLER: Getting rid of imported function_ids
+        # from scheddy.maps.function_ids import functions
+        # TODO: GET ALL OF THE FUNCTIONS RIGHT HERE FROM DB.
+        print(f"ENDPOINTS TO CHECK: {self.fx_eps_to_check}")
+        all_extractors = get_all_extractors(self.fx_eps_to_check)
+        print(f"Fetched all extractors... {all_extractors}")
+
         fxc = get_fx_client(headers)
 
         while True:
@@ -289,9 +316,11 @@ class FamilyLocationScheduler:
                     # print(f"[ORCH] Extractor: {extractor_id}")
                     # print(f"[ORCH] Event: {event}")
 
+                    fx_ep_id = 'e1398319-0d0f-4188-909b-a978f6fc5621'  # TODO: TYLER hardcode.
+
                     batch.add(event,
-                              endpoint_id='e1398319-0d0f-4188-909b-a978f6fc5621',  # TODO: hardcode.
-                              function_id=functions[extractor_id])
+                              endpoint_id=fx_ep_id,
+                              function_id=all_extractors[f"xtract-{extractor_id}"][fx_ep_id])
                     batch_len += 1
 
                 # Only want to send tasks if we retrieved tasks.

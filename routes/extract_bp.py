@@ -214,7 +214,8 @@ def extract_mdata():
     status_by_crawl_id[r["crawl_id"]] = "INIT"
     # t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
     # t1.start()
-    create_scheduler_thread([], r["crawl_id"], r["tokens"])
+    # TODO: TYLER -- FUNCX_ENDPOINT HARDCODED HERE.
+    create_scheduler_thread(['e1398319-0d0f-4188-909b-a978f6fc5621'], r["crawl_id"], r["tokens"])
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
 
