@@ -313,10 +313,7 @@ class FamilyLocationScheduler:
                         metadata_write_path='/home/tskluzac/mdata'
                     )
 
-                    # print(f"[ORCH] Extractor: {extractor_id}")
-                    # print(f"[ORCH] Event: {event}")
-
-                    fx_ep_id = 'e1398319-0d0f-4188-909b-a978f6fc5621'  # TODO: TYLER hardcode.
+                    fx_ep_id = self.fx_eps_to_check[0]  # TODO: Should not be fixed to first fx_ep.
 
                     batch.add(event,
                               endpoint_id=fx_ep_id,

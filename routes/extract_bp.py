@@ -215,7 +215,7 @@ def extract_mdata():
     # t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
     # t1.start()
     # TODO: TYLER -- FUNCX_ENDPOINT HARDCODED HERE.
-    create_scheduler_thread(['e1398319-0d0f-4188-909b-a978f6fc5621'], r["crawl_id"], r["tokens"])
+    create_scheduler_thread(r['fx_ep_ids'], r["crawl_id"], r["tokens"])
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
 
