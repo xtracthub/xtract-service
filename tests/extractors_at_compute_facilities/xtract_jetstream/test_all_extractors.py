@@ -115,5 +115,5 @@ def run(environment):
         print(f"{ext_key}:\tsuccess({success})\tfails({failed})")
 
 
-if __name__ == "__main__":
-    run(environment='jetstream')
+# if __name__ == "__main__":
+#     run(environment='jetstream')
