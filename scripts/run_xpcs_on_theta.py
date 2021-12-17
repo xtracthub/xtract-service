@@ -15,7 +15,9 @@ This script will run the Gladier team's XPCS script on each
 file from the 2021-1 file set on Petrel. It will do so on Theta. 
 """
 
-# TODO: figure out why only 9533 are writing to disk. 
+# TODO:
+# 1. Point to the right xpcs_data file.
+# 2. Point to the right bunch of metadata files.
 
 fxc = FuncXClient()
 xpcs_x = XPCSExtractor()
@@ -35,9 +37,10 @@ batch_size = 500
 hdf_count = 0
 all_events = Queue()
 
-max_count = 100000
+max_count = 500000
 
-crawl_info = "/Users/tylerskluzacek/Desktop/xpcs_crawl_info.csv"
+# crawl_info = "/Users/tylerskluzacek/Desktop/xpcs_crawl_info.csv"  # TYLER: 2021-1 only
+crawl_info = "/Users/tylerskluzacek/Desktop/xpcs_crawls/xpcs_crawl_info_2020-3.csv"
 
 print(f"Reading data...")
 with open(crawl_info, 'r') as f:
@@ -70,7 +73,6 @@ while not all_events.empty():
 
     # Temporary edge case fix.
 
-
     current_batch = []
 
     while len(current_batch) < batch_size:
@@ -85,7 +87,7 @@ while not all_events.empty():
                                    xtract_dir="/home/tskluzac/.xtract",
                                    sys_path_add="/",
                                    module_path="gather_xpcs_metadata",
-                                   metadata_write_path='/home/tskluzac/xtract_xpcs_2021_01--12-11-2021')
+                                   metadata_write_path='/home/tskluzac/xtract_xpcs_2020_03--12-12-2021')
 
         current_batch.append(payload)
 
