@@ -7,6 +7,7 @@ from extractors.xtract_hdf import HDFExtractor
 from extractors.xtract_python import PythonExtractor
 from extractors.xtract_c_code import CCodeExtractor
 from extractors.xtract_netcdf import NetCDFExtractor
+from extractors.xtract_xpcs import XPCSExtractor
 
 tabular_extractor = TabularExtractor()
 keyword_extractor = KeywordExtractor()
@@ -16,6 +17,7 @@ hdf_extractor = HDFExtractor()
 python_extractor = PythonExtractor()
 c_code_extractor = CCodeExtractor()
 netcdf_extractor = NetCDFExtractor()
+xpcs_extractor = XPCSExtractor()
 
 all_extractors = {"xtract-tabular": {'extractor': tabular_extractor,
                                      'test_files': ['comma_delim']},
@@ -33,8 +35,9 @@ all_extractors = {"xtract-tabular": {'extractor': tabular_extractor,
                                     'test_files': ['testfile.c']},
                   "xtract-netcdf": {'extractor': netcdf_extractor,
                                     'test_files': ['test-netcdf.nc']},
+                  "xtract-xpcs": {'extractor': xpcs_extractor,
+                                  'test_files': ['test-hdf-1']},
                   # "xtract-matio",
-                  # "xtract-xpcs",
                   # "xtract-tika"
                   }
 

@@ -114,7 +114,7 @@ def run(environment, fxc):
         failed = ext_to_pass_fail_counts_queue[ext_key]['fail']
 
         tab_break = "\t"
-        if len(ext_key) < 12:
+        if len(ext_key) < 11:
             tab_break = tab_break + "\t"
 
         print(f"{ext_key}:{tab_break}success({success})\tfails({failed})")

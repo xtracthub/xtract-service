@@ -13,7 +13,7 @@ Current status of Xtract extractor library
 | ImageNER        | v0.0    | Tabled     | Tabled       | Tabled           | Tabled         |
 | **NetCDF**      | v1.0    | READY      | Incomplete   | READY            | Incomplete     |
 | Maps            | v0.0    | Tabled     | Tabled       | Tabled           | Tabled         |
-| **XPCS**        | v0.0    | Incomplete | Incomplete   | Incomplete       | Incomplete     |
+| **XPCS**        | v1.0    | READY      | Incomplete   | READY            | Incomplete     |
 | **MatIO**       | v0.0    | READY      | Incomplete   | Incomplete       | Incomplete     |
 | **Tika**        | v0.0    | In-progress| Incomplete   | Incomplete       | Incomplete     |
-| **UNIX-File**   | v0.0    | Incomplete | Incomplete   | Incomplete       | Incomplete     |
+| **UNIX-File**   | v0.0    | In Dev     | Incomplete   | Incomplete       | Incomplete     |
