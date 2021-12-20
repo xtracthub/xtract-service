@@ -6,10 +6,10 @@ class CCodeExtractor(Extractor):
 
     def __init__(self):
         super().__init__(extr_id=None,
-                         func_id="", # TODO: fill in once func is registered
+                         func_id="833f6271-e03c-4ac5-bc32-64eba7f13460",
                          extr_name="xtract-c-code",
-                         store_type="", # TODO: fill in once func is registered
-                         store_url="") # TODO: fill in once func is registered
+                         store_type="ecr",
+                         store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-c-code:latest")
 
     def create_event(self,
                      family_batch,

@@ -11,7 +11,6 @@ class TabularExtractor(Extractor):
                          extr_name="xtract-tabular",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-tabular:latest")
-        # super().set_extr_func(tabular_extract)
 
     def create_event(self,
                      family_batch,

@@ -29,8 +29,6 @@ def xtract_default():
 def config_containers():
     """ Returns the status of a crawl. """
 
-    print("HIT")
-
     r = request.json
 
     fx_eid = r["fx_eid"]
@@ -54,14 +52,11 @@ def config_containers():
     from tests.extractors_at_compute_facilities.xtract_jetstream.test_all_extractors import register_functions, get_execution_information
 
     execution_info = get_execution_information('jetstream')  # TODO: loosen this.
-    print("HIT C")
 
     fxc = get_fx_client(headers=headers)
 
-    print("HIT2")
     func_uuids = register_functions(execution_info, fxc=fxc)
 
-    print("HIT3")
     in_query_1 = f"""INSERT INTO fxep_container_lookup (fx_eid, container_dir) VALUES ('{fx_eid}', '{container_path}');"""
     cur.execute(in_query_1)
     from uuid import uuid4
