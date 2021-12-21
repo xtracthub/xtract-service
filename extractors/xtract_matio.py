@@ -1,40 +1,31 @@
 
 from extractors.extractor import Extractor
+from extractors.utils.base_event import create_event
 
 
-class MatioExtractor(Extractor):
+class MatIOExtractor(Extractor):
 
     def __init__(self):
-
         super().__init__(extr_id=None,
-                         func_id="71639b5b-ef94-41bd-87b9-18b9f7b2fb72",
+                         func_id="833f6271-e03c-4ac5-bc32-64eba7f13460",
                          extr_name="xtract-matio",
                          store_type="ecr",
                          store_url="039706667969.dkr.ecr.us-east-1.amazonaws.com/xtract-matio:latest")
-        super().set_extr_func(matio_extract)
 
+    def create_event(self,
+                     family_batch,
+                     ep_name,
+                     xtract_dir,
+                     sys_path_add,
+                     module_path,
+                     metadata_write_path,
+                     recursion_depth=None):
 
-def matio_extract(event):
+        event = create_event(family_batch=family_batch,
+                             ep_name=ep_name,
+                             xtract_dir=xtract_dir,
+                             sys_path_add=sys_path_add,
+                             module_path=module_path,
+                             metadata_write_path=metadata_write_path)
 
-    """
-    Function
-    :param event (dict) -- contains auth header and list of HTTP links to extractable files:
-    :return metadata (dict) -- metadata as gotten from the materials_io library:
-    """
-
-    import time
-    import sys
-
-
-
-    # Enable using files stored at '/' in the container.
-    sys.path.insert(1, '/')
-
-
-    from xtract_matio_main import extract_matio
-
-
-
-
-
-    return {'finished': len(all_families.families), 'extract_time': t1-import_end}
+        return event
