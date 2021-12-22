@@ -19,6 +19,8 @@ import logging
 
 application = Flask(__name__)
 # application.logger.addHandler(handler)
+logger = logging.getLogger(__name__)
+logger.setLevel('DEBUG')
 
 # Register Blueprints for crawls and extractions.
 application.register_blueprint(crawl_bp.crawl_bp)
@@ -74,7 +76,9 @@ def config_containers():
         '{item}', '{fx_eid}', '{func_uuids[item]}');"""
         cur.execute(in_query_1)
     conn.commit()
-    logging.error("TYLER CHECKING IN")
+    logger.error("TYLER CHECKING IN")
+    logger.info("TYLER INFO CHECKING")
+    logger.debug("TYLER DEBUG CHECKING")
     return {'status': 'OK'}
 
 
