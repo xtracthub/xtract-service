@@ -16,8 +16,10 @@ import logging
 # handler = StreamHandler(stream='sys.stdout')
 # handler.setFormatter(formatter)
 
+import logging
 
 application = Flask(__name__)
+application.logger.setLevel(logging.DEBUG)
 # application.logger.addHandler(handler)
 # logger = logging.getLogger(__name__)
 # logger.setLevel('DEBUG')
