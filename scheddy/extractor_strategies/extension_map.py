@@ -17,7 +17,7 @@ class ExtensionMapStrategy(Strategy):
             The priority for ALL extension_map extractors is 1 if extractor as there is no ranking involved.
         """
 
-        print(f"Len: {type(file_objs[0])}")
+        # print(f"Len: {type(file_objs[0])}")
         assert len(file_objs) == 1, "[ExtensionMapStrategy] Number of families sent here should be 1"
         assert len(file_objs[0]['files']) == 1, "[ExtensionMapStrategy] Number of files per family should be 1"
         file_obj = file_objs[0]

@@ -160,7 +160,7 @@ class FamilyLocationScheduler:
             (1) invoke idle endpoints (e.g., Midway2/Theta)
             (2) get the Globus EP associated with a given endpoint
         """
-        print(endpoints)
+        # print(endpoints)
         for item in self.fx_eps_to_check:
             print(item)
             # TODO: populate fx_endpoints
@@ -184,35 +184,35 @@ class FamilyLocationScheduler:
 
                     # If there is nothing in a given priority queue, just skip it.
                     if self.to_schedule_pqs[ext_type].qsize() == 0:
-                        print(ext_type)
+                        # print(ext_type)
                         # print(f"Q Size continue for ext_type {ext_type}")
                         continue
 
                     ext_pri_mapping[ext_type] = self.to_schedule_pqs[ext_type].queue[0].priority
 
                 # If there is nothing to order, then we should break. # TODO: when in loop, will want a wait/retry.
-                print(f"Number of extractors in queue: {len(ext_pri_mapping)}")
+                # print(f"Number of extractors in queue: {len(ext_pri_mapping)}")
                 if len(ext_pri_mapping) == 0:
                     print("Nothing left to schedule! Breaking...")
                     break
 
-                print(f"Ext Pri Mapping: {ext_pri_mapping}")
+                # print(f"Ext Pri Mapping: {ext_pri_mapping}")
                 # List of all 'maximum priority' extractor (queue) names.
                 max_value = max(ext_pri_mapping.values())
                 max_value_items = [key for key, val in ext_pri_mapping.items() if val == max_value]
-                print(f"Here are our max_value_items: {max_value_items}")
+                # print(f"Here are our max_value_items: {max_value_items}")
 
                 # If there's a tie.
                 if len(max_value_items) >= 1:
                     # if our tiebreaker is 'random', then pop all leaders in random order.
                     # NOTE: pop all at once to avoid unnecessary iterations + checks.
                     if tiebreaker == 'random':
-                        print(f"IN RANDOM")
+                        #  print(f"IN RANDOM")
                         max_value_items = list(max_value_items)  # cast to list so we can shuffle
-                        print(f"Max value items: {max_value_items}")
+                        # print(f"Max value items: {max_value_items}")
 
                         # "Tuple" object does not support item assignment
-                        print(type(max_value_items))
+                        # print(type(max_value_items))
                         shuffle(max_value_items)
 
                         # DRAIN the leaders into to_xtract_q.
@@ -221,7 +221,7 @@ class FamilyLocationScheduler:
                             packed_pri_obj = full_pq.get()
                             fam = packed_pri_obj.data
 
-                            print(f"Fetched: {fam}")
+                            # print(f"Fetched: {fam}")
                             fam['first_extractor'] = extractor_name
                             self.to_xtract_q.put(fam)
                             self.counters['cumu_scheduled'] += 1
@@ -247,7 +247,7 @@ class FamilyLocationScheduler:
 
             # If our accounting is complete
             # NOTE: when concurrent, will also need to check if scheduling is DONE.
-            print(f"Checking done-ness...")
+            # print(f"Checking done-ness...")
             if self.counters['fx']['success'] + \
                     self.counters['fx']['failed'] + \
                     self.counters['flagged_unknown'] == self.counters['cumu_scheduled'] \
@@ -334,12 +334,12 @@ class FamilyLocationScheduler:
                     if not self.funcx_current_tasks.empty():
                         tid = self.funcx_current_tasks.get()
                         poll_batch.append(tid)
-                print(f"Current length of poll_batch: {len(poll_batch)}")
+                # print(f"Current length of poll_batch: {len(poll_batch)}")
 
                 if len(poll_batch) > 0:
                     x = fxc.get_batch_result(poll_batch)
                     time.sleep(1.1)
-                    print(f"Poll result: {x}")
+                    # print(f"Poll result: {x}")
                     for item in x:
                         result = x[item]
 
@@ -442,8 +442,8 @@ class FamilyLocationScheduler:
                         if extractor not in self.to_schedule_pqs:
                             self.to_schedule_pqs[extractor] = PriorityQueue()
 
-                        print(f"Priority: {priority}")
-                        print(f"Extractor: {extractor}")
+                        # print(f"Priority: {priority}")
+                        # print(f"Extractor: {extractor}")
                         pri_entry_obj = PriorityEntry(priority, message_as_dict)
                         self.to_schedule_pqs[extractor].put(pri_entry_obj)
                         self.counters['cumu_to_schedule'] += 1
