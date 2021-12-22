@@ -62,6 +62,7 @@ def config_containers():
         '{item}', '{fx_eid}', '{func_uuids[item]}');"""
         cur.execute(in_query_1)
     conn.commit()
+    application.logger("TYLER CHECKING IN")
     return {'status': 'OK'}
 
 
