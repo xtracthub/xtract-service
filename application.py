@@ -5,19 +5,20 @@ from flask import Flask, request
 from routes import crawl_bp, extract_bp, configure_bp
 from utils.pg_utils import pg_conn
 from scheddy.scheduler import get_fx_client
-from logging.handlers import RotatingFileHandler
+from logging import StreamHandler
 
 import logging
 
-logger = logging.getLogger(__name__)
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-logger.setLevel(logging.DEBUG)
-handler = RotatingFileHandler('/opt/python/log/application.log', maxBytes=1024,backupCount=5)
-handler.setFormatter(formatter)
+# logger = logging.getLogger(__name__)
+# formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+# logger.setLevel(logging.DEBUG)
+# # handler = RotatingFileHandler('/opt/python/log/application.log', maxBytes=1024,backupCount=5)
+# handler = StreamHandler(stream='sys.stdout')
+# handler.setFormatter(formatter)
 
 
 application = Flask(__name__)
-application.logger.addHandler(handler)
+# application.logger.addHandler(handler)
 
 # Register Blueprints for crawls and extractions.
 application.register_blueprint(crawl_bp.crawl_bp)
@@ -73,7 +74,7 @@ def config_containers():
         '{item}', '{fx_eid}', '{func_uuids[item]}');"""
         cur.execute(in_query_1)
     conn.commit()
-    logger.info("TYLER CHECKING IN")
+    logging.error("TYLER CHECKING IN")
     return {'status': 'OK'}
 
 
