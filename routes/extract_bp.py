@@ -110,7 +110,6 @@ def extract_mdata():
     r = request.json
     current_app.logger.error("[TYLER] IN EXTRACT")
 
-
     # Store these for possibility of transfer later.
     local_mdata_maps[r['crawl_id']] = r['local_mdata_path']
     remote_mdata_maps[r['crawl_id']] = r['remote_mdata_path']
