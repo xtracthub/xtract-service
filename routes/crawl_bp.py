@@ -4,6 +4,7 @@ import requests
 from flask import Blueprint, request
 
 from status_checks import get_crawl_status
+from flask import current_app
 
 
 """ Routes that have to do with using Xtract's crawler """
@@ -12,6 +13,8 @@ crawl_bp = Blueprint('crawl_bp', __name__)
 
 @crawl_bp.route('/crawl', methods=['POST'])
 def crawl_repo():
+    current_app.logger.error("[TYLER] IN CRAWL")
+
 
     crawl_url = 'http://xtractcrawler5-env.eba-akbhvznm.us-east-1.elasticbeanstalk.com/crawl'
 
