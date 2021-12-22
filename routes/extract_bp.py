@@ -4,18 +4,11 @@ import pickle
 import globus_sdk
 from flask import current_app
 
-from funcx import FuncXClient
 from flask import Blueprint, request
 from globus_sdk import AccessTokenAuthorizer
-from extractors.xtract_keyword import KeywordExtractor
-from extractors.extractor import base_extractor
-from tests.test_utils.mock_event import create_mock_event
-import application
 
-from status_checks import get_extract_status
+
 from scheddy.scheduler import FamilyLocationScheduler
-# from orchestrator.orchestrator import ExtractorOrchestrator
-from threading import Thread
 
 
 # TODO: back in the databases
@@ -72,96 +65,6 @@ extract_bp = Blueprint('extract_bp', __name__)
 active_orchestrators = dict()
 
 
-# @extract_bp.route('/configure_ep/<funcx_eid>', methods=['POST'])
-# def configure_ep(funcx_eid):
-#     """ Configuring the endpoint means ensuring that all credentials on the endpoint
-#         are updated/refreshed, and that the Globus + funcX eps are online"""
-#     start_time = time.time()
-
-#     # Step 0: pull out the headers
-#     headers = request.json['headers']
-#     timeout = request.json['timeout']
-#     ep_name = request.json['ep_name']
-#     globus_eid = request.json['globus_eid']
-#     xtract_path = request.json['xtract_path']
-#     local_download_path = request.json['local_download_path']
-#     local_mdata_path = request.json['local_mdata_path']
-
-#     # dep_tokens = client.oauth2_get_dependent_tokens(headers['Authorization'])
-#     fx_auth = AccessTokenAuthorizer(headers['Authorization'])
-#     search_auth = AccessTokenAuthorizer(headers['Search'])
-#     openid_auth = AccessTokenAuthorizer(headers['Openid'])
-
-#     print(fx_auth.access_token)
-#     print(search_auth.access_token)
-#     print(openid_auth.access_token)
-
-#     fx_client = FuncXClient(fx_authorizer=fx_auth,
-#                             search_authorizer=search_auth,
-#                             openid_authorizer=openid_auth)
-
-#     print(dir(fx_client))
-
-#     print(fx_client.TOKEN_DIR, fx_client.TOKEN_FILENAME, fx_client.BASE_USER_AGENT)
-
-#     # TODO: boot this outside to avoid wasteful funcX calls.
-#     reg_func_id = fx_client.register_function(function=test_function)
-
-#     print(f"Successfully registered check-function with ID: {reg_func_id}")
-
-#     # Step 1: use funcX function to ensure endpoint is online and returning tasks.
-#     #  --> Only taking first element in batch, as our batch size is only 1.
-#     task_id = fx_client.run(endpoint_id=funcx_eid, function_id=reg_func_id)
-
-#     print(f"Result from config extract: {task_id}")
-
-#     while True:
-#         result = fx_client.get_batch_result(task_id_list=[task_id])
-#         print(result)
-#         if 'exception' in result[task_id]:
-#             result[task_id]['exception'].reraise()
-
-#         if result[task_id]['status'] == 'success':
-#             print("Successfully returned test function. Breaking!")
-#             break
-
-#         elif result[task_id]['status'] == 'FAILED':
-#             return {'config_status': 'FAILED', 'fx_eid': funcx_eid, 'msg': 'funcX internal failure'}
-
-#         else:
-#             if time.time() - start_time > timeout:
-#                 return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
-#             else:
-#                 time.sleep(2)
-
-#     reg_func_id = fx_client.register_function(function=configure_function)
-
-#     print(f"Successfully registered check-function with ID: {reg_func_id}")
-
-#     event = [xtract_path, ep_name, globus_eid, funcx_eid, local_download_path, local_mdata_path]
-
-#     # Step 1: use funcX function to ensure endpoint is online and returning tasks.
-#     #  --> Only taking first element in batch, as our batch size is only 1.
-#     task_id = fx_client.run(event=event, endpoint_id=funcx_eid, function_id=reg_func_id)
-
-#     print(f"Result from config extract: {task_id}")
-
-#     while True:
-#         result = fx_client.get_batch_result(task_id_list=[task_id])
-#         print(result)
-#         if 'exception' in result[task_id]:
-#             result[task_id]['exception'].reraise()
-
-#         if result[task_id]['status'] == 'success':
-#             return {'config_status': 'SUCCESS', 'fx_eid': funcx_eid}
-
-#         elif result[task_id]['status'] == 'FAILED':
-#             return {'config_status': 'FAILED', 'fx_eid': funcx_eid, 'msg': 'funcX internal failure'}
-
-#         else:
-#             if time.time() - start_time > timeout:
-#                 return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
-#         time.sleep(2)
 
 
 @extract_bp.route('/check_ep_configured', methods=['GET'])
@@ -205,6 +108,8 @@ def check_fx_client():
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
+    current_app.logger.error("[TYLER] IN EXTRACT")
+
 
     # Store these for possibility of transfer later.
     local_mdata_maps[r['crawl_id']] = r['local_mdata_path']

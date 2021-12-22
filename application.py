@@ -79,6 +79,7 @@ def config_containers():
     logger.error("TYLER CHECKING IN")
     logger.info("TYLER INFO CHECKING")
     logger.debug("TYLER DEBUG CHECKING")
+    print('ding')
     return {'status': 'OK'}
 
 
