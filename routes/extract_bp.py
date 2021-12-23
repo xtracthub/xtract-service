@@ -1,10 +1,9 @@
-import json
-import time
-import pickle
-import globus_sdk
-from flask import current_app
 
-from flask import Blueprint, request
+import globus_sdk
+from utils.auth.globus_auth import get_uid_from_token
+
+
+from flask import Blueprint, request, current_app
 from globus_sdk import AccessTokenAuthorizer
 
 
@@ -38,33 +37,9 @@ def create_scheduler_thread(fx_eps, crawl_id, headers):
     # t2.start()
 
 
-def configure_function(event):
-    import os
-    import json
-    from uuid import uuid4
-
-    xtract_path, ep_name, globus_eid, funcx_eid, local_download_path, local_mdata_path = event
-
-    full_x_path = os.path.join(xtract_path, ep_name)
-    os.makedirs(full_x_path, exist_ok=True)
-
-    full_config_path = os.path.join(full_x_path, 'config.json')
-    with open(full_config_path, 'w') as f:
-        data = {'xtract_eid': str(uuid4()),
-                'globus_eid': globus_eid,
-                'funcx_eid': funcx_eid,
-                'local_download_path': local_download_path,
-                'local_mdata_path': local_mdata_path}
-        json.dump(data, f)
-
-    return {'status': 'success', 'xtract_eid': data['xtract_eid']}
-
-
 """ Routes that have to do with extraction (post-crawling). """
 extract_bp = Blueprint('extract_bp', __name__)
 active_orchestrators = dict()
-
-
 
 
 @extract_bp.route('/check_ep_configured', methods=['GET'])
@@ -101,14 +76,20 @@ def check_fx_client():
     fxc = FuncXClient(fx_authorizer=fx_auth,
                       search_authorizer=search_auth,
                       openid_authorizer=openid_auth)
-
     return "IT WORKED!"
 
 
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
-    current_app.logger.error("[TYLER] IN EXTRACT")
+    headers = r['tokens']
+
+    try:
+        user = get_uid_from_token(str.replace(str(headers['Authorization']), 'Bearer ', ''))
+        current_app.logger.info(f"[configure_bp] Authenticated user: {user}")
+    except ValueError as e:
+        current_app.logger.error(f"[configure_bp] UNABLE TO AUTHENTICATE USER -- CAUGHT: {e}")
+        return {'status': 401, 'message': 'Unable to authenticate with given token'}
 
     # Store these for possibility of transfer later.
     local_mdata_maps[r['crawl_id']] = r['local_mdata_path']
@@ -118,8 +99,7 @@ def extract_mdata():
     status_by_crawl_id[r["crawl_id"]] = "INIT"
     # t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
     # t1.start()
-    # TODO: TYLER -- FUNCX_ENDPOINT HARDCODED HERE.
-    create_scheduler_thread(r['fx_ep_ids'], r["crawl_id"], r["tokens"])
+    create_scheduler_thread(r['fx_ep_ids'], r["crawl_id"], headers)
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
 
