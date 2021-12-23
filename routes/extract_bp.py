@@ -53,32 +53,6 @@ local_mdata_maps = dict()
 remote_mdata_maps = dict()
 
 
-@extract_bp.route('/DEBUG_check_fx_client', methods=['GET'])
-def check_fx_client():
-    """ This should check to see if we can properly make a funcX endpoint"""
-    from funcx import FuncXClient
-
-    r = request.json
-
-    tokens = r['headers']
-
-    current_app.logger.debug("hi")
-
-    fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
-    search_auth = AccessTokenAuthorizer(tokens['Search'])
-    openid_auth = AccessTokenAuthorizer(tokens['Openid'])
-    print(f"TRYING TO CREATE FUNCX CLIENT")
-
-    print(f"fx_auth: {fx_auth}")
-    print(f"search_auth: {search_auth}")
-    print(f"openid_auth: {openid_auth}")
-
-    fxc = FuncXClient(fx_authorizer=fx_auth,
-                      search_authorizer=search_auth,
-                      openid_authorizer=openid_auth)
-    return "IT WORKED!"
-
-
 @extract_bp.route('/extract', methods=['POST'])
 def extract_mdata():
     r = request.json
@@ -114,6 +88,14 @@ def get_extr_status():
     """
 
     r = request.json
+
+    # TODO: add headers here (shouldn't be able to look at someone else's jobs).
+    # try:
+    #     user = get_uid_from_token(str.replace(str(headers['Authorization']), 'Bearer ', ''))
+    #     current_app.logger.info(f"[configure_bp] Authenticated user: {user}")
+    # except ValueError as e:
+    #     current_app.logger.error(f"[configure_bp] UNABLE TO AUTHENTICATE USER -- CAUGHT: {e}")
+    #     return {'status': 401, 'message': 'Unable to authenticate with given token'}
 
     extract_id = r["crawl_id"]
 
@@ -278,37 +260,3 @@ def ingest_search():
     #         continue
     #     time.sleep(1)
 
-
-@extract_bp.route('/offload_mdata', methods=['POST'])
-def offload_mdata():
-
-    # TODO: only transfer if extraction is complete.
-    # TODO: add proper polling.
-    r = request.json
-
-    crawl_id = r['crawl_id']
-    tokens = r['tokens']
-
-    source_ep = r['source_ep']
-    mdata_ep = r['mdata_ep']
-
-    source_dir = local_mdata_maps[crawl_id]
-    dest_dir = remote_mdata_maps[crawl_id]
-
-    print(f"Source EP: {source_ep}")
-    print(f"Source Dir: {source_dir}")
-
-    print(f"Dest EP: {mdata_ep}")
-    print(f"Dest Dir: {dest_dir}")
-
-    tc = get_globus_tc(tokens['Transfer'])
-
-    tdata = globus_sdk.TransferData(transfer_client=tc,
-                                    source_endpoint=source_ep,
-                                    destination_endpoint=mdata_ep)
-
-    tdata.add_item(source_dir, dest_dir, recursive=True)
-    transfer_result = tc.submit_transfer(tdata)
-
-    print(transfer_result)
-    return {"status": "SUCCESS"}
