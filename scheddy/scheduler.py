@@ -43,7 +43,7 @@ def get_all_extractors(fx_ep_ls):
         get_query = f"""SELECT ext_name, func_uuid from extractors WHERE fx_eid='{fx_ep}';"""
         cur.execute(get_query)
 
-        current_app.logger.info('We just executed query to get containers!')
+        # logger.info('We just executed query to get containers!')
         print('We just executed query to get containers!')
         for item in cur.fetchall():
             ext_name, func_uuid = item
@@ -51,7 +51,7 @@ def get_all_extractors(fx_ep_ls):
                 all_extractors[ext_name] = dict()
             all_extractors[ext_name][fx_ep] = func_uuid
 
-        current_app.logger.info(f'These are all of the extractors we found: {all_extractors}')
+        # current_app.logger.info(f'These are all of the extractors we found: {all_extractors}')
         print(f'These are all of the extractors we found: {all_extractors}')
 
     return all_extractors
