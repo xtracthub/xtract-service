@@ -8,7 +8,7 @@ from routes import crawl_bp, extract_bp, configure_bp
 
 application = Flask(__name__)
 application.logger.setLevel(logging.DEBUG)
-application.logger.basicConfig(format='%(message)s')  # remove timestamp, already appended by EB.
+logging.basicConfig(format='%(message)s')  # remove timestamp, already appended by EB.
 
 # Register Blueprints for crawls and extractions.
 application.register_blueprint(crawl_bp.crawl_bp)
