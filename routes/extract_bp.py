@@ -60,9 +60,9 @@ def extract_mdata():
 
     try:
         user = get_uid_from_token(str.replace(str(headers['Authorization']), 'Bearer ', ''))
-        current_app.logger.info(f"[configure_bp] Authenticated user: {user}")
+        current_app.logger.info(f"[extract_bp] Authenticated user: {user}")
     except ValueError as e:
-        current_app.logger.error(f"[configure_bp] UNABLE TO AUTHENTICATE USER -- CAUGHT: {e}")
+        current_app.logger.error(f"[extract_bp] UNABLE TO AUTHENTICATE USER -- CAUGHT: {e}")
         return {'status': 401, 'message': 'Unable to authenticate with given token'}
 
     # Store these for possibility of transfer later.
