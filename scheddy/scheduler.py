@@ -49,7 +49,7 @@ def get_all_extractors(fx_ep_ls):
 
         # logger.info('We just executed query to get containers!')
         log.error('we are here.')
-        print('We just executed query to get containers!')
+        log.error('We just executed query to get containers!')
         for item in cur.fetchall():
             ext_name, func_uuid = item
             if ext_name not in all_extractors:
@@ -57,7 +57,7 @@ def get_all_extractors(fx_ep_ls):
             all_extractors[ext_name][fx_ep] = func_uuid
 
         # current_app.logger.info(f'These are all of the extractors we found: {all_extractors}')
-        print(f'These are all of the extractors we found: {all_extractors}')
+        log.error(f'These are all of the extractors we found: {all_extractors}')
 
     return all_extractors
 
