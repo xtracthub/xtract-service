@@ -18,6 +18,7 @@ from scheddy.maps.name_to_extractor_map import extractor_map
 from scheddy.extractor_strategies.extension_map import ExtensionMapStrategy
 from funcx import FuncXClient
 from globus_sdk import AccessTokenAuthorizer
+from flask import current_app
 
 
 class PriorityEntry(object):
@@ -38,15 +39,20 @@ def get_all_extractors(fx_ep_ls):
     # Should be {extractor_name: {'funcx_id": uuid}}
     all_extractors = dict()
     for fx_ep in fx_ep_ls:
-        print('here')
+
         get_query = f"""SELECT ext_name, func_uuid from extractors WHERE fx_eid='{fx_ep}';"""
         cur.execute(get_query)
 
+        current_app.logger.info('We just executed query to get containers!')
+        print('We just executed query to get containers!')
         for item in cur.fetchall():
             ext_name, func_uuid = item
             if ext_name not in all_extractors:
                 all_extractors[ext_name] = dict()
             all_extractors[ext_name][fx_ep] = func_uuid
+
+        current_app.logger.info(f'These are all of the extractors we found: {all_extractors}')
+        print(f'These are all of the extractors we found: {all_extractors}')
 
     return all_extractors
 
@@ -333,7 +339,6 @@ class FamilyLocationScheduler:
                         result = x[item]
 
                         if result['status'] == 'success':
-                            # print(f"Success result: {result}")
                             self.counters['fx']['success'] += 1
 
                         elif result['status'] == 'failed':
