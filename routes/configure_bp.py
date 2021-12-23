@@ -1,99 +1,59 @@
-from flask import Blueprint, request
-import json
+
 import os
-import funcx
-import funcx.sdk.utils.throttling
-from globus_sdk import auth
-from werkzeug.datastructures import Headers
+import json
+
+from flask import Blueprint, request, current_app
+
+from utils.pg_utils import pg_conn
+from scheddy.scheduler import get_fx_client
+from utils.auth.globus_auth import get_uid_from_token
+from tests.extractors_at_compute_facilities.xtract_jetstream.test_all_extractors import \
+    register_functions, get_execution_information
 
 
 """ Routes that have to do with using configuration """
 configure_bp = Blueprint('configure_bp', __name__)
-timeout = 10
-max_requests = 10
 
 
-def configure_endpoint_function(header_auth):
-    import os
-    import json
-
-    try:
-        data = json.loads(header_auth)
-    except UnicodeDecodeError as err_msg:
-        print('Unable to decode header.')
-        return {'status': 'failure'}
-
-    # TODO: Verify that the user provides a valid path,
-    # possibly via regex/checking if the path is available
-    # and that permissions allow us to write to that location
-    if not os.path.exists(data['xtract_path']):
-        os.makedirs(data['xtract_path'])
-    with open(os.path.join(data['xtract_path'], 'config.json'), 'w') as f:
-        config = {
-            'ep_name': data['ep_name'],
-            'funcx_eid': data['funcx_eid'],
-            'globus_eid': data['globus_eid'],
-            'xtract_path': data['xtract_path'],
-            'local-metadata-path': data['local_metadata_path'],
-            'headers': data['headers']
-            }
-        
-        json.dump(config, f)
-        return {'status': 'success'}
-
-
-@configure_bp.route('/configure_ep/<funcx_eid>', methods=['GET', 'POST'])
-def configure_ep(funcx_eid):
-    """ Configuring the endpoint means ensuring that all credentials on the endpoint
-        are updated/refreshed, and that the Globus + funcX eps are online """
-    import time
-    from funcx import FuncXClient
-    from globus_sdk import AccessTokenAuthorizer
-
-    if not request.json:
-        return {'status': 200, 'message': 'Endpoint configuration unsuccessful!', 'error': 'missing headers'}
-
+@configure_bp.route('/config_containers', methods=['POST'])
+def config_containers():
+    """ Returns the status of a crawl. """
     r = request.json
 
-    payload = r
-    header_auth = payload['headers']
+    fx_eid = r["fx_eid"]
+    container_path = r["container_path"]
+    headers = r['headers']
 
-    fx_auth = AccessTokenAuthorizer(header_auth['authorization'])
-    fxc = FuncXClient(fx_authorizer=fx_auth)
-    ep_uuid = funcx_eid
-    func_uuid = fxc.register_function(configure_endpoint_function)
-    task_id = fxc.run(json.dumps(payload),
-        function_id=func_uuid,
-        endpoint_id=ep_uuid)
-    
-    start_time = time.time()
-    num_requests = 0
+    try:
+        user = get_uid_from_token(str.replace(str(headers['Authorization']), 'Bearer ', ''))
+        current_app.logger.info(f"[configure_bp] Authenticated user: {user}")
+    except ValueError as e:
+        current_app.logger.error(f"[configure_bp] UNABLE TO AUTHENTICATE USER -- CAUGHT: {e}")
+        return {'status': 401, 'message': 'Unable to authenticate with given token'}
 
+    del_query_1 = f"""DELETE FROM fxep_container_lookup WHERE fx_eid='{fx_eid}';"""
+    del_query_2 = f"""DELETE FROM extractors WHERE fx_eid='{fx_eid}';"""
 
-    # TODO: Verify that an endpoint is online before configuring it
-    # This can be done by calling for the endpoint status function
-    # endpoint_status = fxc.get_endpoint_status(funcx_eid)
-    # endpoint_status = json.dumps(endpoint_status, indent=4)
-    # print(endpoint_status)
-    
-    while True and num_requests < max_requests:
-        result = fxc.get_batch_result(task_id_list=[task_id])
-        num_requests += 1
-        print(result)
-        if 'exception' in result[task_id]:
-            result[task_id]['exception'].reraise()
+    conn = pg_conn()
+    cur = conn.cursor()
 
-        if result[task_id]['status'] == 'success':
-            print("Successfully returned test function. Breaking!")
-            break
+    cur.execute(del_query_1)
+    cur.execute(del_query_2)
 
-        elif result[task_id]['status'] == 'FAILED':
-            return {'config_status': 'FAILED', 'fx_eid': funcx_eid, 'msg': 'funcX internal failure'}
+    execution_info = get_execution_information('jetstream')  # TODO: loosen this...
 
-        else:
-            if time.time() - start_time > timeout:
-                return {'config_status': "FAILED", 'fx_id': funcx_eid, 'msg': 'funcX return timeout'}
-            else:
-                time.sleep(2)
+    fxc = get_fx_client(headers=headers)
 
-    return {'status': 200, 'message': 'Endpoint successfully configured!', 'funcx_eid': funcx_eid}
+    func_uuids = register_functions(execution_info, fxc=fxc)
+
+    in_query_1 = f"""INSERT INTO fxep_container_lookup (fx_eid, container_dir) VALUES ('{fx_eid}', '{container_path}');"""
+    cur.execute(in_query_1)
+    from uuid import uuid4
+
+    for item in func_uuids:
+        in_query_1 = f"""INSERT INTO extractors (ext_id, ext_name, fx_eid, func_uuid) VALUES ('{uuid4()}', 
+        '{item}', '{fx_eid}', '{func_uuids[item]}');"""
+        cur.execute(in_query_1)
+    conn.commit()
+    current_app.logger.info("[configure_bp] Successfully registered containers!")
+    return {'status': 200, 'message': 'OK'}
