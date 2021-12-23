@@ -13,6 +13,7 @@ from xtract_sdk.packagers.family import Family
 from status_checks import get_crawl_status
 from scheddy.endpoint_strategies.rand_n_families import RandNFamiliesStrategy
 from scheddy.endpoint_strategies.nothing_moves import NothingMovesStrategy
+from scheddy.maps.name_to_extractor_map import extractor_map
 
 from scheddy.extractor_strategies.extension_map import ExtensionMapStrategy
 from funcx import FuncXClient
@@ -270,10 +271,6 @@ class FamilyLocationScheduler:
 
                 batch = fxc.create_batch()
 
-                # Bounce these out after Globus Demo.
-                from extractors.xtract_tabular import TabularExtractor
-                from extractors.xtract_keyword import KeywordExtractor
-
                 batch_len = 0
                 while not self.to_xtract_q.empty():  # TODO: also need max batch size here.
                     family = self.to_xtract_q.get()
@@ -281,13 +278,8 @@ class FamilyLocationScheduler:
 
                     extractor_id = family['first_extractor']
 
-                    # print(f"Family's extractor id: {extractor_id}")
-
-                    # TODO: needs to be offloaded to a map or something.
-                    if extractor_id == 'tabular':
-                        extractor = TabularExtractor()
-                    elif extractor_id == 'keyword':
-                        extractor = KeywordExtractor()
+                    if extractor_id in extractor_map:
+                        extractor = extractor_map[extractor_id]
                     else:
                         self.counters['flagged_unknown'] += 1
                         continue
@@ -298,12 +290,9 @@ class FamilyLocationScheduler:
                     packed_family = Family()
                     family['base_url'] = None
                     packed_family.from_dict(family)
-                    # ***************************
 
-                    # print(f"Family object: {packed_family}")
                     fam_batch.add_family(packed_family)
 
-                    # TODO: remove hardcoded elements here.
                     event = extractor.create_event(
                         family_batch=fam_batch,
                         ep_name='foobar',
