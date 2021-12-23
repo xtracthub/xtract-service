@@ -73,6 +73,7 @@ def extract_mdata():
     status_by_crawl_id[r["crawl_id"]] = "INIT"
     # t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
     # t1.start()
+    current_app.logger(f"Starting scheduler thread...")
     create_scheduler_thread(r['fx_ep_ids'], r["crawl_id"], headers)
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
