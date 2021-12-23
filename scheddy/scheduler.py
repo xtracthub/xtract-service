@@ -20,6 +20,10 @@ from funcx import FuncXClient
 from globus_sdk import AccessTokenAuthorizer
 from flask import current_app
 
+import logging
+
+log = logging.getLogger(f"{__name__}.sub")
+
 
 class PriorityEntry(object):
 
@@ -44,6 +48,7 @@ def get_all_extractors(fx_ep_ls):
         cur.execute(get_query)
 
         # logger.info('We just executed query to get containers!')
+        log.error('we are here.')
         print('We just executed query to get containers!')
         for item in cur.fetchall():
             ext_name, func_uuid = item
