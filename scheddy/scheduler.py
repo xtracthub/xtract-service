@@ -255,6 +255,8 @@ class FamilyLocationScheduler:
 
         fxc = get_fx_client(headers)
 
+        self.cur_status = "EXTRACTING"
+
         while True:
 
             # If our accounting is complete
