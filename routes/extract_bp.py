@@ -74,6 +74,7 @@ def extract_mdata():
     # t1 = Thread(target=create_scheduler_thread, args=([], r["crawl_id"], r["tokens"]))
     # t1.start()
     current_app.logger.info(f"Starting scheduler thread...")
+    current_app.logger.info(f"Creating scheduler thread for {r['fx_ep_ids']}")
     create_scheduler_thread(r['fx_ep_ids'], r["crawl_id"], headers)
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}

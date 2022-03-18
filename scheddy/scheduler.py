@@ -64,7 +64,8 @@ def get_all_extractors(fx_ep_ls):
 
 def get_fx_client(headers):
     tokens = headers
-    fx_auth = AccessTokenAuthorizer(tokens['Authorization'])
+    print(f"HEADERS IN HERE: {tokens}")
+    fx_auth = AccessTokenAuthorizer(tokens['Authorization'].replace('Bearer ', ''))
     search_auth = AccessTokenAuthorizer(tokens['Search'])
     openid_auth = AccessTokenAuthorizer(tokens['Openid'])
     print(f"TRYING TO CREATE FUNCX CLIENT")

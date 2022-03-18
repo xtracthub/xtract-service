@@ -1,7 +1,6 @@
 
 
 def base_extractor(event):
-    import json
     from xtract_sdk.agent.xtract import XtractAgent
 
     # Load endpoint configuration. Init the XtractAgent.

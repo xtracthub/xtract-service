@@ -22,6 +22,7 @@ application.register_blueprint(configure_bp.configure_bp)
 def xtract_default():
     """ Return the default information as part of the request. """
     # TODO: helpful message here that Vas can check.
+    print("HITTING FLASK HOME")
     return {'status': "FUNCTIONAL", 'code': 200}
 
 
