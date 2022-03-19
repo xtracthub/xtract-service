@@ -28,4 +28,4 @@ def xtract_default():
 
 if __name__ == '__main__':
     application.logger.info("[application.py] Starting Xtract service...")
-    application.run(debug=True, threaded=True, ssl_context="adhoc")
+    application.run(debug=True, threaded=True)# , ssl_context="adhoc")

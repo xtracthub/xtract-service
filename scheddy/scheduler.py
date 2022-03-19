@@ -192,13 +192,10 @@ class FamilyLocationScheduler:
 
                     # If file type is unknown, then we skip. # TODO: think more about how to handle 'unknowns'.
                     if ext_type in ['unknown']:
-                        # print(f"Unknown continue for ext_type {ext_type}")
                         continue
 
                     # If there is nothing in a given priority queue, just skip it.
                     if self.to_schedule_pqs[ext_type].qsize() == 0:
-                        # print(ext_type)
-                        # print(f"Q Size continue for ext_type {ext_type}")
                         continue
 
                     ext_pri_mapping[ext_type] = self.to_schedule_pqs[ext_type].queue[0].priority
@@ -220,9 +217,7 @@ class FamilyLocationScheduler:
                     # if our tiebreaker is 'random', then pop all leaders in random order.
                     # NOTE: pop all at once to avoid unnecessary iterations + checks.
                     if tiebreaker == 'random':
-                        #  print(f"IN RANDOM")
                         max_value_items = list(max_value_items)  # cast to list so we can shuffle
-                        # print(f"Max value items: {max_value_items}")
 
                         # "Tuple" object does not support item assignment
                         # print(type(max_value_items))
@@ -307,9 +302,10 @@ class FamilyLocationScheduler:
 
                     fam_batch.add_family(packed_family)
 
+                    # TODO: hardcodes galore.
                     event = extractor.create_event(
                         family_batch=fam_batch,
-                        ep_name='foobar',
+                        ep_name='geodude',
                         xtract_dir="/home/tskluzac/.xtract",
                         sys_path_add="/",
                         module_path=f"xtract_{extractor_id}_main",
@@ -318,6 +314,7 @@ class FamilyLocationScheduler:
 
                     fx_ep_id = self.fx_eps_to_check[0]  # TODO: Should not be fixed to first fx_ep.
 
+                    print(f"Endpoint ID: {fx_ep_id}")
                     batch.add(event,
                               endpoint_id=fx_ep_id,
                               function_id=all_extractors[f"xtract-{extractor_id}"][fx_ep_id])

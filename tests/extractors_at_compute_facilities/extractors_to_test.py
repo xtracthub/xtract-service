@@ -23,7 +23,7 @@ xpcs_extractor = XPCSExtractor()
 tika_extractor = TikaExtractor()
 matio_extractor = MatIOExtractor()
 
-all_extractors = \
+ALL_EXTRACTORS = \
     {"xtract-tabular": {'extractor': tabular_extractor,
                         'test_files': ['comma_delim']},
      "xtract-keyword": {'extractor': keyword_extractor,

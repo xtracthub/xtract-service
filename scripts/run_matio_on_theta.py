@@ -55,18 +55,18 @@ fn_uuid = fxc.register_function(base_extractor,
                                 description="Tabular test function.")
 print("FN_UUID : ", fn_uuid)
 
-task_batch_size = 16  # 128
+task_batch_size = 4  # 128
 fx_batch_size = 64  # 32
 
 hdf_count = 0
 task_batches = Queue()
 missing_file = "/Users/tylerskluzacek/missing_files.json"
-missing_file_0 = "/Users/tylerskluzacek/missing_files_0.json"
+missing_file_0 = "/Users/tylerskluzacek/missing_mdf2.json"
 # missing_file = None
-missing_file = None
+# missing_file = None
 
-min_num = 1900000   # 1400000
-max_count = 2300000  # 1900000
+min_num = 500000   # 540000
+max_count = 3000000  # 560000
 
 # crawl_info = f"/Users/tylerskluzacek/Desktop/xpcs_crawls/xpcs_crawl_info_{trimester}.csv"
 # crawl_info = f"/Users/tylerskluzacek/Desktop/iccs_crawls/cdiac_EAGLE.csv"
@@ -120,8 +120,6 @@ with open(crawl_info, 'r') as f:
                 should_scan_file = False
 
         if file_count < min_num:
-            # print("BELOW")
-
             should_scan_file = False
 
         # If we should scan the file, then throw it in the batch!
@@ -144,14 +142,9 @@ with open(crawl_info, 'r') as f:
         event = create_many_family_mock_event(current_files_to_batch)
         task_batches.put(event)
         print(f"Loaded partial batch of size: {len(current_files_to_batch)}")
-        # if hdf_count > max_count:
-        #     print(f"DEBUG -- breaking!!!")
-        #     break
-
 
 poll_queue = Queue()
 print(f"Number of batches: {task_batches.qsize()}")
-# exit()
 
 print(f"Sending batches")
 time.sleep(2)
@@ -176,7 +169,7 @@ while not task_batches.empty():
                                    sys_path_add="/",
                                    module_path=f"xtract_{extractor_name}_main",
                                    metadata_write_path=f'/home/tskluzac/{extractor_name}-{repo_name}-completed',
-                                   writer='json-np')
+                                   writer='json-np')  # TODO: make an arg.
 
         current_batch.append(payload)
 
@@ -201,7 +194,6 @@ while not task_batches.empty():
     # TODO: sauce this to be much better.
     print("Moving to phase 2...")
     time.sleep(0.5)
-    # break  # TODO: remove this break.
 
 
 # Cleanup the 'non-full-last-batch-stragglers'

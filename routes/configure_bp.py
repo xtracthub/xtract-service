@@ -1,14 +1,12 @@
 
-import os
-import json
-
 from flask import Blueprint, request, current_app
 
 from utils.pg_utils import pg_conn
 from scheddy.scheduler import get_fx_client
 from utils.auth.globus_auth import get_uid_from_token
 from tests.extractors_at_compute_facilities.xtract_jetstream.test_all_extractors import \
-    register_functions, get_execution_information
+    register_functions # , get_execution_information
+from uuid import uuid4
 
 
 """ Routes that have to do with using configuration """
@@ -38,30 +36,17 @@ def config_containers():
     del_query_1 = f"""DELETE FROM fxep_container_lookup WHERE fx_eid='{fx_eid}';"""
     del_query_2 = f"""DELETE FROM extractors WHERE fx_eid='{fx_eid}';"""
 
-    print("Connecting?")
     conn = pg_conn()
     cur = conn.cursor()
-    print("Connected...")
 
-    print(del_query_1)
     cur.execute(del_query_1)
-    print(del_query_2)
     cur.execute(del_query_2)
-    print("Queries done...")
 
-    execution_info = get_execution_information('jetstream')  # TODO: loosen this...
-
-    # print("getting fx client...")
-    # headers['Authorization'] = fx_token
     fxc = get_fx_client(headers=headers)
 
-    func_uuids = register_functions(execution_info, fxc=fxc)
-
-    print("more queries...")
+    func_uuids = register_functions(fx_eid, container_path, fxc=fxc)
     in_query_1 = f"""INSERT INTO fxep_container_lookup (fx_eid, container_dir) VALUES ('{fx_eid}', '{container_path}');"""
     cur.execute(in_query_1)
-    from uuid import uuid4
-
     for item in func_uuids:
         in_query_1 = f"""INSERT INTO extractors (ext_id, ext_name, fx_eid, func_uuid) VALUES ('{uuid4()}', 
         '{item}', '{fx_eid}', '{func_uuids[item]}');"""
