@@ -257,7 +257,6 @@ class FamilyLocationScheduler:
 
             # If our accounting is complete
             # NOTE: when concurrent, will also need to check if scheduling is DONE.
-            # print(f"Checking done-ness...")
             if self.counters['fx']['success'] + \
                     self.counters['fx']['failed'] + \
                     self.counters['flagged_unknown'] == self.counters['cumu_scheduled'] \
