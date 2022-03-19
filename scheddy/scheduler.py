@@ -276,9 +276,7 @@ class FamilyLocationScheduler:
                 time.sleep(5)
 
             else:
-
                 batch = fxc.create_batch()
-
                 batch_len = 0
                 while not self.to_xtract_q.empty():  # TODO: also need max batch size here.
                     family = self.to_xtract_q.get()
@@ -304,7 +302,7 @@ class FamilyLocationScheduler:
                     # TODO: hardcodes galore.
                     event = extractor.create_event(
                         family_batch=fam_batch,
-                        ep_name='geodude',
+                        ep_name='default',
                         xtract_dir="/home/tskluzac/.xtract",
                         sys_path_add="/",
                         module_path=f"xtract_{extractor_id}_main",

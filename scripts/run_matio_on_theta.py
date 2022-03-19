@@ -55,7 +55,7 @@ fn_uuid = fxc.register_function(base_extractor,
                                 description="Tabular test function.")
 print("FN_UUID : ", fn_uuid)
 
-task_batch_size = 4  # 128
+task_batch_size = 1  # 128
 fx_batch_size = 64  # 32
 
 hdf_count = 0
@@ -65,15 +65,14 @@ missing_file_0 = "/Users/tylerskluzacek/missing_mdf2.json"
 # missing_file = None
 # missing_file = None
 
-min_num = 500000   # 540000
-max_count = 3000000  # 560000
+min_num = 300000   # 540000
+max_count = 400000  # 560000
 
 # crawl_info = f"/Users/tylerskluzacek/Desktop/xpcs_crawls/xpcs_crawl_info_{trimester}.csv"
 # crawl_info = f"/Users/tylerskluzacek/Desktop/iccs_crawls/cdiac_EAGLE.csv"
 # crawl_info = f"/Users/tylerskluzacek/Desktop/iccs_crawls/crawl_cord_EAGLE.csv"
 crawl_info = f"/Users/tylerskluzacek/Desktop/crawl_mdf.csv"
 
-# TODO: 'AND missing_files_0.json'
 missing_dict_a = dict()
 missing_dict_b = dict()
 
