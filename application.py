@@ -25,8 +25,8 @@ def xtract_default():
     return {'status': "FUNCTIONAL", 'code': 200}
 
 
-@application.route('/test2', methods=['POST', 'GET'])
-def xtract_default():
+@application.route('/test', methods=['POST', 'GET'])
+def xtract_default2():
     r1 = request.data
     r2 = request.json
     print(r1)
