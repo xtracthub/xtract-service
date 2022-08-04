@@ -44,7 +44,8 @@ fxc = FuncXClient()
 xpcs_x = CCodeExtractor()
 # xpcs_x = TikaExtractor()
 
-ep_id = "2293034e-4c9f-459c-a6f0-0ed310a8e618"
+# ep_id = "2293034e-4c9f-459c-a6f0-0ed310a8e618"
+ep_id = "0f7dcd2d-6d33-4468-ac79-f75528b61894"
 extractor_name = "matio"
 repo_name = "mdf"
 
@@ -55,7 +56,7 @@ fn_uuid = fxc.register_function(base_extractor,
                                 description="Tabular test function.")
 print("FN_UUID : ", fn_uuid)
 
-task_batch_size = 1  # 128
+task_batch_size = 2  # 128
 fx_batch_size = 64  # 32
 
 hdf_count = 0
@@ -65,8 +66,11 @@ missing_file_0 = "/Users/tylerskluzacek/missing_mdf2.json"
 # missing_file = None
 # missing_file = None
 
-min_num = 300000   # 540000
-max_count = 400000  # 560000
+# Done: 0-500k
+
+
+min_num = 400000   # 0k
+max_count = 430000  # 400k
 
 # crawl_info = f"/Users/tylerskluzacek/Desktop/xpcs_crawls/xpcs_crawl_info_{trimester}.csv"
 # crawl_info = f"/Users/tylerskluzacek/Desktop/iccs_crawls/cdiac_EAGLE.csv"

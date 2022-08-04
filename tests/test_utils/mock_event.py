@@ -26,24 +26,29 @@ def create_mock_event(files, parser=None):
     return mock_event
 
 
-def create_many_family_mock_event(files, parser=None):
-    # TODO: this will break for matio
+def create_many_family_mock_event(families, parser=None):
     mock_event = dict()
 
     fam_batch = FamilyBatch()
     family_id = None
 
-    for file in files:
-
-        if type(file) is dict:
-            family_id = str(file['family_id'])
-            file = file['filename']
+    for family_obj in families:
 
         test_fam_1 = Family()
         group_file_objs = []
 
-        base_path = file
-        group_file_objs.append({'path': base_path, 'metadata': dict()})
+        # If we only have 1 file in the family group.
+        # print(family_id)
+        family_id = str(family_obj['family_id'])
+        file_names = family_obj['filenames']
+
+        # Otherwise, if we have multiple files to pack ingo group.
+        # elif len(file_names) > 1:
+        for fobj in file_names:
+            base_path = fobj
+            group_file_objs.append({'path': base_path, 'metadata': dict()})
+
+        # Hard-code set to LOCAL.  # TODO: Remove if we decide not to support HTTPS/GDrive download...
         test_fam_1.download_type = "LOCAL"
 
         test_fam_1.add_group(files=group_file_objs, parser=parser)

@@ -28,6 +28,9 @@ file from the 2021-1 file set on Petrel. It will do so on Theta.
 
 # extractors =
 
+# TODO:
+# 1. Point to the right xpcs_data file.
+# 2. Point to the right bunch of metadata files.
 
 fxc = FuncXClient()
 # xpcs_x = XPCSExtractor()
@@ -35,16 +38,16 @@ fxc = FuncXClient()
 # xpcs_x = JsonXMLExtractor()
 # xpcs_x = HDFExtractor()
 # xpcs_x = ImagesExtractor()
-xpcs_x = KeywordExtractor()
+# xpcs_x = KeywordExtractor()
 # xpcs_x = PythonExtractor()
 # xpcs_x = TabularExtractor()
-#xpcs_x = CCodeExtractor()
+xpcs_x = CCodeExtractor()
 # xpcs_x = TikaExtractor()
 
-# ep_id = "0f7dcd2d-6d33-4468-ac79-f75528b61894"
-ep_id = "e1398319-0d0f-4188-909b-a978f6fc5621"
-extractor_name = "keyword"
-repo_name = "goomba"
+# ep_id = "2293034e-4c9f-459c-a6f0-0ed310a8e618"
+ep_id = "0f7dcd2d-6d33-4468-ac79-f75528b61894"
+extractor_name = "matio"
+repo_name = "mdf-group"
 
 container_uuid = fxc.register_container(f'/home/tskluzac/.xtract/.containers/xtract-{extractor_name}.img', 'singularity')
 print("Container UUID: {}".format(container_uuid))
@@ -53,41 +56,74 @@ fn_uuid = fxc.register_function(base_extractor,
                                 description="Tabular test function.")
 print("FN_UUID : ", fn_uuid)
 
-task_batch_size = 128  # 128
-fx_batch_size = 32  # 32
+task_batch_size = 4  # 128
+fx_batch_size = 16  # 32
 
 hdf_count = 0
 task_batches = Queue()
-# missing_file = "/Users/tylerskluzacek/missing_files.json"
-missing_file = None
+missing_file = "/Users/tylerskluzacek/missing_files.json"
+missing_file_0 = "/Users/tylerskluzacek/missing_mdf2.json"
+# missing_file = None
+# missing_file = None
 
-max_count = 600000
-
+min_num = 0
+max_count = 500000
 
 # crawl_info = f"/Users/tylerskluzacek/Desktop/xpcs_crawls/xpcs_crawl_info_{trimester}.csv"
 # crawl_info = f"/Users/tylerskluzacek/Desktop/iccs_crawls/cdiac_EAGLE.csv"
-crawl_info = f"/Users/tylerskluzacek/crawl-cord-thesis.csv"
+# crawl_info = f"/Users/tylerskluzacek/Desktop/iccs_crawls/crawl_cord_EAGLE.csv"
+# crawl_info = f"/Users/tylerskluzacek/Desktop/crawl_mdf.csv"
+crawl_info = f"/Users/tylerskluzacek/Desktop/mdf-multi-groups.json"
 
+# TODO: ENTIRE BLOCK BELOW IS 'missing groups'.
+# missing_dict_a = dict()
+# missing_dict_b = dict()
+#
+# missing_dict = dict()
+# if missing_file is not None:
+#     with open(missing_file, 'r') as f:
+#         missing_data = json.load(f)['missing_ls']
+#         for item in missing_data:
+#             missing_dict_a[item] = "hi"
+#
+#     with open(missing_file_0, 'r') as f:
+#         missing_data = json.load(f)['missing_ls']
+#         for item in missing_data:
+#             missing_dict_b[item] = "hi"
+#
+#     print("Creating super-dict...")
+#     for item in missing_dict_a:
+#         if item in missing_dict_b:
+#             missing_dict[item] = 'hi'
+#
+#     print(f"Files in queue: {len(missing_dict)}")
+missing_file = None
 missing_dict = dict()
-if missing_file is not None:
-    with open(missing_file, 'r') as f:
-        missing_data = json.load(f)['missing_ls']
-        for item in missing_data:
-            missing_dict[item] = "hi"
+
 
 print(f"Reading data...")
 with open(crawl_info, 'r') as f:
-    csv_reader = csv.reader(f)
-    next(csv_reader)
+    # csv_reader = csv.reader(f)
+    raw_data = json.load(f)
+    # for item in raw_data['groups']:
+    #     print(item)
+    #     exit()
 
     batch = fxc.create_batch()
 
     current_app_batch = 0
     current_files_to_batch = []
     file_count = 0
-    for line in csv_reader:
-        raw_filename = line[0]
-        real_filename = raw_filename.replace('/XPCSDATA/', '/eagle/Xtract/')
+    for line in raw_data['groups']:
+        # if not raw_filename.endswith('.hdf'):
+        #     continue
+        # real_filename = raw_filename.replace('/XPCSDATA/', '/projects/CSC249ADCD01/skluzacek/')
+
+        new_group = []
+
+        for raw_filename in line:
+            new_group.append(raw_filename.replace('/MDF/', '/projects/CSC249ADCD01/skluzacek/MDF/'))
+        # hdf_count += 1
 
         # We should scan, unless the file is not in a "Missing data" json.
         should_scan_file = True
@@ -95,10 +131,12 @@ with open(crawl_info, 'r') as f:
             if str(file_count) not in missing_dict:
                 should_scan_file = False
 
+        if file_count < min_num:
+            should_scan_file = False
+
         # If we should scan the file, then throw it in the batch!
         if should_scan_file:
-
-            current_files_to_batch.append({'filenames': [real_filename], 'family_id': file_count})
+            current_files_to_batch.append({'filename': new_group, 'family_id': file_count})
 
         if len(current_files_to_batch) >= task_batch_size:
             event = create_many_family_mock_event(current_files_to_batch)
@@ -115,15 +153,10 @@ with open(crawl_info, 'r') as f:
         event = create_many_family_mock_event(current_files_to_batch)
         task_batches.put(event)
         print(f"Loaded partial batch of size: {len(current_files_to_batch)}")
-        # if hdf_count > max_count:
-        #     print(f"DEBUG -- breaking!!!")
-        #     break
 
-# exit()
+
 poll_queue = Queue()
-print(f"Number of HDFs: {hdf_count}")
 print(f"Number of batches: {task_batches.qsize()}")
-# exit()
 
 print(f"Sending batches")
 time.sleep(2)
@@ -148,7 +181,7 @@ while not task_batches.empty():
                                    sys_path_add="/",
                                    module_path=f"xtract_{extractor_name}_main",
                                    metadata_write_path=f'/home/tskluzac/{extractor_name}-{repo_name}-completed',
-                                   writer='json')
+                                   writer='json-np')  # TODO: make an arg.
 
         current_batch.append(payload)
 
@@ -159,7 +192,11 @@ while not task_batches.empty():
         batch.add(item, endpoint_id=ep_id, function_id=fn_uuid)
 
     # List of task_ids
+    ts = time.time()
     batch_res = fxc.batch_run(batch)
+    te = time.time()
+
+    print(f"Total request round-trip time: {te-ts}")
 
     for item in batch_res:
         poll_queue.put(item)
@@ -169,7 +206,6 @@ while not task_batches.empty():
     # TODO: sauce this to be much better.
     print("Moving to phase 2...")
     time.sleep(0.5)
-    # break  # TODO: remove this break.
 
 
 # Cleanup the 'non-full-last-batch-stragglers'
@@ -177,7 +213,6 @@ if len(current_batch) > 0:
     for item in current_batch:
         batch.add(item, endpoint_id=ep_id, function_id=fn_uuid)
 
-    # List of task_ids
     batch_res = fxc.batch_run(batch)
 
     for item in batch_res:
@@ -202,10 +237,8 @@ while True:
             else:
                 print("FAILED!")
                 fail_count += 1
-                try:
-                    x[tid_key]['exception'].reraise()
-                except Exception as e:
-                    print(e)
+                print(x[tid_key]['exception'])
+                # x[tid_key]['exception'].reraise()
 
         else:
             poll_queue.put(tid_key)

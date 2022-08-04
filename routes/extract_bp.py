@@ -26,6 +26,8 @@ def create_scheduler_thread(fx_eps, crawl_id, headers):
     :param fx_eps (list) : does xyz
     """
     print("Started sched_obj")
+    import sys
+    print("CREATING SCHEDULER THREAD", file=sys.stdout)
     sched_obj = FamilyLocationScheduler(fx_eps=fx_eps,
                                         crawl_id=crawl_id,
                                         headers=headers)
@@ -75,6 +77,9 @@ def extract_mdata():
     # t1.start()
     current_app.logger.info(f"Starting scheduler thread...")
     current_app.logger.info(f"Creating scheduler thread for {r['fx_ep_ids']}")
+
+    import sys
+    print(r['fx_ep_ids'], file=sys.stdout)
     create_scheduler_thread(r['fx_ep_ids'], r["crawl_id"], headers)
 
     return {'status': 200, 'message': 'started extraction!', 'crawl_id': r['crawl_id']}
@@ -106,7 +111,7 @@ def get_extr_status():
     cur_counters = sched.counters
     print(f"STATUS: {cur_status}")
 
-    return {'status': cur_status, 'counters': cur_counters, 'crawl_id': extract_id}
+    return {'status': cur_status, 'crawl_id': extract_id,  'counters': cur_counters}
 
 
 def get_globus_tc(transfer_token):

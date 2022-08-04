@@ -42,6 +42,7 @@ class PriorityEntry(object):
 
 
 def get_all_extractors(fx_ep_ls):
+    """ Fetch all funcX functions from the DB and return as dictionary. """
 
     cur = pg_conn().cursor()  # don't need connection object; don't need to commit.
 
@@ -236,9 +237,11 @@ class FamilyLocationScheduler:
     def orch_thread(self, headers):
         to_terminate = False
 
+        import sys
+        print("IN THE ORCH THREAD", file=sys.stdout)
         print(f"ENDPOINTS TO CHECK: {self.fx_eps_to_check}")
         all_extractors = get_all_extractors(self.fx_eps_to_check)
-        print(f"Fetched all extractors... {all_extractors}")
+        print(f"Fetched all extractors... {all_extractors}", file=sys.stdout)
 
         fxc = get_fx_client(headers)
 
@@ -289,7 +292,8 @@ class FamilyLocationScheduler:
 
                     fam_batch.add_family(packed_family)
 
-                    # TODO: hardcodes galore.
+                    import sys
+                    print(extractor_id, file=sys.stdout)
                     event = extractor.create_event(
                         family_batch=fam_batch,
                         ep_name='default',
@@ -302,6 +306,7 @@ class FamilyLocationScheduler:
                     fx_ep_id = self.fx_eps_to_check[0]  # TODO: Should not be fixed to first fx_ep.
 
                     print(f"Endpoint ID: {fx_ep_id}")
+                    # logger
                     batch.add(event,
                               endpoint_id=fx_ep_id,
                               function_id=all_extractors[f"xtract-{extractor_id}"][fx_ep_id])
@@ -309,8 +314,12 @@ class FamilyLocationScheduler:
 
                 # Only want to send tasks if we retrieved tasks.
                 if batch_len > 0:
+
+                    print("SENDING BATCH", file=sys.stdout)
                     batch_res = fxc.batch_run(batch)
+                    print(f"BATCH SENT of length: {len(batch_res)}")
                     time.sleep(1.1)
+
                     for item in batch_res:
                         self.funcx_current_tasks.put(item)
 

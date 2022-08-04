@@ -18,5 +18,6 @@ def base_extractor(event):
     paths = xtra.flush_metadata_to_files(writer=event['writer'])
     stats = xtra.get_completion_stats()
     stats['mdata_paths'] = paths
+    # stats['completed_timestamp'] =
 
     return stats
